@@ -31,7 +31,6 @@ add_definitions(-DLINUX -DNDEBUG)
 #---------------------------------------------------------------------------------------
 # Add CMakeLists from subdirectories
 #---------------------------------------------------------------------------------------
-include_directories(${PROJECT_BINARY_DIR})
 add_subdirectory(common)
 add_subdirectory(compiler2)
 add_subdirectory(compiler2/asn1)

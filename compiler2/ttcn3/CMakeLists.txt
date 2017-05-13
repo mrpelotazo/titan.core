@@ -32,6 +32,7 @@ add_dependencies(ttcn3_compiler generate-common-files)
 target_include_directories(ttcn3_compiler PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
     ${PROJECT_SOURCE_DIR}
+    ${PROJECT_BINARY_DIR}
 )
 
 #---------------------------------------------------------------------------------------
