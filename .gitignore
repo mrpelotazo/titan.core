@@ -11,3 +11,4 @@ Makefile.personal
 *.pdf
 META-INF
 build.properties
+build
