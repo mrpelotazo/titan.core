@@ -28,14 +28,14 @@ add_library(asn1_compiler ${ASN1_STATIC_SOURCES} ${ASN1_GENERATED_SOURCES})
 
 target_include_directories(asn1_compiler PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-	${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 #---------------------------------------------------------------------------------------
 # File generation commands
 #---------------------------------------------------------------------------------------
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/asn1p.tab.cc ${CMAKE_CURRENT_BINARY_DIR}/asn1p.tab.hh
-    COMMAND bison -d ${CMAKE_CURRENT_LIST_DIR}/asn1p.y
+    COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/asn1p.y
     VERBATIM
 )
 

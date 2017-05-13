@@ -25,7 +25,7 @@ set(COMMON_GENERATED_SOURCES
 #add_executable(hostid ${COMMON_STATIC_SURCES} ${COMMON_GENERATED_SOURCES})
 #add_dependencies(hostid generate-common-files)
 #target_include_directories(hostid PUBLIC
-#	${CMAKE_CURRENT_LIST_DIR}
+#	${CMAKE_CURRENT_SOURCE_DIR}
 #)
 
 #---------------------------------------------------------------------------------------
@@ -35,7 +35,7 @@ add_library(common ${COMMON_STATIC_SOURCES} ${COMMON_GENERATED_SOURCES})
 add_dependencies(common generate-common-files)
 target_include_directories(common PUBLIC
     ${PROJECT_BINARY_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -44,27 +44,27 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # File generation commands
 #---------------------------------------------------------------------------------------
 add_custom_command(OUTPUT pattern_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o pattern_la.cc ${CMAKE_CURRENT_LIST_DIR}/pattern_la.l
+    COMMAND flex -B -s -Cr -Cfe -o pattern_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/pattern_la.l
     VERBATIM
 )
 
 add_custom_command(OUTPUT pattern_p.cc pattern_p.hh
-    COMMAND bison -d ${CMAKE_CURRENT_LIST_DIR}/pattern_p.y
+    COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/pattern_p.y
     VERBATIM
 )
 
 add_custom_command(OUTPUT pattern_uni.cc pattern_uni.hh
-    COMMAND bison -d ${CMAKE_CURRENT_LIST_DIR}/pattern_uni.y
+    COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/pattern_uni.y
     VERBATIM
 )
 
 add_custom_command(OUTPUT config_preproc_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o config_preproc_la.cc ${CMAKE_CURRENT_LIST_DIR}/config_preproc_la.l
+    COMMAND flex -B -s -Cr -Cfe -o config_preproc_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/config_preproc_la.l
     VERBATIM
 )
 
 add_custom_command(OUTPUT config_preproc_p.tab.cc config_preproc_p.tab.hh
-    COMMAND bison -d -o config_preproc_p.tab.cc -p config_process_ ${CMAKE_CURRENT_LIST_DIR}/config_preproc_p.y
+    COMMAND bison -d -o config_preproc_p.tab.cc -p config_process_ ${CMAKE_CURRENT_SOURCE_DIR}/config_preproc_p.y
     VERBATIM
 )
 
