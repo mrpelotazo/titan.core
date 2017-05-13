@@ -31,7 +31,7 @@ add_library(ttcn3_compiler ${TTCN3_STATIC_SOURCES} ${TTCN3_GENERATED_SOURCES})
 add_dependencies(ttcn3_compiler generate-common-files)
 target_include_directories(ttcn3_compiler PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/../..
+    ${PROJECT_SOURCE_DIR}
 )
 
 #---------------------------------------------------------------------------------------
