@@ -215,7 +215,10 @@ target_link_libraries(ttcn3-rt2-parallel-dynamic PUBLIC
     edit-dynamic
 )
 
-get_target_property(COMMON_INCLUDE_DIR common INTERFACE_INCLUDE_DIRECTORIES)
+#---------------------------------------------------------------------------------------
+# Target ttcn3_profmerge
+#---------------------------------------------------------------------------------------
+get_target_property(COMMON_INCLUDE_DIR common_obj INTERFACE_INCLUDE_DIRECTORIES)
 add_library(profilertools-profmerge OBJECT ProfilerTools.cc)
 target_compile_options(profilertools-profmerge PRIVATE -DPROF_MERGE)
 target_include_directories(profilertools-profmerge PUBLIC ${COMMON_INCLUDE_DIR})
