@@ -103,7 +103,6 @@ add_library(ttcn3_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     ${RT1_DIR}/TitanLoggerControl.hh cversion.h
 )
 
-target_sources(ttcn3 PUBLIC
 set_target_properties(ttcn3_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 target_include_directories(ttcn3_obj PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -115,6 +114,11 @@ target_include_directories(ttcn3_obj PUBLIC
 
 add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj>)
 add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj>)
+
+# target_sources(ttcn3 PUBLIC
+#     ${CORE_STATIC_SOURCES_NO_MAIN}
+# )
+
 target_include_directories(ttcn3 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/common
