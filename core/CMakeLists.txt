@@ -97,16 +97,24 @@ add_custom_command(OUTPUT cversion.h
 #---------------------------------------------------------------------------------------
 # Target ttcn3
 #---------------------------------------------------------------------------------------
-add_library(ttcn3 ${CORE_STATIC_SOURCES_NO_MAIN}
+add_library(ttcn3_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     Single_main.cc LoggerPlugin_static.cc ${RT1_DIR}/TitanLoggerApi.hh
     ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT1_DIR}/PreGenRecordOf.hh
     ${RT1_DIR}/TitanLoggerControl.hh cversion.h
 )
 
 target_sources(ttcn3 PUBLIC
-    ${CORE_STATIC_SOURCES_NO_MAIN}
+set_target_properties(ttcn3_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_include_directories(ttcn3_obj PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${RT1_DIR}
+    ${LIBXML2_INCLUDE_DIR}
 )
 
+add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj>)
+add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj>)
 target_include_directories(ttcn3 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/common
@@ -115,21 +123,26 @@ target_include_directories(ttcn3 PUBLIC
     ${LIBXML2_INCLUDE_DIR}
 )
 
-target_link_libraries(ttcn3 PUBLIC
-    common
-    edit
+target_link_libraries(ttcn3-dynamic PUBLIC
+    common-dynamic
+    edit-dynamic
 )
 
 #---------------------------------------------------------------------------------------
 # Target ttcn3-parallel
 #---------------------------------------------------------------------------------------
-add_library(ttcn3-parallel ${CORE_STATIC_SOURCES_NO_MAIN}
+add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     Parallel_main.cc LoggerPlugin_static.cc ${RT1_DIR}/TitanLoggerApi.hh
     ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT1_DIR}/PreGenRecordOf.hh
     ${RT1_DIR}/TitanLoggerControl.hh cversion.h
 )
 
-target_include_directories(ttcn3-parallel PUBLIC
+set_target_properties(ttcn3-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
+add_library(ttcn3-parallel STATIC $<TARGET_OBJECTS:ttcn3-parallel_obj>)
+add_library(ttcn3-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-parallel_obj>)
+
+target_include_directories(ttcn3-parallel_obj PUBLIC
     ${LIBXML2_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -138,23 +151,23 @@ target_include_directories(ttcn3-parallel PUBLIC
 
 )
 
-target_link_libraries(ttcn3-parallel PUBLIC
-    common
-    edit
+target_link_libraries(ttcn3-parallel-dynamic PUBLIC
+    common-dynamic
+    edit-dynamic
 )
-
 #---------------------------------------------------------------------------------------
 # Target ttcn3-rt2
 #---------------------------------------------------------------------------------------
-add_library(ttcn3-rt2 ${CORE2_STATIC_SOURCES}
+add_library(ttcn3-rt2_obj OBJECT ${CORE2_STATIC_SOURCES}
     Single_main.cc ${RT2_DIR}/TitanLoggerApi.hh
     ${RT2_DIR}/TitanLoggerApiSimple.hh ${RT2_DIR}/PreGenRecordOf.hh
     ${RT2_DIR}/TitanLoggerControl.hh cversion.h
 )
 
-target_compile_options(ttcn3-rt2 PUBLIC -DTITAN_RUNTIME_2)
+set_target_properties(ttcn3-rt2_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_compile_options(ttcn3-rt2_obj PUBLIC -DTITAN_RUNTIME_2)
 
-target_include_directories(ttcn3-rt2 PUBLIC
+target_include_directories(ttcn3-rt2_obj PUBLIC
     ${LIBXML2_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -162,23 +175,27 @@ target_include_directories(ttcn3-rt2 PUBLIC
     ${RT2_DIR}
 )
 
-target_link_libraries(ttcn3-rt2 PUBLIC
-    common
-    edit
+add_library(ttcn3-rt2 STATIC $<TARGET_OBJECTS:ttcn3-rt2_obj>)
+add_library(ttcn3-rt2-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2_obj>)
+
+target_link_libraries(ttcn3-rt2-dynamic PUBLIC
+    common-dynamic
+    edit-dynamic
 )
 
 #---------------------------------------------------------------------------------------
-# Target ttcn3-parallel-rt2
+# Target ttcn3-rt2-parallel
 #---------------------------------------------------------------------------------------
-add_library(ttcn3-parallel-rt2 ${CORE2_STATIC_SOURCES}
+add_library(ttcn3-rt2-parallel_obj OBJECT ${CORE2_STATIC_SOURCES}
     Parallel_main.cc ${RT2_DIR}/TitanLoggerApi.hh
     ${RT2_DIR}/TitanLoggerApiSimple.hh ${RT2_DIR}/PreGenRecordOf.hh
     ${RT2_DIR}/TitanLoggerControl.hh cversion.h
 )
 
-target_compile_options(ttcn3-parallel-rt2 PUBLIC -DTITAN_RUNTIME_2)
+set_target_properties(ttcn3-rt2-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+target_compile_options(ttcn3-rt2-parallel_obj PUBLIC -DTITAN_RUNTIME_2)
 
-target_include_directories(ttcn3-parallel-rt2 PUBLIC
+target_include_directories(ttcn3-rt2-parallel_obj PUBLIC
     ${LIBXML2_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -186,9 +203,12 @@ target_include_directories(ttcn3-parallel-rt2 PUBLIC
     ${RT2_DIR}
 )
 
-target_link_libraries(ttcn3-parallel-rt2 PUBLIC
-    common
-    edit
+add_library(ttcn3-rt2-parallel STATIC $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj>)
+add_library(ttcn3-rt2-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj>)
+
+target_link_libraries(ttcn3-rt2-parallel-dynamic PUBLIC
+    common-dynamic
+    edit-dynamic
 )
 
 get_target_property(COMMON_INCLUDE_DIR common INTERFACE_INCLUDE_DIRECTORIES)
@@ -203,7 +223,8 @@ target_link_libraries(ttcn3_profmerge PRIVATE common)
 #---------------------------------------------------------------------------------------
 # Install targets
 #---------------------------------------------------------------------------------------
-install(TARGETS ttcn3-rt2 ttcn3-parallel-rt2
+install(TARGETS ttcn3 ttcn3-parallel ttcn3-rt2 ttcn3-rt2-parallel
+                ttcn3-dynamic ttcn3-parallel-dynamic ttcn3-rt2-dynamic ttcn3-rt2-parallel-dynamic
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
@@ -214,9 +235,7 @@ install(DIRECTORY ${RT2_DIR}
     PATTERN "TitanLoggerControl.hh" EXCLUDE
 )
 
-install(TARGETS ttcn3 ttcn3-parallel ttcn3_profmerge
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+install(TARGETS ttcn3_profmerge
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
