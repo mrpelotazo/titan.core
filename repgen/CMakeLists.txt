@@ -32,3 +32,15 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/parser.c
 install(TARGETS ttcn3_repgen ttcn3_logformat ttcn3_logfilter ttcn3_logmerge
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+install(CODE "execute_process( \
+        COMMAND ${CMAKE_COMMAND} -E create_symlink ttcn3_repgen repgen \
+        WORKING_DIRECTORY ${CMAKE_INSTALL_FULL_BINDIR} \
+    )"
+)
+
+install(CODE "execute_process( \
+        COMMAND ${CMAKE_COMMAND} -E create_symlink ttcn3_logformat logformat \
+        WORKING_DIRECTORY ${CMAKE_INSTALL_FULL_BINDIR} \
+    )"
+)

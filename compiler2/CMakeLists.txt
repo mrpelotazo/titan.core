@@ -62,3 +62,21 @@ install(FILES titanver
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ
 )
+
+install(CODE "execute_process( \
+        COMMAND ${CMAKE_COMMAND} -E create_symlink compiler asn1_compiler \
+        WORKING_DIRECTORY ${CMAKE_INSTALL_FULL_BINDIR} \
+    )"
+)
+
+install(CODE "execute_process( \
+        COMMAND ${CMAKE_COMMAND} -E create_symlink compiler ttcn3_compiler \
+        WORKING_DIRECTORY ${CMAKE_INSTALL_FULL_BINDIR} \
+    )"
+)
+
+install(CODE "execute_process( \
+        COMMAND ${CMAKE_COMMAND} -E create_symlink ttcn3_makefilegen makefilegen \
+        WORKING_DIRECTORY ${CMAKE_INSTALL_FULL_BINDIR} \
+    )"
+)

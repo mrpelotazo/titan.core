@@ -45,3 +45,9 @@ install(FILES ttcn3_start
     DESTINATION ${CMAKE_INSTALL_BINDIR}
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ
 )
+
+install(CODE "execute_process( \
+        COMMAND ${CMAKE_COMMAND} -E create_symlink mctr_cli mctr \
+        WORKING_DIRECTORY ${CMAKE_INSTALL_FULL_BINDIR} \
+    )"
+)
