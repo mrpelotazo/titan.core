@@ -16,9 +16,15 @@ ExternalProject_Add(libedit
 file(MAKE_DIRECTORY ${EDIT_INSTALL_DIR}/include)
 
 add_library(edit IMPORTED STATIC)
+add_library(edit-dynamic IMPORTED SHARED)
 
 set_target_properties(edit PROPERTIES
     IMPORTED_LOCATION ${EDIT_INSTALL_DIR}/lib/libedit.a
+    INTERFACE_INCLUDE_DIRECTORIES ${EDIT_INSTALL_DIR}/include
+)
+
+set_target_properties(edit-dynamic PROPERTIES
+    IMPORTED_LOCATION ${EDIT_INSTALL_DIR}/lib/libedit.so
     INTERFACE_INCLUDE_DIRECTORIES ${EDIT_INSTALL_DIR}/include
 )
 
