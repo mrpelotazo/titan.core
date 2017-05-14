@@ -31,14 +31,23 @@ set(COMMON_GENERATED_SOURCES
 #---------------------------------------------------------------------------------------
 # Library common
 #---------------------------------------------------------------------------------------
-add_library(common ${COMMON_STATIC_SOURCES} ${COMMON_GENERATED_SOURCES})
-add_dependencies(common generate-common-files)
-target_include_directories(common PUBLIC
+add_library(common_obj OBJECT ${COMMON_STATIC_SOURCES} ${COMMON_GENERATED_SOURCES})
+set_target_properties(common_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+add_dependencies(common_obj generate-common-files)
+target_include_directories(common_obj PUBLIC
     ${PROJECT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+add_library(common STATIC $<TARGET_OBJECTS:common_obj>)
+add_library(common-dynamic SHARED $<TARGET_OBJECTS:common_obj>)
+
+target_include_directories(common PUBLIC
+#     ${PROJECT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 #---------------------------------------------------------------------------------------
 # File generation commands
