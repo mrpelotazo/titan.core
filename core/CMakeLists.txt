@@ -91,9 +91,6 @@ add_custom_command(OUTPUT cversion.h
     COMMAND gccversion > cversion.h
 )
 
-#add_library(rint OBJECT RInt.cc)
-#add_library(textbuf OBJECT Textbuf.cc)
-
 #---------------------------------------------------------------------------------------
 # Target ttcn3
 #---------------------------------------------------------------------------------------
@@ -224,8 +221,6 @@ target_compile_options(profilertools-profmerge PRIVATE -DPROF_MERGE)
 target_include_directories(profilertools-profmerge PUBLIC ${COMMON_INCLUDE_DIR})
 add_executable(ttcn3_profmerge ProfMerge_main.cc $<TARGET_OBJECTS:profilertools-profmerge>)
 target_link_libraries(ttcn3_profmerge PRIVATE common)
-
-#add_subdirectory(${PROJECT_SOURCE_DIR}/core2 ${PROJECT_BINARY_DIR}/core2)
 
 #---------------------------------------------------------------------------------------
 # Install targets
