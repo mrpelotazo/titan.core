@@ -31,9 +31,6 @@ target_link_libraries(mctr_cli
     Threads::Threads
     ${CURSES_LIBRARIES}
 )
-add_custom_target(dostuff
-    DEPENDS Cli_main.cc
-)
 
 add_dependencies(mctr_cli libedit)
 
