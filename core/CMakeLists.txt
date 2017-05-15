@@ -239,7 +239,7 @@ install(TARGETS ttcn3_profmerge
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    FILES_MATCHING PATTERN "*.hh"
+    FILES_MATCHING PATTERN "*.hh" PATTERN "*.h"
     PATTERN "Communication.hh" EXCLUDE
     PATTERN "Fd_And_Timeout_User.hh" EXCLUDE
     PATTERN "LegacyLogger.hh" EXCLUDE
