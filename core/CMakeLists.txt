@@ -109,8 +109,8 @@ target_include_directories(ttcn3_obj PUBLIC
     ${LIBXML2_INCLUDE_DIR}
 )
 
-add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj>)
-add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj>)
+add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
 
 # target_sources(ttcn3 PUBLIC
 #     ${CORE_STATIC_SOURCES_NO_MAIN}
@@ -125,7 +125,6 @@ target_include_directories(ttcn3 PUBLIC
 )
 
 target_link_libraries(ttcn3-dynamic PUBLIC
-    common-dynamic
     edit-dynamic
 )
 
@@ -140,8 +139,8 @@ add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
 
 set_target_properties(ttcn3-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
-add_library(ttcn3-parallel STATIC $<TARGET_OBJECTS:ttcn3-parallel_obj>)
-add_library(ttcn3-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-parallel_obj>)
+add_library(ttcn3-parallel STATIC $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
 
 target_include_directories(ttcn3-parallel_obj PUBLIC
     ${LIBXML2_INCLUDE_DIR}
@@ -153,7 +152,6 @@ target_include_directories(ttcn3-parallel_obj PUBLIC
 )
 
 target_link_libraries(ttcn3-parallel-dynamic PUBLIC
-    common-dynamic
     edit-dynamic
 )
 #---------------------------------------------------------------------------------------
@@ -176,11 +174,10 @@ target_include_directories(ttcn3-rt2_obj PUBLIC
     ${RT2_DIR}
 )
 
-add_library(ttcn3-rt2 STATIC $<TARGET_OBJECTS:ttcn3-rt2_obj>)
-add_library(ttcn3-rt2-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2_obj>)
+add_library(ttcn3-rt2 STATIC $<TARGET_OBJECTS:ttcn3-rt2_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-rt2-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2_obj> $<TARGET_OBJECTS:common_obj>)
 
 target_link_libraries(ttcn3-rt2-dynamic PUBLIC
-    common-dynamic
     edit-dynamic
 )
 
@@ -204,11 +201,10 @@ target_include_directories(ttcn3-rt2-parallel_obj PUBLIC
     ${RT2_DIR}
 )
 
-add_library(ttcn3-rt2-parallel STATIC $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj>)
-add_library(ttcn3-rt2-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj>)
+add_library(ttcn3-rt2-parallel STATIC $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-rt2-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj> $<TARGET_OBJECTS:common_obj>)
 
 target_link_libraries(ttcn3-rt2-parallel-dynamic PUBLIC
-    common-dynamic
     edit-dynamic
 )
 
