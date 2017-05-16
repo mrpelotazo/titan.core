@@ -58,7 +58,8 @@ set(RT2_DIR ${CMAKE_CURRENT_BINARY_DIR}/RT2)
 #---------------------------------------------------------------------------------------
 # File generation commands
 #---------------------------------------------------------------------------------------
-add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.hh
+add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
+                          ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
     COMMAND mkdir ${RT1_DIR}
     COMMAND mkdir ${RT2_DIR}
     COMMAND ${PROJECT_BINARY_DIR}/xsdconvert/xsd2ttcn ${CMAKE_CURRENT_SOURCE_DIR}/${SCHEMA}
@@ -72,12 +73,14 @@ add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT2_DIR}/TitanLog
     COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/simplify.pl ${RT2_DIR}/TitanLoggerApi.hh > ${RT2_DIR}/TitanLoggerApiSimple.hh
 )
 
-add_custom_command(OUTPUT ${RT1_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.hh
+add_custom_command(OUTPUT ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
+                          ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -o ${RT1_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${PREGENERATOR_MODULES}
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -R -o ${RT2_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${PREGENERATOR_MODULES}
 )
 
-add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.hh
+add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc
+                          ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -o ${RT1_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/TitanLoggerControl.ttcn
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -R -o ${RT2_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/TitanLoggerControl.ttcn
 )
