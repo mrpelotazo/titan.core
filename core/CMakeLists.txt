@@ -140,8 +140,10 @@ target_link_libraries(ttcn3-dynamic PUBLIC
 # Target ttcn3-parallel
 #---------------------------------------------------------------------------------------
 add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
-    Parallel_main.cc LoggerPlugin_static.cc ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
-    ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
+    Parallel_main.cc LoggerPlugin_static.cc
+    ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
+    ${RT1_DIR}/TitanLoggerApiSimple.hh
+    ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
     ${RT1_DIR}/TitanLoggerControl.hh cversion.h
     config_process.tab.cc config_process.lex.cc
 )
