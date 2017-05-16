@@ -85,6 +85,12 @@ add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLogge
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -R -o ${RT2_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/TitanLoggerControl.ttcn
 )
 
+add_custom_command(OUTPUT config_process.lex.cc config_process.tab.cc
+    COMMAND flex -B -s -Cr -Cfe -Pconfig_process_ --header-file=config_process.lex.hh -o config_process.lex.cc ${CMAKE_CURRENT_SOURCE_DIR}/config_process.l
+    COMMAND bison -d -o config_process.tab.cc -p config_process_ ${CMAKE_CURRENT_SOURCE_DIR}/config_process.y
+    VERBATIM
+)
+
 #---------------------------------------------------------------------------------------
 # Target gccversion
 #---------------------------------------------------------------------------------------
