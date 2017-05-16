@@ -104,9 +104,12 @@ add_custom_command(OUTPUT cversion.h
 # Target ttcn3
 #---------------------------------------------------------------------------------------
 add_library(ttcn3_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
-    Single_main.cc LoggerPlugin_static.cc ${RT1_DIR}/TitanLoggerApi.hh
-    ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT1_DIR}/PreGenRecordOf.hh
+    Single_main.cc LoggerPlugin_static.cc
+    ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
+    ${RT1_DIR}/TitanLoggerApiSimple.hh
+    ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
     ${RT1_DIR}/TitanLoggerControl.hh cversion.h
+    config_process.tab.cc config_process.lex.cc
 )
 
 set_target_properties(ttcn3_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
