@@ -43,6 +43,7 @@ add_subdirectory(core)
 add_subdirectory(loggerplugins/JUnitLogger)
 add_subdirectory(loggerplugins/JUnitLogger2)
 add_subdirectory(loggerplugins/TSTLogger)
+add_subdirectory(etc)
 
 #---------------------------------------------------------------------------------------
 # CPack
