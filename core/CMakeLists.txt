@@ -121,10 +121,6 @@ target_include_directories(ttcn3_obj PUBLIC
 add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
 add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
 
-# target_sources(ttcn3 PUBLIC
-#     ${CORE_STATIC_SOURCES_NO_MAIN}
-# )
-
 target_include_directories(ttcn3 PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/common
