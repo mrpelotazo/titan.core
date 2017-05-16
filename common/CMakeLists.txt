@@ -80,3 +80,12 @@ add_custom_command(OUTPUT config_preproc_p.tab.cc config_preproc_p.tab.hh
 add_custom_target(generate-common-files
     DEPENDS config_preproc_p.tab.cc config_preproc_p.tab.hh config_preproc_la.cc pattern_uni.cc pattern_uni.hh pattern_p.cc pattern_p.hh pattern_la.cc
 )
+
+#---------------------------------------------------------------------------------------
+# File generation commands
+#---------------------------------------------------------------------------------------
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.hh" PATTERN "*.h"
+
+)
