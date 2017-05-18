@@ -49,6 +49,7 @@ add_subdirectory(etc)
 # CPack
 #---------------------------------------------------------------------------------------
 set(CPACK_GENERATOR DEB)
+set(CPACK_DEBIAN_PACKAGE_RELEASE 1)
 set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/${PROJECT_NAME}-${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DIRECTORY ${CMAKE_BINARY_DIR}/packages)
 
@@ -62,7 +63,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian/postrm.in
 
 message(STATUS "DEB Generator: debian packages will be generated under ${CPACK_PACKAGE_DIRECTORY}")
 set(CPACK_DEBIAN_PACKAGE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}")
-set(CPACK_DEBIAN_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}.deb")
+set(CPACK_DEBIAN_FILE_NAME "${PROJECT_NAME}_${PROJECT_VERSION}-${CPACK_DEBIAN_PACKAGE_RELEASE}.deb")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "TTCN-3 is a standardized, modular language specifically designed for testing")
