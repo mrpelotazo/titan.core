@@ -1,6 +1,6 @@
 #!/bin/bash
 
-pushd @CPACK_PACKAGING_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@
+pushd @CPACK_PACKAGING_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@ > /dev/null
 ln -s compiler asn1_compiler
 ln -s compiler ttcn3_compiler
 ln -s ttcn3_makefilegen makefilegen
