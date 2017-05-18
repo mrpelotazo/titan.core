@@ -67,7 +67,6 @@ set(CPACK_DEBIAN_FILE_NAME "${PROJECT_NAME}_${PROJECT_VERSION}-${CPACK_DEBIAN_PA
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "TTCN-3 is a standardized, modular language specifically designed for testing")
-set(CPACK_PACKAGE_VENDOR "Adrian Antonana")
 set(CPACK_PACKAGE_CONTACT "Adrian Antonana a.antonana@gmail.com")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/eclipse/titan.core")
 #set(CPACK_PACKAGE_DESCRIPTION_FILE "${PROJECT_SOURCE_DIR}/README.rst")
