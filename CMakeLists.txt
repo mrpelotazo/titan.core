@@ -49,7 +49,17 @@ add_subdirectory(etc)
 # CPack
 #---------------------------------------------------------------------------------------
 set(CPACK_GENERATOR DEB)
+set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/${PROJECT_NAME}-${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DIRECTORY ${CMAKE_BINARY_DIR}/packages)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian/postinst.in
+	${CPACK_PACKAGE_DIRECTORY}/postinst
+)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian/postrm.in
+	${CPACK_PACKAGE_DIRECTORY}/postrm
+)
+
 message(STATUS "DEB Generator: debian packages will be generated under ${CPACK_PACKAGE_DIRECTORY}")
 set(CPACK_DEBIAN_PACKAGE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}")
 set(CPACK_DEBIAN_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}.deb")
@@ -65,5 +75,6 @@ set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}")
 #set(CPACK_DEBIAN_PACKAGE_SECTION "Development")
 #set(CPACK_RPM_PACKAGE_LICENSE "LGPL")
 set(CPACK_STRIP_FILES TRUE)
-set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/${PROJECT_NAME}-${PROJECT_VERSION}")
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CPACK_PACKAGE_DIRECTORY}/postinst;${CPACK_PACKAGE_DIRECTORY}/postrm")
+
 include(CPack)
