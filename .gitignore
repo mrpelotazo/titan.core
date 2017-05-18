@@ -12,3 +12,4 @@ Makefile.personal
 META-INF
 build.properties
 build
+*.swp
