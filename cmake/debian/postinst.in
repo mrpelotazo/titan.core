@@ -1,0 +1,9 @@
+#!/bin/bash
+
+pushd @CPACK_PACKAGING_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@
+ln -s compiler asn1_compiler
+ln -s compiler ttcn3_compiler
+ln -s ttcn3_makefilegen makefilegen
+ln -s ttcn3_logformat logformat
+ln -s mctr_cli mctr
+ln -s ttcn3_repgen repgen

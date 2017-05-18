@@ -1,0 +1,4 @@
+#!/bin/bash
+
+rm -rf @CPACK_PACKAGING_INSTALL_PREFIX@
+
