@@ -61,7 +61,11 @@ target_link_libraries(mctr_cli
 
 add_dependencies(mctr_cli libedit)
 
+#---------------------------------------------------------------------------------------
+# Install targets
+#---------------------------------------------------------------------------------------
 install(TARGETS mctr_cli
+    EXPORT ${TARGETS_EXPORT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 

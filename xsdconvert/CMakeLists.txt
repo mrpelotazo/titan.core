@@ -7,7 +7,7 @@
 cmake_minimum_required(VERSION 3.6)
 
 #---------------------------------------------------------------------------------------
-# Not generated sources
+# xsd2ttcn not generated sources
 #---------------------------------------------------------------------------------------
 set(STATIC_SOURCES
     converter.cc XMLParser.cc TTCN3Module.cc TTCN3ModuleInventory.cc
@@ -26,5 +26,6 @@ target_link_libraries(xsd2ttcn common ${LIBXML2_LIBRARIES} OpenSSL::Crypto)
 # Install target
 #---------------------------------------------------------------------------------------
 install(TARGETS xsd2ttcn
+    EXPORT ${TARGETS_EXPORT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
