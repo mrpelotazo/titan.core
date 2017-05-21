@@ -55,6 +55,7 @@ target_include_directories(tcov2lcov PRIVATE ${LIBXML2_INCLUDE_DIR})
 # Install targets
 #---------------------------------------------------------------------------------------
 install(TARGETS compiler ttcn3_makefilegen tcov2lcov
+    EXPORT ${TARGETS_EXPORT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
