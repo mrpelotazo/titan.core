@@ -9,6 +9,7 @@ cmake_minimum_required(VERSION 3.6)
 project(titan VERSION 6.2.0)
 
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 #---------------------------------------------------------------------------------------
 # Find required dependencies
@@ -29,6 +30,14 @@ set(CMAKE_C_STANDARD 11)
 add_definitions(-DLINUX -DNDEBUG)
 
 #---------------------------------------------------------------------------------------
+# CMake package variables
+#---------------------------------------------------------------------------------------
+set(CONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
+set(VERSION_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config-version.cmake")
+set(PROJECT_CONFIG_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}-config.cmake")
+set(TARGETS_EXPORT_NAME "${PROJECT_NAME}Targets")
+
+#---------------------------------------------------------------------------------------
 # Add CMakeLists from subdirectories
 #---------------------------------------------------------------------------------------
 add_subdirectory(common)
@@ -44,6 +53,38 @@ add_subdirectory(loggerplugins/JUnitLogger)
 add_subdirectory(loggerplugins/JUnitLogger2)
 add_subdirectory(loggerplugins/TSTLogger)
 add_subdirectory(etc)
+
+#---------------------------------------------------------------------------------------
+# CMake package
+#---------------------------------------------------------------------------------------
+# Generate package version config file
+write_basic_package_version_file(
+    "${VERSION_CONFIG_FILE}"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+# Install version config
+install(
+    FILES "${VERSION_CONFIG_FILE}"
+    DESTINATION "${CONFIG_INSTALL_DIR}"
+)
+
+# Exported targets for build directory
+export(
+    EXPORT ${TARGETS_EXPORT_NAME}
+    FILE ${PROJECT_NAME}-config.cmake
+)
+
+# Exported targets for installation
+install(
+    EXPORT ${TARGETS_EXPORT_NAME}
+    DESTINATION ${CONFIG_INSTALL_DIR}
+    FILE ${PROJECT_NAME}-config.cmake
+)
+
+# Add to CMake registry
+export(PACKAGE ${PROJECT_NAME})
 
 #---------------------------------------------------------------------------------------
 # CPack
