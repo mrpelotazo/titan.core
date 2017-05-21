@@ -6,19 +6,31 @@
 
 cmake_minimum_required(VERSION 3.6)
 
+#---------------------------------------------------------------------------------------
+# Cli not generated sources
+#---------------------------------------------------------------------------------------
 set(CLI_STATIC_SOURCES
     Cli.cc
 )
 
+#---------------------------------------------------------------------------------------
+# Cli generated sources
+#---------------------------------------------------------------------------------------
 set(CLI_GENERATED_SOURCES
     config_read.lex.cc config_read.tab.cc
 )
 
+#---------------------------------------------------------------------------------------
+# Target cli
+#---------------------------------------------------------------------------------------
 add_library(cli ${CLI_STATIC_SOURCES} ${CLI_GENERATED_SOURCES})
 target_include_directories(cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(cli PUBLIC -D_REENTRANT)
 target_link_libraries(cli PUBLIC common)
 
+#---------------------------------------------------------------------------------------
+# File generation commands
+#---------------------------------------------------------------------------------------
 add_custom_command(OUTPUT config_read.lex.cc
     COMMAND flex -B -s -Cr -Cfe -Pconfig_read_ -o config_read.lex.cc ${CMAKE_CURRENT_SOURCE_DIR}/config_read.l
     VERBATIM
