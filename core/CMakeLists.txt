@@ -124,16 +124,16 @@ target_include_directories(ttcn3_obj PUBLIC
 add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
 add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
 
-target_include_directories(ttcn3 PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/common
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${RT1_DIR}
-    ${LIBXML2_INCLUDE_DIR}
-)
-
 target_link_libraries(ttcn3-dynamic PUBLIC
     edit-dynamic
+)
+
+target_include_directories(ttcn3 INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT1_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 #---------------------------------------------------------------------------------------
@@ -165,6 +165,15 @@ target_include_directories(ttcn3-parallel_obj PUBLIC
 target_link_libraries(ttcn3-parallel-dynamic PUBLIC
     edit-dynamic
 )
+
+target_include_directories(ttcn3-parallel INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT1_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
 #---------------------------------------------------------------------------------------
 # Target ttcn3-rt2
 #---------------------------------------------------------------------------------------
@@ -195,6 +204,14 @@ target_link_libraries(ttcn3-rt2-dynamic PUBLIC
     edit-dynamic
 )
 
+target_include_directories(ttcn3-rt2 INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT2_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
 #---------------------------------------------------------------------------------------
 # Target ttcn3-rt2-parallel
 #---------------------------------------------------------------------------------------
@@ -223,6 +240,14 @@ add_library(ttcn3-rt2-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2-paralle
 
 target_link_libraries(ttcn3-rt2-parallel-dynamic PUBLIC
     edit-dynamic
+)
+
+target_include_directories(ttcn3-rt2-parallel INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT2_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 #---------------------------------------------------------------------------------------
