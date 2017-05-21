@@ -124,6 +124,10 @@ target_include_directories(ttcn3_obj PUBLIC
 add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
 add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
 
+target_compile_definitions(ttcn3 INTERFACE
+    -DLINUX
+)
+
 target_link_libraries(ttcn3-dynamic PUBLIC
     edit-dynamic
 )
@@ -148,11 +152,6 @@ add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     config_process.tab.cc config_process.lex.cc
 )
 
-set_target_properties(ttcn3-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-
-add_library(ttcn3-parallel STATIC $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
-add_library(ttcn3-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
-
 target_include_directories(ttcn3-parallel_obj PUBLIC
     ${LIBXML2_INCLUDE_DIR}
     ${PROJECT_SOURCE_DIR}/common
@@ -162,8 +161,17 @@ target_include_directories(ttcn3-parallel_obj PUBLIC
 
 )
 
+set_target_properties(ttcn3-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
+add_library(ttcn3-parallel STATIC $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
+
 target_link_libraries(ttcn3-parallel-dynamic PUBLIC
     edit-dynamic
+)
+
+target_compile_definitions(ttcn3-parallel INTERFACE
+    -DLINUX
 )
 
 target_include_directories(ttcn3-parallel INTERFACE
@@ -199,6 +207,10 @@ target_include_directories(ttcn3-rt2_obj PUBLIC
 
 add_library(ttcn3-rt2 STATIC $<TARGET_OBJECTS:ttcn3-rt2_obj> $<TARGET_OBJECTS:common_obj>)
 add_library(ttcn3-rt2-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2_obj> $<TARGET_OBJECTS:common_obj>)
+
+target_compile_definitions(ttcn3-rt2 INTERFACE
+    -DLINUX
+)
 
 target_link_libraries(ttcn3-rt2-dynamic PUBLIC
     edit-dynamic
@@ -237,6 +249,10 @@ target_include_directories(ttcn3-rt2-parallel_obj PUBLIC
 
 add_library(ttcn3-rt2-parallel STATIC $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj> $<TARGET_OBJECTS:common_obj>)
 add_library(ttcn3-rt2-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj> $<TARGET_OBJECTS:common_obj>)
+
+target_compile_definitions(ttcn3-rt2-parallel INTERFACE
+    -DLINUX
+)
 
 target_link_libraries(ttcn3-rt2-parallel-dynamic PUBLIC
     edit-dynamic
