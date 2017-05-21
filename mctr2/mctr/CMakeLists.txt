@@ -1,16 +1,43 @@
+##
+## @file
+## @author  Adrian Antonana
+## @brief
+##
+
+
 cmake_minimum_required(VERSION 3.6)
 
+#---------------------------------------------------------------------------------------
+# mctr_cli not generated sources
+#---------------------------------------------------------------------------------------
 set(MCTR_STATIC_SOURCES MctrError.cc MainController.cc UserInterface.cc config_data.cc)
+
+#---------------------------------------------------------------------------------------
+# mctr_cli generated sources
+#---------------------------------------------------------------------------------------
 set(MCTR_GENERATED_SOURCES Cli_main.cc)
 
+#---------------------------------------------------------------------------------------
+# File generation commands
+#---------------------------------------------------------------------------------------
 add_custom_command(OUTPUT Cli_main.cc
     COMMAND echo "\\#define CLI" > Cli_main.cc
     COMMAND cat ${CMAKE_CURRENT_SOURCE_DIR}/main.cc >> Cli_main.cc
 )
 
+#---------------------------------------------------------------------------------------
+# Target rint
+#---------------------------------------------------------------------------------------
 add_library(rint OBJECT ${PROJECT_SOURCE_DIR}/core/RInt.cc)
+
+#---------------------------------------------------------------------------------------
+# Target textbuf
+#---------------------------------------------------------------------------------------
 add_library(textbuf OBJECT ${PROJECT_SOURCE_DIR}/core/Textbuf.cc)
 
+#---------------------------------------------------------------------------------------
+# Target mctr_cli
+#---------------------------------------------------------------------------------------
 add_executable(mctr_cli
     ${MCTR_STATIC_SOURCES}
     ${MCTR_GENERATED_SOURCES}
