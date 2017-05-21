@@ -265,18 +265,17 @@ target_link_libraries(ttcn3_profmerge PRIVATE common)
 #---------------------------------------------------------------------------------------
 install(TARGETS ttcn3 ttcn3-parallel ttcn3-rt2 ttcn3-rt2-parallel
                 ttcn3-dynamic ttcn3-parallel-dynamic ttcn3-rt2-dynamic ttcn3-rt2-parallel-dynamic
+                ttcn3_profmerge
+    EXPORT ${TARGETS_EXPORT_NAME}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY ${RT2_DIR}
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     FILES_MATCHING PATTERN "*.hh"
     PATTERN "TitanLoggerControl.hh" EXCLUDE
-)
-
-install(TARGETS ttcn3_profmerge
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
