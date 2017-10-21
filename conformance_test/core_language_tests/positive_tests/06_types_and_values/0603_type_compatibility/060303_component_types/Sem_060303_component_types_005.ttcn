@@ -1,0 +1,56 @@
+/******************************************************************************
+ * Copyright (c) ETSI 2017.
+ *
+ * This file is subject to copyrights owned by ETSI. Non-exclusive permission
+ * is hereby granted, free of charge, to copy, reproduce and amend this file
+ * under the following conditions: It is provided "as is", without warranty of any
+ * kind, expressed or implied.
+ * 
+ * ETSI shall never be liable for any claim, damages, or other liability arising
+ * from its use or inability of use.This permission does not apply to any documentation
+ * associated with this file for which ETSI keeps all rights reserved. The present
+ * copyright notice shall be included in all copies of whole or part of this
+ * file and shall not imply any sub-license right.
+ *
+ * Modified by: Adrien Kirjak
+ *
+ ** @version  0.0.1
+ ** @purpose  1:6.3.3, Ensure that the IUT correctly handles component compatibility of system and runs on clause
+ ** @verdict  pass reject
+ ***************************************************/
+
+// The following requirements are tested:
+//System compatibility: a function or altstep referring to component type "A" in its system clause may be called
+//or started in any context that has a system clause of type "B" or a test case with a runs on clause of type "B"
+//and no system clause if all the port definitions of "A" have identical definitions in "B". If the type of the
+//system is unknown in the calling function, this can lead to runtime errors if the component type "A" is not
+//system-compatible with the type of the system the current test case was started on.  
+
+module Sem_060303_component_types_005 { 
+
+	type port P message {
+		inout integer;
+	} with {extension "internal"}
+
+	type component GeneralComp {
+		port P p1;
+        port P p2;
+	}
+    
+    type component GeneralCompEx {
+        port P p1;
+    }
+    
+    function f_test() runs on GeneralComp system GeneralCompEx {
+		setverdict(pass);
+    }
+
+	testcase TC_Sem_060303_component_types_005() runs on GeneralComp {
+		f_test(); // GeneralCompEx and GeneralComp are system compatible
+		setverdict(pass);
+	}
+	
+	control{
+	    execute(TC_Sem_060303_component_types_005());
+	}
+}

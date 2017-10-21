@@ -133,6 +133,7 @@
                     <xs:element name="ignoreUntaggedOnTopLevelUnion" minOccurs="0" maxOccurs="1" type="xs:boolean" />
                     <xs:element name="activateDebugger" minOccurs="0" maxOccurs="1" type="xs:boolean" />
                     <xs:element name="quietly" minOccurs="0" maxOccurs="1" type="xs:boolean" />
+                    <xs:element name="enableLegacyEncoding" minOccurs="0" maxOccurs="1" type="xs:boolean" />
                     <xs:element name="namingRules" minOccurs="0" maxOccurs="1" type="xs:normalizedString" />
                     <xs:element name="disableSubtypeChecking" minOccurs="0" maxOccurs="1" type="xs:boolean" />
                     <xs:element name="CxxCompiler" minOccurs="0" maxOccurs="1" type="xs:normalizedString" />
@@ -434,7 +435,7 @@
 			  <xs:element name="ReferencedProject" minOccurs="0" maxOccurs="unbounded">
 				<xs:complexType>
 					<xs:attribute name="name" type="xs:normalizedString" use="required" />
-					<xs:attribute name="projectLocationURI" type="xs:normalizedString" use="required" />
+					<xs:attribute name="projectLocationURI" type="xs:normalizedString" use="optional" />
 					<xs:attribute name="tpdName" type="xs:normalizedString" use="optional" />
 				</xs:complexType>
 			  </xs:element>

@@ -348,8 +348,8 @@ namespace Ttcn {
     /**
      * Generates code for checking if the reference
      * and the referred objects are bound or not.*/
-    void generate_code_ispresentbound(expression_struct_t *expr,
-      bool is_template, const bool isbound);
+    void generate_code_ispresentboundchosen(expression_struct_t *expr,
+      bool is_template, const Value::operationtype_t optype, const char* field);
     /** Lets the referenced assignment object know, that the reference is used
       * at least once (only relevant for formal parameters and external constants). */
     void ref_usage_found();
@@ -1402,6 +1402,22 @@ namespace Ttcn {
      * It is NULL if the function has no 'runs on' clause or \a runs_on_ref is
      * erroneous. */
     Type *runs_on_type;
+    /** The 'mtc' clause (i.e. a reference to a TTCN-3 component type)
+     * It is NULL if the function has no 'mtc' clause. */
+    Reference *mtc_ref;
+    /** Points to the object describing the component type referred by
+     * 'mtc' clause.
+     * It is NULL if the function has no 'mtc' clause or \a mtc_ref is
+     * erroneous. */
+    Type *mtc_type;
+    /** The 'system' clause (i.e. a reference to a TTCN-3 component type)
+     * It is NULL if the function has no 'system' clause. */
+    Reference *system_ref;
+    /** Points to the object describing the component type referred by
+     * 'system' clause.
+     * It is NULL if the function has no 'system' clause or \a system_ref is
+     * erroneous. */
+    Type *system_type;
     /** The 'port' clause (i.e. a reference to a TTCN-3 port type)
      * It is NULL if the function has no 'port' clause. */
     Reference *port_ref;
@@ -1418,6 +1434,7 @@ namespace Ttcn {
     bool is_startable;
     /** Opts out from location information */
     bool transparent;
+    bool deterministic;
 
     NameBridgingScope bridgeScope;
 
@@ -1430,17 +1447,21 @@ namespace Ttcn {
      *
      * Called from a single location in compiler.y
      *
+     * @param p_deterministic true if deterministic
      * @param p_id function name
      * @param p_fpl formal parameter list
      * @param p_runs_on_ref "runs on", else NULL
+     * @param p_mtc_ref "mtc", else NULL
+     * @param p_system_ref "system", else NULL
      * @param p_port_ref "port", else NULL
      * @param p_return_type return type, may be NULL
      * @param returns_template true if the return value is a template
      * @param p_template_restriction restriction type
      * @param p_block the body of the function
      */
-    Def_Function(Identifier *p_id, FormalParList *p_fpl,
-                 Reference *p_runs_on_ref, Reference *p_port_ref,
+    Def_Function(bool p_deterministic, Identifier *p_id, FormalParList *p_fpl,
+                 Reference *p_runs_on_ref, Reference *p_mtc_ref,
+                 Reference *p_system_ref, Reference *p_port_ref,
                  Type *p_return_type,
                  bool returns_template,
                  template_restriction_t p_template_restriction,
@@ -1450,6 +1471,8 @@ namespace Ttcn {
     virtual void set_fullname(const string& p_fullname);
     virtual void set_my_scope(Scope *p_scope);
     virtual Type *get_RunsOnType();
+    virtual Type *get_MtcType();
+    virtual Type *get_SystemType();
     virtual Type *get_PortType();
     /** Returns a scope that can access the definitions within component type
      * \a comptype and its parent is \a parent_scope.*/
@@ -1516,7 +1539,9 @@ namespace Ttcn {
     Type::MessageEncodingType_t encoding_type;
     string *encoding_options;
     Ttcn::ErrorBehaviorList *eb_list;
-    Ttcn::PrintingType *json_printing;
+    // pretty or compact printing for json or xml
+    Ttcn::PrintingType *printing;
+    bool deterministic;
     /// Copy constructor disabled
     Def_ExtFunction(const Def_ExtFunction& p);
     /// %Assignment disabled
@@ -1526,19 +1551,21 @@ namespace Ttcn {
      *
      * Called from a single location in compiler.y
      *
+     * @param p_deterministic true if deterministic function
      * @param p_id the name
      * @param p_fpl formal parameters
      * @param p_return_type the return type
      * @param returns_template true if it returns a template
      * @param p_template_restriction restriction type
      */
-    Def_ExtFunction(Identifier *p_id, FormalParList *p_fpl,
+    Def_ExtFunction(bool p_deterministic, Identifier *p_id, FormalParList *p_fpl,
       Type *p_return_type, bool returns_template,
       template_restriction_t p_template_restriction)
       : Def_Function_Base(true, p_id, p_fpl, p_return_type, returns_template,
           p_template_restriction),
       function_type(EXTFUNC_MANUAL), encoding_type(Type::CT_UNDEF),
-      encoding_options(0), eb_list(0), json_printing(0) { }
+      encoding_options(0), eb_list(0), printing(0),
+      deterministic(p_deterministic) { }
     ~Def_ExtFunction();
     virtual Def_ExtFunction *clone() const;
     virtual void set_fullname(const string& p_fullname);
@@ -1586,6 +1613,22 @@ namespace Ttcn {
      * It is NULL if the altstep has no 'runs on' clause or \a runs_on_ref is
      * erroneous. */
     Type *runs_on_type;
+    /** The 'mtc' clause (i.e. a reference to a TTCN-3 component type)
+     * It is NULL if the altstep has no 'mtc' clause. */
+    Reference *mtc_ref;
+    /** Points to the object describing the component type referred by
+     * 'mtc' clause.
+     * It is NULL if the altstep has no 'mtc' clause or \a mtc_ref is
+     * erroneous. */
+    Type *mtc_type;
+    /** The 'system' clause (i.e. a reference to a TTCN-3 component type)
+     * It is NULL if the altstep has no 'system' clause. */
+    Reference *system_ref;
+    /** Points to the object describing the component type referred by
+     * 'system' clause.
+     * It is NULL if the altstep has no 'system' clause or \a system_ref is
+     * erroneous. */
+    Type *system_type;
     StatementBlock *sb; /**< contains the local definitions */
     AltGuards *ags;
 
@@ -1597,13 +1640,16 @@ namespace Ttcn {
     Def_Altstep& operator=(const Def_Altstep& p);
   public:
     Def_Altstep(Identifier *p_id, FormalParList *p_fpl,
-                Reference *p_runs_on_ref, StatementBlock *p_sb,
+                Reference *p_runs_on_ref, Reference *p_mtc_ref,
+                Reference *p_system_ref, StatementBlock *p_sb,
                 AltGuards *p_ags);
     virtual ~Def_Altstep();
     virtual Def_Altstep *clone() const;
     virtual void set_fullname(const string& p_fullname);
     virtual void set_my_scope(Scope *p_scope);
     virtual Type *get_RunsOnType();
+    virtual Type *get_MtcType();
+    virtual Type *get_SystemType();
     virtual FormalParList *get_FormalParList();
     /** Returns a scope that can access the definitions within component type
      * \a comptype and its parent is \a parent_scope.*/

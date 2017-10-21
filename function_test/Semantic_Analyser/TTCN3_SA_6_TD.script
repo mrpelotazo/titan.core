@@ -17,6 +17,7 @@
 .*   Palugyai, Sandor
 .*   Pandi, Krisztian
 .*   Szabados, Kristof
+.*   Szabo, Bence Janos
 .*   Szabo, Janos Zoltan – initial implementation
 .*   Szalai, Endre
 .*
@@ -1698,6 +1699,9 @@ template default f:= r[0];
 <END_RESULT>
 <RESULT IF_PASS COUNT 1>
 (?im)\bNotify\b.+?\bcode\b.+?\bnot\b.+?\bgenerated\b
+<END_RESULT>
+<RESULT IF_PASS COUNT 2>
+(?im)\bwarning\b.+?template.+?should.+?not.+?contain.+?field.+?default
 <END_RESULT>
 <RESULT IF_PASS COUNT 1>
 (?is)\berror:

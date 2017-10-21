@@ -172,17 +172,28 @@ namespace Ttcn {
   Type *StatementBlock::get_mtc_system_comptype(bool is_system)
   {
     // return NULL outside test cases
-    if (!my_def || my_def->get_asstype() != Common::Assignment::A_TESTCASE)
+    if (!my_def)
       return 0;
-    if (is_system) {
-      Def_Testcase *t_tc = dynamic_cast<Def_Testcase*>(my_def);
-      if (!t_tc) FATAL_ERROR("StatementBlock::get_mtc_system_comptype()");
-      Type *system_ct = t_tc->get_SystemType();
-      if (system_ct) return system_ct;
-      // otherwise (if the testcase has no system clause) the type of 'system'
-      // is the same as the type of 'mtc' (which is given in 'runs on' clause)
+    Common::Assignment::asstype_t asstype = my_def->get_asstype();
+    if (asstype == Common::Assignment::A_TESTCASE) {
+      if (is_system) {
+        Def_Testcase *t_tc = dynamic_cast<Def_Testcase*>(my_def);
+        if (!t_tc) FATAL_ERROR("StatementBlock::get_mtc_system_comptype()");
+        Type *system_ct = t_tc->get_SystemType();
+        if (system_ct) return system_ct;
+        // otherwise (if the testcase has no system clause) the type of 'system'
+        // is the same as the type of 'mtc' (which is given in 'runs on' clause)
+      }
+      return my_def->get_RunsOnType();
+    } else if (asstype == Common::Assignment::A_FUNCTION || asstype == Common::Assignment::A_ALTSTEP) {
+      if (is_system) {
+        return my_def->get_SystemType();
+      } else {
+        return my_def->get_MtcType();
+      }
+    } else {
+      return 0;
     }
-    return my_def->get_RunsOnType();
   }
 
   Ttcn::StatementBlock *StatementBlock::get_statementblock_scope()
@@ -722,6 +733,10 @@ namespace Ttcn {
       delete setstate_op.val;
       delete setstate_op.ti;
       break;
+    case S_SETENCODE:
+      delete setencode_op.type;
+      delete setencode_op.encoding;
+      break;
     default:
       FATAL_ERROR("Statement::clean_up()");
     } // switch statementtype
@@ -1074,14 +1089,15 @@ namespace Ttcn {
   }
 
   Statement::Statement(statementtype_t p_st, Reference *p_ref,
-                       TemplateInstance *p_templinst, Value *p_val)
+                       TemplateInstance *p_templinst, Value *p_val, bool p_translate)
     : statementtype(p_st), my_sb(0)
   {
     switch(statementtype) {
     case S_SEND:
-      if(!p_ref || !p_templinst)
+      if((!p_ref && p_translate == false) || !p_templinst)
         FATAL_ERROR("Statement::Statement()");
       port_op.portref=p_ref;
+      port_op.translate = p_translate;
       port_op.s.sendpar=p_templinst;
       port_op.s.toclause=p_val;
       break;
@@ -1154,13 +1170,14 @@ namespace Ttcn {
                        TemplateInstance *p_templinst,
                        TemplateInstance *p_fromclause,
                        ValueRedirect *p_redirectval, Reference *p_redirectsender,
-                       Reference* p_redirectindex)
+                       Reference* p_redirectindex, bool p_translate)
     : statementtype(p_st), my_sb(0)
   {
     switch(statementtype) {
     case S_RECEIVE:
     case S_CHECK_RECEIVE:
     case S_TRIGGER:
+      port_op.translate = p_translate;
       port_op.portref=p_ref;
       port_op.anyfrom = p_anyfrom;
       port_op.r.rcvpar=p_templinst;
@@ -1474,7 +1491,7 @@ namespace Ttcn {
     }
   }
   
-    Statement::Statement(statementtype_t p_st, Value* p_val, TemplateInstance* p_ti)
+  Statement::Statement(statementtype_t p_st, Value* p_val, TemplateInstance* p_ti)
   : statementtype(p_st), my_sb(0)
   {
     switch (statementtype) {
@@ -1484,6 +1501,22 @@ namespace Ttcn {
       }
       setstate_op.val = p_val;
       setstate_op.ti = p_ti;
+      break;
+    default:
+      FATAL_ERROR("Statement::Statement()");
+    }
+  }
+    
+  Statement::Statement(statementtype_t p_st, Type* p_type, Value* p_encoding)
+  : statementtype(p_st), my_sb(0)
+  {
+    switch (statementtype) {
+    case S_SETENCODE:
+      if (p_type == NULL || p_encoding == NULL) {
+        FATAL_ERROR("Statement::Statement()");
+      }
+      setencode_op.type = p_type;
+      setencode_op.encoding = p_encoding;
       break;
     default:
       FATAL_ERROR("Statement::Statement()");
@@ -1620,6 +1653,7 @@ namespace Ttcn {
     case S_STOP_PROFILER: return "@profiler.stop";
     case S_UPDATE: return "@update";
     case S_SETSTATE: return "setstate";
+    case S_SETENCODE: return "setencode";
     default:
       FATAL_ERROR("Statement::get_stmt_name()");
       return "";
@@ -1768,7 +1802,7 @@ namespace Ttcn {
       if (deactivate) deactivate->set_my_scope(p_scope);
       break;
     case S_SEND:
-      port_op.portref->set_my_scope(p_scope);
+      if (!port_op.translate) port_op.portref->set_my_scope(p_scope);
       port_op.s.sendpar->set_my_scope(p_scope);
       if(port_op.s.toclause) port_op.s.toclause->set_my_scope(p_scope);
       break;
@@ -1955,6 +1989,10 @@ namespace Ttcn {
         setstate_op.ti->set_my_scope(p_scope);
       }
       break;
+    case S_SETENCODE:
+      setencode_op.type->set_my_scope(p_scope);
+      setencode_op.encoding->set_my_scope(p_scope);
+      break;
     default:
       FATAL_ERROR("Statement::set_my_scope()");
     } // switch statementtype
@@ -2039,7 +2077,7 @@ namespace Ttcn {
       if (deactivate) deactivate->set_fullname(p_fullname+".deact");
       break;
     case S_SEND:
-      port_op.portref->set_fullname(p_fullname+".portref");
+      if (!port_op.translate) port_op.portref->set_fullname(p_fullname+".portref");
       port_op.s.sendpar->set_fullname(p_fullname+".sendpar");
       if(port_op.s.toclause)
         port_op.s.toclause->set_fullname(p_fullname+".to");
@@ -2244,6 +2282,10 @@ namespace Ttcn {
       if (setstate_op.ti != NULL) {
         setstate_op.ti->set_fullname(p_fullname + ".ti");
       }
+      break;
+    case S_SETENCODE:
+      setencode_op.type->set_fullname(p_fullname + ".type");
+      setencode_op.encoding->set_fullname(p_fullname + ".encoding");
       break;
     default:
       FATAL_ERROR("Statement::set_fullname()");
@@ -2536,6 +2578,7 @@ namespace Ttcn {
     case S_INT2ENUM:
     case S_UPDATE:
     case S_SETSTATE:
+    case S_SETENCODE:
       return false;
     case S_ALT:
     case S_INTERLEAVE:
@@ -2795,6 +2838,9 @@ namespace Ttcn {
       break;
     case S_SETSTATE:
       chk_setstate();
+      break;
+    case S_SETENCODE:
+      chk_setencode();
       break;
     default:
       FATAL_ERROR("Statement::chk()");
@@ -3125,6 +3171,11 @@ error:
       ref_pard->error("Function with `port' clause cannot be called directly.");
     }
     my_sb->chk_runs_on_clause(t_ass, *ref_pard, "call");
+    
+    bool in_control_part = my_sb->get_my_def() == NULL;
+    my_sb->chk_mtc_clause(t_ass, *ref_pard, "call", in_control_part);
+    my_sb->chk_system_clause(t_ass, *ref_pard, "call", in_control_part);
+    
     if (t_ass->get_Type())
       ref_pard->warning("The value returned by %s is not used",
 	      t_ass->get_description().c_str());
@@ -3251,40 +3302,44 @@ error:
     Error_Context cntxt(this, "In select union statement");
     select_union.expr->set_lowerid_to_ref();
     Type *t_gov=select_union.expr->get_expr_governor_last();
-    
+    boolean error = FALSE;
     if (t_gov == NULL || t_gov->get_typetype() == Type::T_ERROR) {
       select.expr->error("Cannot determine the type of the head expression");
-      return;
+      error = TRUE;
     }
     
-    Type::typetype_t tt=t_gov->get_typetype();
-    if (tt != Type::T_CHOICE_T && tt != Type::T_CHOICE_A && tt != Type::T_ANYTYPE) {
-      select.expr->error("The head must be of a union type or anytype");
-      return;
+    if (error == FALSE) {
+      Type::typetype_t tt = t_gov->get_typetype();
+      if (tt != Type::T_CHOICE_T && tt != Type::T_CHOICE_A && tt != Type::T_ANYTYPE) {
+        select.expr->error("The head must be of a union type or anytype");
+        error = TRUE;
+      }
     }
     
-    for(size_t i=0; i<select_union.sus->get_nof_sus(); i++) {
-      size_t size = select_union.sus->get_su_byIndex(i)->get_ids().size();
-      for(size_t j=0; j<size; j++) {
-        const Identifier *id = select_union.sus->get_su_byIndex(i)->get_id_byIndex(j);
-        if (!t_gov->has_comp_withName(*id)) {
-          select_union.sus->get_su_byIndex(i)->error("In the %lu. branch: '%s' is not an alternative of union type '%s'", i+1, id->get_ttcnname().c_str(), t_gov->get_typename().c_str());
-          continue;
-        }
-        for(size_t i2=i; i2<select_union.sus->get_nof_sus(); i2++) {
-          size_t size2 = select_union.sus->get_su_byIndex(i2)->get_ids().size();
-          for(size_t j2=j; j2<size2; j2++) {
-            if (i == i2 && j == j2) continue;
-            const Identifier *id2 = select_union.sus->get_su_byIndex(i2)->get_id_byIndex(j2);
-            if (id->get_ttcnname() == id2->get_ttcnname()) {
-              select_union.sus->get_su_byIndex(i2)->error("The '%s' is already present in the %lu. branch of select union", id->get_ttcnname().c_str(), i+1);
+    if (error == FALSE) {
+      for(size_t i=0; i<select_union.sus->get_nof_sus(); i++) {
+        size_t size = select_union.sus->get_su_byIndex(i)->get_ids().size();
+        for(size_t j=0; j<size; j++) {
+          const Identifier *id = select_union.sus->get_su_byIndex(i)->get_id_byIndex(j);
+          if (!t_gov->has_comp_withName(*id)) {
+            select_union.sus->get_su_byIndex(i)->error("In the %lu. branch: '%s' is not an alternative of union type '%s'", i+1, id->get_ttcnname().c_str(), t_gov->get_typename().c_str());
+            continue;
+          }
+          for(size_t i2=i; i2<select_union.sus->get_nof_sus(); i2++) {
+            size_t size2 = select_union.sus->get_su_byIndex(i2)->get_ids().size();
+            for(size_t j2=j; j2<size2; j2++) {
+              if (i == i2 && j == j2) continue;
+              const Identifier *id2 = select_union.sus->get_su_byIndex(i2)->get_id_byIndex(j2);
+              if (id->get_ttcnname() == id2->get_ttcnname()) {
+                select_union.sus->get_su_byIndex(i2)->error("The '%s' is already present in the %lu. branch of select union", id->get_ttcnname().c_str(), i+1);
+              }
             }
           }
         }
       }
     }
     
-    select_union.sus->chk(t_gov);
+    select_union.sus->chk();
   }
   void Statement::chk_for()
   {
@@ -3371,6 +3426,9 @@ error:
     Error_Context cntxt(this, "In altstep instance");
     Common::Assignment *t_ass = ref_pard->get_refd_assignment();
     my_sb->chk_runs_on_clause(t_ass, *ref_pard, "call");
+    bool in_control_part = my_sb->get_my_def() == NULL;
+    my_sb->chk_mtc_clause(t_ass, *ref_pard, "call", in_control_part);
+    my_sb->chk_system_clause(t_ass, *ref_pard, "call", in_control_part);
   }
 
   void Statement::chk_return()
@@ -3521,7 +3579,17 @@ error:
   {
     Error_Context cntxt(this, "In send statement");
     // checking the port reference
-    Type *port_type = chk_port_ref(port_op.portref);
+    Type *port_type;
+    if (port_op.translate) {
+      PortScope* ps = my_sb->get_scope_port();
+      if (ps) {
+        port_type = ps->get_port_type();
+      } else {
+        error("Cannot determine the type of the port: Missing port clause on the function.");
+      }
+    } else {
+      port_type = chk_port_ref(port_op.portref);
+    }
     // determining the message type
     Type *msg_type = 0;
     bool msg_type_determined = false;
@@ -3905,7 +3973,17 @@ error:
     const char *stmt_name = get_stmt_name();
     Error_Context cntxt(this, "In %s statement", stmt_name);
     // checking the port reference
-    Type *port_type = chk_port_ref(port_op.portref, port_op.anyfrom);
+    Type *port_type;
+    if (port_op.translate) {
+      PortScope* ps = my_sb->get_scope_port();
+      if (ps) {
+        port_type = ps->get_port_type();
+      } else {
+        error("Cannot determine the type of the port: Missing port clause on the function.");
+      }
+    } else {
+      port_type = chk_port_ref(port_op.portref, port_op.anyfrom);
+    }
     // checking the parameter and/or value redirect
     if (port_op.r.rcvpar) {
       // the receive parameter (template instance) is present
@@ -3953,7 +4031,7 @@ error:
 	  port_op.portref->error("Port type `%s' does not have any incoming "
 	    "message types", port_type->get_typename().c_str());
 	}
-      } else if (!port_op.portref) {
+      } else if (!port_op.portref && port_op.translate == false) {
 	// the statement refers to 'any port'
 	port_op.r.rcvpar->error("Operation `any port.%s' cannot have parameter",
 	  stmt_name);
@@ -4747,6 +4825,10 @@ error:
     }
     // checking consistency
     if (!ptb1 || !ptb2) return;
+    if (!ptb1->connect_can_receive_or_send(ptb2)) {
+      warning("Neither port type `%s' nor port type `%s' can send messages.",
+        pt1->get_typename().c_str(), pt2->get_typename().c_str());
+    }
     if (!ptb1->is_connectable(ptb2) ||
 	(ptb1 != ptb2 && !ptb2->is_connectable(ptb1))) {
       error("The connection between port types `%s' and `%s' is not consistent",
@@ -4783,10 +4865,6 @@ error:
       pt1 = chk_conn_endpoint(config_op.compref1, config_op.portref1, true);
       if (pt1) {
         ptb1 = pt1->get_PortBody();
-        if (ptb1->is_internal()) {
-          config_op.portref1->warning("Port type `%s' was marked as `internal'",
-                  pt1->get_typename().c_str());
-        }
       } else ptb1 = 0;
       Value *cref1 = config_op.compref1->get_value_refd_last();
       if (cref1->get_valuetype() == Value::V_EXPR) {
@@ -4808,10 +4886,6 @@ error:
       pt2 = chk_conn_endpoint(config_op.compref2, config_op.portref2, true);
       if (pt2) {
         ptb2 = pt2->get_PortBody();
-        if (ptb2->is_internal()) {
-          config_op.portref2->warning("Port type `%s' was marked as `internal'",
-            pt2->get_typename().c_str());
-        }
       } else ptb2 = 0;
       Value *cref2 = config_op.compref2->get_value_refd_last();
       if (cref2->get_valuetype() == Value::V_EXPR) {
@@ -4837,7 +4911,19 @@ error:
       return;
     }
     // checking consistency
-    if (!ptb1 || !ptb2) return;
+    if (!ptb1 || !ptb2) {
+      if (ptb1 && ptb1->is_internal()) {
+        Error_Context cntxt2(config_op.compref1, "In first endpoint");
+        config_op.portref1->warning("Port type `%s' was marked as `internal'",
+                pt1->get_typename().c_str());
+      }
+      if (ptb2 && ptb2->is_internal()) {
+        Error_Context cntxt2(config_op.compref2, "In second endpoint");
+        config_op.portref2->warning("Port type `%s' was marked as `internal'",
+                pt2->get_typename().c_str());
+      }
+      return;
+    }
     if (cref1_is_tc || cref2_is_system) {
       // The check for safe mapping was already checked in
       // PortTypeBody::chk_map_translation()
@@ -4848,6 +4934,10 @@ error:
           pt2->get_typename().c_str());
         ptb1->report_mapping_errors(ptb2);
       }
+      if (!config_op.translate && !ptb1->map_can_receive_or_send(ptb2)) {
+        warning("Port type `%s' cannot send or receive from system port type `%s'.",
+          pt1->get_typename().c_str(), pt2->get_typename().c_str());
+      }
     } else if (cref2_is_tc || cref1_is_system) {
       config_op.translate = !ptb2->is_legacy() && ptb2->is_translate(ptb1);
       if (!config_op.translate && !ptb2->is_mappable(ptb1)) {
@@ -4856,6 +4946,10 @@ error:
           pt2->get_typename().c_str());
         ptb2->report_mapping_errors(ptb1);
       }
+      if (!config_op.translate && !ptb2->map_can_receive_or_send(ptb1)) {
+        warning("Port type `%s' cannot send or receive from system port type `%s'.",
+          pt2->get_typename().c_str(), pt1->get_typename().c_str());
+      }
     } else {
       // we have no idea which one is the system port
       config_op.translate = (!ptb1->is_legacy() && ptb1->is_translate(ptb2)) ||
@@ -4863,6 +4957,18 @@ error:
       if (!config_op.translate && !ptb1->is_mappable(ptb1) && !ptb2->is_mappable(ptb1)) {
         error("The mapping between port types `%s' and `%s' is not consistent",
                 pt1->get_typename().c_str(), pt2->get_typename().c_str());
+      }
+    }
+    if (!config_op.translate) {
+      if (ptb1->is_internal()) {
+        Error_Context cntxt2(config_op.compref1, "In first endpoint");
+        config_op.portref1->warning("Port type `%s' was marked as `internal'",
+                pt1->get_typename().c_str());
+      }
+      if (ptb2->is_internal()) {
+        Error_Context cntxt2(config_op.compref2, "In second endpoint");
+        config_op.portref2->warning("Port type `%s' was marked as `internal'",
+                pt2->get_typename().c_str());
       }
     }
   }
@@ -5639,7 +5745,6 @@ error:
       return;
     }
     Common::Assignment* refd_ass = update_op.ref->get_refd_assignment(false);
-    Type* ref_type = NULL;
     if (refd_ass != NULL) {
       switch (refd_ass->get_asstype()) {
       case Definition::A_CONST:
@@ -5650,7 +5755,7 @@ error:
           "expected instead of %s", refd_ass->get_assname());
         return;
       }
-      ref_type = refd_ass->get_Type();
+      Type* ref_type = refd_ass->get_Type();
       if (ref_type != NULL &&
           !ErroneousDescriptors::can_have_err_attribs(ref_type)) {
         update_op.ref->error("Type `%s' cannot have erroneous attributes",
@@ -5706,6 +5811,48 @@ error:
       } else {
         setstate_op.ti->error("Cannot determine the type of the parameter.");
       }
+    }
+  }
+  
+  void Statement::chk_setencode()
+  {
+    if (legacy_codec_handling) {
+      FATAL_ERROR("Statement::chk_setencode");
+    }
+    Error_Context cntxt(this, "In setencode statement");
+    Common::Type* type = setencode_op.type;
+    type->chk();
+    Type* t_ct = type->get_type_w_coding_table();
+    bool type_error = (type->get_typetype() == Common::Type::T_ERROR);
+    if (!type_error) {
+      if (t_ct == NULL) {
+        type->error("The type argument has no encoding rules defined");
+        type_error = true;
+      }
+      else if (t_ct->get_coding_table().size() == 1) {
+        type->warning("The type argument has only one encoding rule defined. "
+          "The 'setencode' statement will be ignored");
+      }
+    }
+    {
+      Common::Value* enc_str = setencode_op.encoding;
+      Error_Context cntxt2(enc_str, "In the second argument");
+      enc_str->set_lowerid_to_ref();
+      Common::Type::get_pooltype(Type::T_USTR)->chk_this_value(enc_str, NULL,
+        Common::Type::EXPECTED_DYNAMIC_VALUE, INCOMPLETE_NOT_ALLOWED,
+        OMIT_NOT_ALLOWED, NO_SUB_CHK);
+      if (!type_error && enc_str->get_valuetype() != Common::Value::V_ERROR &&
+          !enc_str->is_unfoldable()) {
+        enc_str->chk_dyn_enc_str(type);
+      }
+    }
+    RunsOnScope* runs_on_scope = my_sb->get_scope_runs_on();
+    if (runs_on_scope == NULL) {
+      error("'self.setencode' must be in a definition with a runs-on clause");
+    }
+    else if (!type_error && t_ct->get_coding_table().size() >= 2) {
+      runs_on_scope->get_component_type()->get_CompBody()->
+        add_default_coding_var(type);
     }
   }
 
@@ -5777,7 +5924,7 @@ error:
       if (deactivate) deactivate->set_code_section(p_code_section);
       break;
     case S_SEND:
-      port_op.portref->set_code_section(p_code_section);
+      if (!port_op.translate) port_op.portref->set_code_section(p_code_section);
       port_op.s.sendpar->set_code_section(p_code_section);
       if (port_op.s.toclause)
         port_op.s.toclause->set_code_section(p_code_section);
@@ -5971,6 +6118,9 @@ error:
       if (setstate_op.ti != NULL) {
         setstate_op.ti->set_code_section(p_code_section);
       }
+      break;
+    case S_SETENCODE:
+      setencode_op.encoding->set_code_section(p_code_section);
       break;
     default:
       FATAL_ERROR("Statement::set_code_section()");
@@ -6170,6 +6320,9 @@ error:
       break;
     case S_SETSTATE:
       str = generate_code_setstate(str);
+      break;
+    case S_SETENCODE:
+      str = generate_code_setencode(str);
       break;
     default:
       FATAL_ERROR("Statement::generate_code()");
@@ -7264,8 +7417,12 @@ error:
   {
     expression_struct expr;
     Code::init_expr(&expr);
-    port_op.portref->generate_code(&expr);
-    expr.expr = mputstr(expr.expr, ".send(");
+    if (!port_op.translate) {
+      port_op.portref->generate_code(&expr);
+      expr.expr = mputstr(expr.expr, ".send(");
+    } else {
+      expr.expr = mputstr(expr.expr, "send(");
+    }
     generate_code_expr_sendpar(&expr);
     if (port_op.s.toclause) {
       expr.expr = mputstr(expr.expr, ", ");
@@ -7291,13 +7448,13 @@ error:
     if (port_op.s.call.body) {
       str = mputstr(str, "{\n");
       if (port_op.s.call.timer) {
-	str = port_op.s.call.timer->update_location_object(str);
-	str = mputstr(str, "TIMER call_timer;\n");
-	Code::init_expr(&expr);
-	expr.expr = mputstr(expr.expr, "call_timer.start(");
-	port_op.s.call.timer->generate_code_expr(&expr);
-	expr.expr = mputc(expr.expr, ')');
-	str = Code::merge_free_expr(str, &expr);
+        str = port_op.s.call.timer->update_location_object(str);
+        str = mputstr(str, "TIMER call_timer;\n");
+        Code::init_expr(&expr);
+        expr.expr = mputstr(expr.expr, "call_timer.start(");
+        port_op.s.call.timer->generate_code_expr(&expr);
+        expr.expr = mputc(expr.expr, ')');
+        str = Code::merge_free_expr(str, &expr);
       }
       // the label name is used for prefixing local variables
       if(!my_sb) FATAL_ERROR("Statement::generate_code_call()");
@@ -7509,7 +7666,7 @@ error:
     }
     if (config_op.translate == true && warning == false) {
       expr.expr = mputstr(expr.expr, ", TRUE");
-    }
+      }
     expr.expr = mputstr(expr.expr, ")");
     if (config_op.translate == true) {
       string funcname;
@@ -7578,6 +7735,8 @@ error:
       if (expr_reason.postamble)
         expr.postamble = mputprintf(expr.postamble, "%s;\n",
                                     expr_reason.postamble);
+      //TODO: when there is more than 1 reason parameter
+      // the resulting string should be extracted into a temporary variable.
       expr.expr = mputprintf(expr.expr, "%s", expr_reason.expr);
       Code::free_expr(&expr_reason);
     }
@@ -7717,14 +7876,44 @@ error:
     }
     return Code::merge_free_expr(str, &expr);
   }
+  
+  char* Statement::generate_code_setencode(char* str)
+  {
+    if (legacy_codec_handling) {
+      FATAL_ERROR("Statement::generate_code_setencode");
+    }
+    if (setencode_op.type->get_type_w_coding_table()->get_coding_table().size() == 1) {
+      // the 'setencode' statement is ignored if the type has only one encoding
+      return str;
+    }
+    expression_struct expr;
+    Code::init_expr(&expr);
+    setencode_op.encoding->generate_code_expr(&expr);
+    if (expr.preamble != NULL) {
+      str = mputstr(str, expr.preamble);
+    }
+    str = mputprintf(str, "%s_default_coding = %s;\n",
+      setencode_op.type->get_genname_default_coding(my_sb).c_str(), expr.expr);
+    if (expr.postamble != NULL) {
+      str = mputstr(str, expr.postamble);
+    }
+    Code::free_expr(&expr);
+    return str;
+  }
 
   void Statement::generate_code_expr_receive(expression_struct *expr,
     const char *opname)
   {
-    if (port_op.portref) {
-      // The operation refers to a specific port.
-      port_op.portref->generate_code(expr);
-      expr->expr = mputprintf(expr->expr, ".%s(", opname);
+    if (port_op.portref || port_op.translate) {
+      if (!port_op.translate) {
+        // The operation refers to a specific port.
+        port_op.portref->generate_code(expr);
+        expr->expr = mputprintf(expr->expr, ".%s(", opname);
+      } else {
+        // No need for a reference because the send will be called
+        // on *this in the c++ code.
+        expr->expr = mputprintf(expr->expr, "%s(", opname);
+      }
       if (port_op.r.rcvpar) {
         // The receive parameter is present.
         bool has_decoded_redirect = port_op.r.redirect.value != NULL &&
@@ -7744,7 +7933,7 @@ error:
     generate_code_expr_fromclause(expr);
     expr->expr = mputstr(expr->expr, ", ");
     generate_code_expr_senderredirect(expr);
-    if (port_op.portref) {
+    if (port_op.portref || port_op.translate) {
       expr->expr = mputstr(expr->expr, ", ");
       if (port_op.r.redirect.index != NULL) {
         generate_code_index_redirect(expr, port_op.r.redirect.index, my_sb);
@@ -8297,6 +8486,7 @@ error:
         case S_INT2ENUM:
         case S_UPDATE:
         case S_SETSTATE:
+        case S_SETENCODE:
           break;
         default:
           FATAL_ERROR("Statement::set_parent_path()");
@@ -9658,7 +9848,8 @@ error:
             set_params_str = mputstr(set_params_str, "}\nelse {\n");
           }
           Type::typetype_t tt = par->get_type()->get_type_refd_last()->get_typetype_ttcn3();
-          if (ve->get_dec_type()->is_coding_by_function(false)) {
+          if (legacy_codec_handling &&
+              ve->get_dec_type()->is_coding_by_function(false)) {
             set_params_str = mputstr(set_params_str, "BITSTRING buff(");
             switch (tt) {
             case Type::T_BSTR:
@@ -9711,10 +9902,10 @@ error:
               "TTCN_error(\"Parameter redirect (for parameter '%s') failed, "
               "because the buffer was not empty after decoding. "
               "Remaining bits: %%d.\", buff.lengthof());\n"
-              "}\n", ve->get_dec_type()->get_coding_function(false)->
+              "}\n", ve->get_dec_type()->get_legacy_coding_function(false)->
               get_genname_from_scope(scope).c_str(), par_name, par_name, par_name);
           }
-          else { // built-in decoding
+          else if (legacy_codec_handling) { // legacy codec handling with built-in decoding
             switch (tt) {
             case Type::T_OSTR:
             case Type::T_CSTR:
@@ -9804,6 +9995,65 @@ error:
               "}\n", par_name,
               ve->get_dec_type()->get_genname_typedescriptor(scope).c_str(),
               ve->get_dec_type()->get_coding(false).c_str(), par_name);
+          }
+          else { // new codec handling
+            set_params_str = mputstr(set_params_str, "OCTETSTRING buff(");
+            switch (tt) {
+            case Type::T_BSTR:
+              set_params_str = mputprintf(set_params_str, "bit2oct(par.%s())",
+                par_name);
+              break;
+            case Type::T_HSTR:
+              set_params_str = mputprintf(set_params_str, "hex2oct(par.%s())",
+                par_name);
+              break;
+            case Type::T_OSTR:
+              set_params_str = mputprintf(set_params_str, "par.%s()", par_name);
+              break;
+            case Type::T_CSTR:
+              set_params_str = mputprintf(set_params_str, "char2oct(par.%s())",
+                par_name);
+              break;
+            case Type::T_USTR:
+              set_params_str = mputprintf(set_params_str,
+                "unichar2oct(par.%s(), ", par_name);
+              if (ve->get_str_enc() == NULL || !ve->get_str_enc()->is_unfoldable()) {
+                // encoding format is missing or is known at compile-time
+                set_params_str = mputprintf(set_params_str, "\"%s\"",
+                  ve->get_str_enc() != NULL ?
+                  ve->get_str_enc()->get_val_str().c_str() : "UTF-8");
+              }
+              else {
+                // the encoding format is not known at compile-time, so an extra
+                // member and constructor parameter is needed to store it
+                members_str = mputprintf(members_str, "CHARSTRING enc_fmt_%s;\n",
+                  par_name);
+                constr_params_str = mputprintf(constr_params_str,
+                  ", CHARSTRING par_fmt_%s = CHARSTRING()", par_name);
+                constr_init_list_str = mputprintf(constr_init_list_str,
+                  ", enc_fmt_%s(par_fmt_%s)", par_name, par_name);
+                set_params_str = mputprintf(set_params_str, "enc_fmt_%s", par_name);
+              }
+              set_params_str = mputstr(set_params_str, ")");
+              break;
+            default:
+              FATAL_ERROR("ParamRedirect::generate_code_decoded");
+            }
+            set_params_str = mputprintf(set_params_str,
+              ");\n"
+              "if (%s_decoder(buff, *ptr_%s_dec, %s_default_coding) != 0) {\n"
+              "TTCN_error(\"Decoding failed in parameter redirect "
+              "(for parameter '%s').\");\n"
+              "}\n"
+              "if (buff.lengthof() != 0) {\n"
+              "TTCN_error(\"Parameter redirect (for parameter '%s') failed, "
+              "because the buffer was not empty after decoding. "
+              "Remaining octets: %%d.\", buff.lengthof());\n"
+              "}\n",
+              ve->get_dec_type()->get_genname_coder(scope).c_str(),
+              par_name,
+              ve->get_dec_type()->get_genname_default_coding(scope).c_str(),
+              par_name, par_name);
           }
           if (use_decmatch_result) {
             set_params_str = mputstr(set_params_str, "}\n");
@@ -10414,7 +10664,7 @@ error:
               set_values_str = mputstr(set_values_str, "}\nelse {\n");
             }
             Type::typetype_t tt = redir_type->get_type_refd_last()->get_typetype_ttcn3();
-            if (member_type->is_coding_by_function(false)) {
+            if (legacy_codec_handling && member_type->is_coding_by_function(false)) {
               set_values_str = mputprintf(set_values_str, "BITSTRING buff_%d(",
                 static_cast<int>(i));
               switch (tt) {
@@ -10480,11 +10730,12 @@ error:
                 "TTCN_error(\"Value redirect #%d failed, because the buffer was "
                 "not empty after decoding. Remaining bits: %%d.\", "
                 "buff_%d.lengthof());\n"
-                "}\n", member_type->get_coding_function(false)->
+                "}\n", member_type->get_legacy_coding_function(false)->
                 get_genname_from_scope(scope).c_str(),
-                static_cast<int>(i), static_cast<int>(i), static_cast<int>(i + 1), static_cast<int>(i), static_cast<int>(i + 1), static_cast<int>(i));
+                static_cast<int>(i), static_cast<int>(i), static_cast<int>(i + 1),
+                static_cast<int>(i), static_cast<int>(i + 1), static_cast<int>(i));
             }
-            else { // built-in decoding
+            else if (legacy_codec_handling) { // legacy codec handing with built-in decoding
               switch (tt) {
               case Type::T_OSTR:
               case Type::T_CSTR:
@@ -10588,6 +10839,79 @@ error:
                 "}\n",
                 static_cast<int>(i), member_type->get_genname_typedescriptor(scope).c_str(), static_cast<int>(i),
                 member_type->get_coding(false).c_str(), static_cast<int>(i), static_cast<int>(i + 1), static_cast<int>(i));
+            }
+            else { // new codec handling
+              set_values_str = mputprintf(set_values_str, "OCTETSTRING buff_%d(",
+                static_cast<int>(i));
+              switch (tt) {
+              case Type::T_BSTR:
+                set_values_str = mputprintf(set_values_str, "bit2oct((*par)%s%s)",
+                  subrefs_str, opt_suffix);
+                break;
+              case Type::T_HSTR:
+                set_values_str = mputprintf(set_values_str, "hex2oct((*par)%s%s)",
+                  subrefs_str, opt_suffix);
+                break;
+              case Type::T_OSTR:
+                set_values_str = mputprintf(set_values_str, "(*par)%s%s",
+                  subrefs_str, opt_suffix);
+                break;
+              case Type::T_CSTR:
+                set_values_str = mputprintf(set_values_str,
+                  "char2oct((*par)%s%s)", subrefs_str, opt_suffix);
+                break;
+              case Type::T_USTR:
+                set_values_str = mputprintf(set_values_str,
+                  "unichar2oct((*par)%s%s, ", subrefs_str, opt_suffix);
+                if (v[i]->get_str_enc() == NULL || !v[i]->get_str_enc()->is_unfoldable()) {
+                  // encoding format is missing or is known at compile-time
+                  set_values_str = mputprintf(set_values_str, "\"%s\"",
+                    v[i]->get_str_enc() != NULL ?
+                    v[i]->get_str_enc()->get_val_str().c_str() : "UTF-8");
+                }
+                else {
+                  // the encoding format is not known at compile-time, so an extra
+                  // member and constructor parameter is needed to store it
+                  inst_params_str = mputstr(inst_params_str, ", ");
+                  expression_struct str_enc_expr;
+                  Code::init_expr(&str_enc_expr);
+                  v[i]->get_str_enc()->generate_code_expr(&str_enc_expr);
+                  inst_params_str = mputstr(inst_params_str, str_enc_expr.expr);
+                  if (str_enc_expr.preamble != NULL) {
+                    expr->preamble = mputstr(expr->preamble, str_enc_expr.preamble);
+                  }
+                  if (str_enc_expr.postamble != NULL) {
+                    expr->postamble = mputstr(expr->postamble, str_enc_expr.postamble);
+                  }
+                  Code::free_expr(&str_enc_expr);
+                  members_str = mputprintf(members_str, "CHARSTRING enc_fmt_%d;\n",
+                    static_cast<int>(i));
+                  constr_params_str = mputprintf(constr_params_str,
+                    ", CHARSTRING par_fmt_%d", static_cast<int>(i));
+                  constr_init_list_str = mputprintf(constr_init_list_str,
+                    ", enc_fmt_%d(par_fmt_%d)", static_cast<int>(i), static_cast<int>(i));
+                  set_values_str = mputprintf(set_values_str, "enc_fmt_%d", static_cast<int>(i));
+                }
+                set_values_str = mputstr(set_values_str, ")");
+                break;
+              default:
+                FATAL_ERROR("ValueRedirect::generate_code");
+              }
+              set_values_str = mputprintf(set_values_str,
+                ");\n"
+                "if (%s_decoder(buff_%d, *ptr_%d, %s_default_coding) != 0) {\n"
+                "TTCN_error(\"Decoding failed in value redirect #%d.\");\n"
+                "}\n"
+                "if (buff_%d.lengthof() != 0) {\n"
+                "TTCN_error(\"Value redirect #%d failed, because the buffer was "
+                "not empty after decoding. Remaining octets: %%d.\", "
+                "buff_%d.lengthof());\n"
+                "}\n",
+                member_type->get_genname_coder(scope).c_str(),
+                static_cast<int>(i), static_cast<int>(i),
+                member_type->get_genname_default_coding(scope).c_str(),
+                static_cast<int>(i + 1), static_cast<int>(i),
+                static_cast<int>(i + 1), static_cast<int>(i));
             }
             if (use_decmatch_result) {
               set_values_str = mputstr(set_values_str, "}\n");
@@ -11170,8 +11494,8 @@ error:
 
   LogArguments::LogArguments(const LogArguments& p)
   {
-    for (size_t i = 0; i < logargs.size(); ++i) {
-      logargs[i] = p.logargs[i]->clone();
+    for (size_t i = 0; i < p.logargs.size(); ++i) {
+      logargs.add(p.logargs[i]->clone());
     }
   }
   
@@ -12031,7 +12355,7 @@ error:
     ids.add(id);
   }
 
-  void SelectUnion::chk(Type */*p_gov*/)
+  void SelectUnion::chk()
   {
     Error_Context cntxt(this, "In select union statement");
     block->chk();
@@ -12171,10 +12495,10 @@ error:
     return false;
   }
 
-  void SelectUnions::chk(Type *p_gov)
+  void SelectUnions::chk()
   {
     for(size_t i = 0; i < sus.size(); i++) {
-      sus[i]->chk(p_gov);
+      sus[i]->chk();
     }
   }
 
@@ -12756,11 +13080,11 @@ error:
       case AltGuard::AG_REF:
       case AltGuard::AG_INVOKE:
 	// an altstep may return ALT_REPEAT
-	label_needed = true;
-	break;
+        label_needed = true;
+        break;
       case AltGuard::AG_ELSE:
-	has_else_branch = true;
-	break;
+        has_else_branch = true;
+        break;
       default:
         FATAL_ERROR("AltGuards::generate_code_alt()");
       }
@@ -12795,105 +13119,105 @@ error:
       AltGuard *ag = ags[i];
       AltGuard::altguardtype_t agtype = ag->get_type();
       if (agtype == AltGuard::AG_ELSE) {
-	// an else branch was found
-	str = mputstr(str, "TTCN_Snapshot::else_branch_reached();\n");
-	StatementBlock *block = ag->get_block();
-	if (block->get_nof_stmts() > 0) {
-	  str = mputstr(str, "{\n");
-	  if (debugger_active) {
-	    str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
-	  }
-	  str = block->generate_code(str, def_glob_vars, src_glob_vars);
-	  str = mputstr(str, "}\n");
-	}
-	// jump out of the infinite for() loop
-	if (block->has_return() != StatementBlock::RS_YES)
-	  str = mputstr(str, "break;\n");
-	// do not generate code for further branches
-	break;
+        // an else branch was found
+        str = mputstr(str, "TTCN_Snapshot::else_branch_reached();\n");
+        StatementBlock *block = ag->get_block();
+        if (block->get_nof_stmts() > 0) {
+          str = mputstr(str, "{\n");
+          if (debugger_active) {
+            str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
+          }
+          str = block->generate_code(str, def_glob_vars, src_glob_vars);
+          str = mputstr(str, "}\n");
+        }
+        // jump out of the infinite for() loop
+        if (block->has_return() != StatementBlock::RS_YES)
+          str = mputstr(str, "break;\n");
+        // do not generate code for further branches
+        break;
       } else {
-	Value *guard_expr = ag->get_guard_expr();
-	if (guard_expr) {
-	  // the branch has a boolean guard expression
-	  str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_UNCHECKED) {\n",
-	    label_str, static_cast<unsigned long>( i ));
-	  str = guard_expr->update_location_object(str);
-	  expression_struct expr;
-	  Code::init_expr(&expr);
-	  guard_expr->generate_code_expr(&expr);
-	  str = mputstr(str, expr.preamble);
-	  str = mputprintf(str, "if (%s) %s_alt_flag_%lu = ALT_MAYBE;\n"
-	    "else %s_alt_flag_%lu = ALT_NO;\n", expr.expr, label_str,
-	    static_cast<unsigned long>( i ), label_str, static_cast<unsigned long>( i ));
-	  str = mputstr(str, expr.postamble);
-	  Code::free_expr(&expr);
-	  str = mputstr(str, "}\n");
-	}
-	// evaluation of guard operation or altstep
-	str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_MAYBE) {\n",
-	  label_str, static_cast<unsigned long>( i ));
-	// indicates whether the guard operation might return ALT_REPEAT
-	bool can_repeat;
-	expression_struct expr;
-	Code::init_expr(&expr);
-	expr.expr = mputprintf(expr.expr, "%s_alt_flag_%lu = ", label_str,
+        Value *guard_expr = ag->get_guard_expr();
+        if (guard_expr) {
+          // the branch has a boolean guard expression
+          str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_UNCHECKED) {\n",
+            label_str, static_cast<unsigned long>( i ));
+          str = guard_expr->update_location_object(str);
+          expression_struct expr;
+          Code::init_expr(&expr);
+          guard_expr->generate_code_expr(&expr);
+          str = mputstr(str, expr.preamble);
+          str = mputprintf(str, "if (%s) %s_alt_flag_%lu = ALT_MAYBE;\n"
+            "else %s_alt_flag_%lu = ALT_NO;\n", expr.expr, label_str,
+            static_cast<unsigned long>( i ), label_str, static_cast<unsigned long>( i ));
+          str = mputstr(str, expr.postamble);
+          Code::free_expr(&expr);
+          str = mputstr(str, "}\n");
+        }
+        // evaluation of guard operation or altstep
+        str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_MAYBE) {\n",
+          label_str, static_cast<unsigned long>( i ));
+        // indicates whether the guard operation might return ALT_REPEAT
+        bool can_repeat;
+        expression_struct expr;
+        Code::init_expr(&expr);
+        expr.expr = mputprintf(expr.expr, "%s_alt_flag_%lu = ", label_str,
           static_cast<unsigned long>( i ));
-	switch (agtype) {
-	case AltGuard::AG_OP: {
-	  // the guard operation is a receiving statement
-	  Statement *stmt = ag->get_guard_stmt();
-	  str = stmt->update_location_object(str);
-	  stmt->generate_code_expr(&expr);
-	  can_repeat = stmt->can_repeat();
-	  break; }
-	case AltGuard::AG_REF: {
-	  // the guard operation is an altstep instance
-	  Ref_pard *ref = ag->get_guard_ref();
-	  str = ref->update_location_object(str);
-	  Common::Assignment *altstep = ref->get_refd_assignment();
-	  expr.expr = mputprintf(expr.expr, "%s_instance(",
-	    altstep->get_genname_from_scope(my_scope).c_str());
-	  ref->get_parlist()->generate_code_alias(&expr,
-	    altstep->get_FormalParList(), altstep->get_RunsOnType(), false);
-	  expr.expr = mputc(expr.expr, ')');
-	  can_repeat = true;
-	  break; }
-	case AltGuard::AG_INVOKE: {
+        switch (agtype) {
+        case AltGuard::AG_OP: {
+          // the guard operation is a receiving statement
+          Statement *stmt = ag->get_guard_stmt();
+          str = stmt->update_location_object(str);
+          stmt->generate_code_expr(&expr);
+          can_repeat = stmt->can_repeat();
+          break; }
+        case AltGuard::AG_REF: {
+          // the guard operation is an altstep instance
+          Ref_pard *ref = ag->get_guard_ref();
+          str = ref->update_location_object(str);
+          Common::Assignment *altstep = ref->get_refd_assignment();
+          expr.expr = mputprintf(expr.expr, "%s_instance(",
+            altstep->get_genname_from_scope(my_scope).c_str());
+          ref->get_parlist()->generate_code_alias(&expr,
+            altstep->get_FormalParList(), altstep->get_RunsOnType(), false);
+          expr.expr = mputc(expr.expr, ')');
+          can_repeat = true;
+          break; }
+        case AltGuard::AG_INVOKE: {
           // the guard operation is an altstep invocation
           str = ag->update_location_object(str);
           ag->generate_code_invoke_instance(&expr);
           can_repeat = true;
           break; }
-	default:
-	  FATAL_ERROR("AltGuards::generate_code_alt()");
-	}
-	str = Code::merge_free_expr(str, &expr);
-	if (can_repeat) {
-	  str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_REPEAT) goto %s;\n",
-	    label_str, static_cast<unsigned long>( i ), label_str);
-	}
+        default:
+          FATAL_ERROR("AltGuards::generate_code_alt()");
+        }
+        str = Code::merge_free_expr(str, &expr);
+        if (can_repeat) {
+          str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_REPEAT) goto %s;\n",
+            label_str, static_cast<unsigned long>( i ), label_str);
+        }
         if (agtype == AltGuard::AG_REF || agtype == AltGuard::AG_INVOKE) {
           str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_BREAK) break;\n",
              label_str, static_cast<unsigned long>( i ));
         }
-	// execution of statement block if the guard was successful
-	str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_YES) ", label_str,
+        // execution of statement block if the guard was successful
+        str = mputprintf(str, "if (%s_alt_flag_%lu == ALT_YES) ", label_str,
           static_cast<unsigned long>( i ));
-	StatementBlock *block = ag->get_block();
-	if (block && block->get_nof_stmts() > 0) {
-	  str = mputstr(str, "{\n");
-	  if (debugger_active) {
-	    str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
-	  }
-	  str = block->generate_code(str, def_glob_vars, src_glob_vars);
-	  if (block->has_return() != StatementBlock::RS_YES)
-	    str = mputstr(str, "break;\n");
-	  str = mputstr(str, "}\n");
-	} else str = mputstr(str, "break;\n");
-	// closing of if() block
-	str = mputstr(str, "}\n");
-      }
-    }
+        StatementBlock *block = ag->get_block();
+        if (block && block->get_nof_stmts() > 0) {
+          str = mputstr(str, "{\n");
+          if (debugger_active) {
+            str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
+          }
+          str = block->generate_code(str, def_glob_vars, src_glob_vars);
+          if (block->has_return() != StatementBlock::RS_YES)
+            str = mputstr(str, "break;\n");
+          str = mputstr(str, "}\n");
+        } else str = mputstr(str, "break;\n");
+        // closing of if() block
+        str = mputstr(str, "}\n");
+      } //if
+    } // for
     if (!has_else_branch) {
       // calling of defaults
       str = mputprintf(str, "if (%s_default_flag == ALT_MAYBE) {\n"
@@ -12938,109 +13262,109 @@ error:
       AltGuard *ag = ags[i];
       AltGuard::altguardtype_t agtype = ag->get_type();
       if (agtype == AltGuard::AG_ELSE) {
-	// an else branch was found
-	str = mputstr(str, "TTCN_Snapshot::else_branch_reached();\n");
-	StatementBlock *block = ag->get_block();
-	if (block->get_nof_stmts() > 0) {
-	  str = mputstr(str, "{\n");
-	  if (debugger_active) {
-	    str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
-	  }
-	  str = block->generate_code(str, def_glob_vars, src_glob_vars);
-	  str = mputstr(str, "}\n");
-	}
-	if (block->has_return() != StatementBlock::RS_YES)
-	  str = mputstr(str, "return ALT_YES;\n");
-	// do not generate code for further branches
-	break;
+      // an else branch was found
+      str = mputstr(str, "TTCN_Snapshot::else_branch_reached();\n");
+      StatementBlock *block = ag->get_block();
+      if (block->get_nof_stmts() > 0) {
+        str = mputstr(str, "{\n");
+        if (debugger_active) {
+          str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
+        }
+        str = block->generate_code(str, def_glob_vars, src_glob_vars);
+        str = mputstr(str, "}\n");
+      }
+      if (block->has_return() != StatementBlock::RS_YES)
+        str = mputstr(str, "return ALT_YES;\n");
+      // do not generate code for further branches
+      break;
       } else {
         size_t blockcount = 0;
-	Value *guard_expr = ag->get_guard_expr();
-	if (guard_expr) {
-	  // the branch has a boolean guard expression
-	  str = guard_expr->update_location_object(str);
-	  str = guard_expr->generate_code_tmp(str, "if (", blockcount);
-	  str = mputstr(str, ") {\n");
-	  blockcount++;
-	}
-	// indicates whether the guard operation might return ALT_REPEAT
-	bool can_repeat;
-	expression_struct expr;
-	Code::init_expr(&expr);
-	switch (agtype) {
-	case AltGuard::AG_OP: {
-	  // the guard operation is a receiving statement
-	  Statement *stmt = ag->get_guard_stmt();
-	  str = stmt->update_location_object(str);
-	  stmt->generate_code_expr(&expr);
-	  can_repeat = stmt->can_repeat();
-	  break; }
-	case AltGuard::AG_REF: {
-	  // the guard operation is an altstep instance
-	  Ref_pard *ref = ag->get_guard_ref();
-	  str = ref->update_location_object(str);
-	  Common::Assignment *altstep = ref->get_refd_assignment();
-	  expr.expr = mputprintf(expr.expr, "%s_instance(",
-	    altstep->get_genname_from_scope(my_scope).c_str());
-	  ref->get_parlist()->generate_code_alias(&expr,
-	    altstep->get_FormalParList(), altstep->get_RunsOnType(), false);
-	  expr.expr = mputc(expr.expr, ')');
-	  can_repeat = true;
-	  break; }
-	case AltGuard::AG_INVOKE: {
+      Value *guard_expr = ag->get_guard_expr();
+      if (guard_expr) {
+        // the branch has a boolean guard expression
+        str = guard_expr->update_location_object(str);
+        str = guard_expr->generate_code_tmp(str, "if (", blockcount);
+        str = mputstr(str, ") {\n");
+        blockcount++;
+      }
+      // indicates whether the guard operation might return ALT_REPEAT
+      bool can_repeat;
+      expression_struct expr;
+      Code::init_expr(&expr);
+      switch (agtype) {
+      case AltGuard::AG_OP: {
+        // the guard operation is a receiving statement
+        Statement *stmt = ag->get_guard_stmt();
+        str = stmt->update_location_object(str);
+        stmt->generate_code_expr(&expr);
+        can_repeat = stmt->can_repeat();
+        break; }
+      case AltGuard::AG_REF: {
+        // the guard operation is an altstep instance
+        Ref_pard *ref = ag->get_guard_ref();
+        str = ref->update_location_object(str);
+        Common::Assignment *altstep = ref->get_refd_assignment();
+        expr.expr = mputprintf(expr.expr, "%s_instance(",
+          altstep->get_genname_from_scope(my_scope).c_str());
+        ref->get_parlist()->generate_code_alias(&expr,
+          altstep->get_FormalParList(), altstep->get_RunsOnType(), false);
+        expr.expr = mputc(expr.expr, ')');
+        can_repeat = true;
+        break; }
+      case AltGuard::AG_INVOKE: {
           str = ag->update_location_object(str);
           ag->generate_code_invoke_instance(&expr);
           can_repeat = true;
-	  break; }
-	default:
-	  FATAL_ERROR("AltGuards::generate_code_altstep()");
+        break; }
+      default:
+        FATAL_ERROR("AltGuards::generate_code_altstep()");
         }
-	if (expr.preamble || expr.postamble) {
-	  if (blockcount == 0) {
-	    // open a statement block if it is not done so far
-	    str = mputstr(str, "{\n");
-	    blockcount++;
-	  }
-	  const string& tmp_id = my_mod->get_temporary_id();
-	  const char *tmp_id_str = tmp_id.c_str();
-	  str = mputprintf(str, "alt_status %s;\n"
-	    "{\n", tmp_id_str);
-	  str = mputstr(str, expr.preamble);
-	  str = mputprintf(str, "%s = %s;\n", tmp_id_str, expr.expr);
-	  str = mputstr(str, expr.postamble);
-	  str = mputprintf(str, "}\n"
-	    "switch (%s) {\n", tmp_id_str);
-	} else {
-	  str = mputprintf(str, "switch (%s) {\n", expr.expr);
-	}
-	Code::free_expr(&expr);
-	str = mputstr(str, "case ALT_YES:\n");
-	StatementBlock *block = ag->get_block();
-	if (block && block->get_nof_stmts() > 0) {
-	  str = mputstr(str, "{\n");
-	  if (debugger_active) {
-	    str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
-	  }
-	  str = block->generate_code(str, def_glob_vars, src_glob_vars);
-	  str = mputstr(str, "}\n");
-	}
-	if (!block || block->has_return() != StatementBlock::RS_YES)
-	  str = mputstr(str, "return ALT_YES;\n");
-	if (can_repeat)
-	  str = mputstr(str, "case ALT_REPEAT:\n"
-	    "return ALT_REPEAT;\n");
-        if (agtype == AltGuard::AG_REF || agtype == AltGuard::AG_INVOKE) {
-          str = mputprintf(str, "case ALT_BREAK:\n"
-	    "return ALT_BREAK;\n");
+      if (expr.preamble || expr.postamble) {
+        if (blockcount == 0) {
+          // open a statement block if it is not done so far
+          str = mputstr(str, "{\n");
+          blockcount++;
         }
-	if (!has_else_branch)
-	  str = mputstr(str, "case ALT_MAYBE:\n"
-	    "ret_val = ALT_MAYBE;\n");
-	str = mputstr(str, "default:\n"
-	  "break;\n"
-	  "}\n");
-	// closing statement blocks
-	for ( ; blockcount > 0; blockcount--) str = mputstr(str, "}\n");
+        const string& tmp_id = my_mod->get_temporary_id();
+        const char *tmp_id_str = tmp_id.c_str();
+        str = mputprintf(str, "alt_status %s;\n"
+          "{\n", tmp_id_str);
+        str = mputstr(str, expr.preamble);
+        str = mputprintf(str, "%s = %s;\n", tmp_id_str, expr.expr);
+        str = mputstr(str, expr.postamble);
+        str = mputprintf(str, "}\n"
+          "switch (%s) {\n", tmp_id_str);
+      } else {
+        str = mputprintf(str, "switch (%s) {\n", expr.expr);
+      }
+      Code::free_expr(&expr);
+      str = mputstr(str, "case ALT_YES:\n");
+      StatementBlock *block = ag->get_block();
+      if (block && block->get_nof_stmts() > 0) {
+        str = mputstr(str, "{\n");
+        if (debugger_active) {
+          str = mputstr(str, "TTCN3_Debug_Scope debug_scope;\n");
+        }
+        str = block->generate_code(str, def_glob_vars, src_glob_vars);
+        str = mputstr(str, "}\n");
+      }
+      if (!block || block->has_return() != StatementBlock::RS_YES)
+        str = mputstr(str, "return ALT_YES;\n");
+      if (can_repeat)
+        str = mputstr(str, "case ALT_REPEAT:\n"
+          "return ALT_REPEAT;\n");
+      if (agtype == AltGuard::AG_REF || agtype == AltGuard::AG_INVOKE) {
+        str = mputprintf(str, "case ALT_BREAK:\n"
+        "return ALT_BREAK;\n");
+      }
+      if (!has_else_branch)
+        str = mputstr(str, "case ALT_MAYBE:\n"
+          "ret_val = ALT_MAYBE;\n");
+      str = mputstr(str, "default:\n"
+        "break;\n"
+        "}\n");
+      // closing statement blocks
+      for ( ; blockcount > 0; blockcount--) str = mputstr(str, "}\n");
       }
     }
     if (!has_else_branch) str = mputstr(str, "return ret_val;\n");
@@ -13124,8 +13448,8 @@ error:
         if (block && block->get_nof_stmts() > 0) {
           str = mputstr(str, "{\n"); // (3)
           str = block->generate_code(str, def_glob_vars, src_glob_vars);
-	  if (block->has_return() != StatementBlock::RS_YES)
-	    str = mputstr(str, "break;\n");
+            if (block->has_return() != StatementBlock::RS_YES)
+              str = mputstr(str, "break;\n");
           str = mputstr(str, "}\n"); // (3)
         }
         else str = mputstr(str, "break;\n");

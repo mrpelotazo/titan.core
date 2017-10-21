@@ -82,6 +82,7 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
   boolean text_needed = sdef->hasText && enable_text();
   boolean xer_needed = sdef->hasXer && enable_xer();
   boolean json_needed = sdef->hasJson && enable_json();
+  boolean oer_needed = sdef->hasOer && enable_oer();
 
   char *selection_type, *unbound_value, *selection_prefix;
   selection_type = mcopystr("union_selection_type");
@@ -268,11 +269,8 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
     "{\n"
     "if (checked_selection == %s) TTCN_error(\"Internal error: Performing "
       "ischosen() operation on an invalid field of union type %s.\");\n"
-    "if (union_selection == %s) TTCN_error(\"Performing ischosen() operation "
-      "on an unbound value of union type %s.\");\n"
     "return union_selection == checked_selection;\n"
-    "}\n\n", name, selection_type, unbound_value, dispname, unbound_value,
-    dispname);
+    "}\n\n", name, selection_type, unbound_value, dispname);
 
   /* is_bound function */
   def = mputstr   (def, "boolean is_bound() const;\n");
@@ -527,9 +525,11 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
     "}\n"
     "}\n\n", dispname);
 
-  if(ber_needed || raw_needed || text_needed || xer_needed || json_needed)
+  if(ber_needed || raw_needed || text_needed || xer_needed || json_needed
+    || oer_needed) {
     def_encdec(name, &def, &src, ber_needed, raw_needed, text_needed,
-               xer_needed, json_needed, TRUE);
+               xer_needed, json_needed, oer_needed, TRUE);
+  }
 
   /* BER functions */
   if(ber_needed) {
@@ -589,10 +589,13 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
         "  BER_chk_descr(p_td);\n"
         "  ASN_BER_TLV_t *new_tlv = NULL;\n"
         "  TTCN_EncDec_ErrorContext ec_0(\"Alternative '\");\n"
-        "  TTCN_EncDec_ErrorContext ec_1;\n"
-        "  const Erroneous_values_t* err_vals = NULL;\n"
-        "  const Erroneous_descriptor_t* emb_descr = NULL;\n"
-        "  switch (union_selection) {\n", name);
+        "  TTCN_EncDec_ErrorContext ec_1;\n", name);
+      if (sdef->nElements > 0) {
+        src = mputstr(src,
+          "  const Erroneous_values_t* err_vals = NULL;\n"
+          "  const Erroneous_descriptor_t* emb_descr = NULL;\n");
+      }
+      src = mputstr(src, "  switch (union_selection) {\n");
       for (i = 0; i < sdef->nElements; i++) {
         src = mputprintf(src, "  case %s_%s:\n"
           "    err_vals = p_err_descr->get_field_err_values(%d);\n"
@@ -1342,10 +1345,14 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
 
     /* An untagged union can start with the start tag of any alternative */
     for (i = 0; i < sdef->nElements; i++) {
-      src=mputprintf(src,
-        "  if (%s::can_start(name, uri, %s_xer_, flavor, flavor2)) return TRUE;\n"
-        , sdef->elements[i].type, sdef->elements[i].typegen
-      );
+      // An untagged union cannot start with itself. It would create an infinite
+      // recursion.
+      if (strcmp(sdef->elements[i].type, sdef->name) != 0) {
+        src=mputprintf(src,
+          "  if (%s::can_start(name, uri, %s_xer_, flavor, flavor2)) return TRUE;\n"
+          , sdef->elements[i].type, sdef->elements[i].typegen
+        );
+      }
     }
     src = mputstr(src, "  return FALSE;\n}\n\n");
 
@@ -2017,62 +2024,11 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
     // JSON encode
     src = mputprintf(src,
       "int %s::JSON_encode(const TTCN_Typedescriptor_t&%s, JSON_Tokenizer& p_tok) const\n"
-      "{\n", name, (use_runtime_2 || !sdef->jsonAsValue) ? " p_td" : "");
-    if (use_runtime_2) {
-      src = mputstr(src, "  if (err_descr) return JSON_encode_negtest(err_descr, p_td, p_tok);\n");
-    }
-    if (!sdef->jsonAsValue) {
-      // 'as value' is not set for the base type, but it might still be set in
-      // the type descriptor
-      src = mputstr(src, 
-        "  boolean as_value = NULL != p_td.json && p_td.json->as_value;\n"
-        "  int enc_len = as_value ? 0 : "
-        "p_tok.put_next_token(JSON_TOKEN_OBJECT_START, NULL);\n");
-    } else {
-      src = mputstr(src, "  int enc_len = 0;\n");
-    }
-    src = mputstr(src, "  switch(union_selection) {\n");
-      
-    for (i = 0; i < sdef->nElements; ++i) {
-      src = mputprintf(src, "  case %s_%s:\n", selection_prefix, sdef->elements[i].name);
-      if (!sdef->jsonAsValue) {
-        src = mputprintf(src,
-          "    if (!as_value) {\n"
-          "      enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, \"%s\");\n"
-          "    }\n"
-          , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname);
+      "{\n", name, (sdef->nElements > 0) && (use_runtime_2 || !sdef->jsonAsValue) ? " p_td" : "");
+    if (sdef->nElements > 0) {
+      if (use_runtime_2) {
+        src = mputstr(src, "  if (err_descr) return JSON_encode_negtest(err_descr, p_td, p_tok);\n");
       }
-      src = mputprintf(src, 
-	      "    enc_len += field_%s->JSON_encode(%s_descr_, p_tok);\n"
-	      "    break;\n"
-        , sdef->elements[i].name, sdef->elements[i].typedescrname);
-    }
-    src = mputprintf(src, 
-      "  default:\n"
-      "    TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND, \n"
-	    "      \"Encoding an unbound value of type %s.\");\n"
-      "    return -1;\n"
-      "  }\n\n"
-      , dispname);
-    if (!sdef->jsonAsValue) {
-      src = mputstr(src,
-        "  if (!as_value) {\n"
-        "    enc_len += p_tok.put_next_token(JSON_TOKEN_OBJECT_END, NULL);\n"
-        "  }\n");
-    }
-    src = mputstr(src,
-      "  return enc_len;\n"
-      "}\n\n");
-    
-    if (use_runtime_2) {
-      // JSON encode for negative testing
-      def = mputstr(def,
-        "int JSON_encode_negtest(const Erroneous_descriptor_t*, "
-        "const TTCN_Typedescriptor_t&, JSON_Tokenizer&) const;\n");
-      src = mputprintf(src,
-        "int %s::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_descr, "
-        "const TTCN_Typedescriptor_t&%s, JSON_Tokenizer& p_tok) const\n"
-        "{\n", name, !sdef->jsonAsValue ? " p_td" : "");
       if (!sdef->jsonAsValue) {
         // 'as value' is not set for the base type, but it might still be set in
         // the type descriptor
@@ -2081,55 +2037,22 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
           "  int enc_len = as_value ? 0 : "
           "p_tok.put_next_token(JSON_TOKEN_OBJECT_START, NULL);\n");
       } else {
-        src = mputstr(src, "  int enc_len = 0;\n\n");
+        src = mputstr(src, "  int enc_len = 0;\n");
       }
-      src = mputstr(src,
-        "  const Erroneous_values_t* err_vals = NULL;\n"
-        "  const Erroneous_descriptor_t* emb_descr = NULL;\n"
-        "  switch(union_selection) {\n");
-        
+      src = mputstr(src, "  switch(union_selection) {\n");
+
       for (i = 0; i < sdef->nElements; ++i) {
+        src = mputprintf(src, "  case %s_%s:\n", selection_prefix, sdef->elements[i].name);
+        if (!sdef->jsonAsValue) {
+          src = mputprintf(src,
+            "    if (!as_value) {\n"
+            "      enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, \"%s\");\n"
+            "    }\n"
+            , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname);
+        }
         src = mputprintf(src, 
-          "  case %s_%s:\n"
-          "    err_vals = p_err_descr->get_field_err_values(%d);\n"
-          "    emb_descr = p_err_descr->get_field_emb_descr(%d);\n"
-          "    if (NULL != err_vals && NULL != err_vals->value) {\n"
-          "      if (NULL != err_vals->value->errval) {\n"
-          "        if(err_vals->value->raw){\n"
-          "          enc_len += err_vals->value->errval->JSON_encode_negtest_raw(p_tok);\n"
-          "        } else {\n"
-          "          if (NULL == err_vals->value->type_descr) {\n"
-          "            TTCN_error(\"internal error: erroneous value typedescriptor missing\");\n"
-          "          }\n"
-          , selection_prefix, sdef->elements[i].name, (int)i, (int)i);
-        if (!sdef->jsonAsValue) {
-          src = mputprintf(src,
-            "          if (!as_value) {\n"
-            "            enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, \"%s\");\n"
-            "          }\n"
-            , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname);
-        }
-        src = mputstr(src,
-          "          enc_len += err_vals->value->errval->JSON_encode(*err_vals->value->type_descr, p_tok);\n"
-          "        }\n"
-          "      }\n"
-          "    } else {\n");
-        if (!sdef->jsonAsValue) {
-          src = mputprintf(src,
-            "      if (!as_value) {\n"
-            "        enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, \"%s\");\n"
-            "      }\n"
-            , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname);
-        }
-        src = mputprintf(src,
-          "      if (NULL != emb_descr) {\n"
-          "        enc_len += field_%s->JSON_encode_negtest(emb_descr, %s_descr_, p_tok);\n"
-          "      } else {\n"
-          "        enc_len += field_%s->JSON_encode(%s_descr_, p_tok);\n"
-          "      }\n"
-          "    }\n"
+          "    enc_len += field_%s->JSON_encode(%s_descr_, p_tok);\n"
           "    break;\n"
-          , sdef->elements[i].name, sdef->elements[i].typedescrname
           , sdef->elements[i].name, sdef->elements[i].typedescrname);
       }
       src = mputprintf(src, 
@@ -2143,195 +2066,306 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
         src = mputstr(src,
           "  if (!as_value) {\n"
           "    enc_len += p_tok.put_next_token(JSON_TOKEN_OBJECT_END, NULL);\n"
-          "}\n");
+          "  }\n");
       }
       src = mputstr(src,
         "  return enc_len;\n"
         "}\n\n");
+    }
+    else {
+      src = mputprintf(src,
+        "  TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND, \n"
+        "    \"Cannot encode union of type %s, because it has zero alternatives.\");\n"
+        "  return -1;\n"
+        "}\n\n", dispname);   
+    }
+    
+    if (use_runtime_2) {
+      // JSON encode for negative testing
+      def = mputstr(def,
+        "int JSON_encode_negtest(const Erroneous_descriptor_t*, "
+        "const TTCN_Typedescriptor_t&, JSON_Tokenizer&) const;\n");
+      src = mputprintf(src,
+        "int %s::JSON_encode_negtest(const Erroneous_descriptor_t*%s, "
+        "const TTCN_Typedescriptor_t&%s, JSON_Tokenizer& p_tok) const\n"
+        "{\n", name, sdef->nElements > 0 ? " p_err_descr" : "",
+        (sdef->nElements > 0 && !sdef->jsonAsValue) ? " p_td" : "");
+      if (sdef->nElements > 0) {
+        if (!sdef->jsonAsValue) {
+          // 'as value' is not set for the base type, but it might still be set in
+          // the type descriptor
+          src = mputstr(src, 
+            "  boolean as_value = NULL != p_td.json && p_td.json->as_value;\n"
+            "  int enc_len = as_value ? 0 : "
+            "p_tok.put_next_token(JSON_TOKEN_OBJECT_START, NULL);\n");
+        } else {
+          src = mputstr(src, "  int enc_len = 0;\n\n");
+        }
+        src = mputstr(src,
+          "  const Erroneous_values_t* err_vals = NULL;\n"
+          "  const Erroneous_descriptor_t* emb_descr = NULL;\n"
+          "  switch(union_selection) {\n");
+
+        for (i = 0; i < sdef->nElements; ++i) {
+          src = mputprintf(src, 
+            "  case %s_%s:\n"
+            "    err_vals = p_err_descr->get_field_err_values(%d);\n"
+            "    emb_descr = p_err_descr->get_field_emb_descr(%d);\n"
+            "    if (NULL != err_vals && NULL != err_vals->value) {\n"
+            "      if (NULL != err_vals->value->errval) {\n"
+            "        if(err_vals->value->raw){\n"
+            "          enc_len += err_vals->value->errval->JSON_encode_negtest_raw(p_tok);\n"
+            "        } else {\n"
+            "          if (NULL == err_vals->value->type_descr) {\n"
+            "            TTCN_error(\"internal error: erroneous value typedescriptor missing\");\n"
+            "          }\n"
+            , selection_prefix, sdef->elements[i].name, (int)i, (int)i);
+          if (!sdef->jsonAsValue) {
+            src = mputprintf(src,
+              "          if (!as_value) {\n"
+              "            enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, \"%s\");\n"
+              "          }\n"
+              , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname);
+          }
+          src = mputstr(src,
+            "          enc_len += err_vals->value->errval->JSON_encode(*err_vals->value->type_descr, p_tok);\n"
+            "        }\n"
+            "      }\n"
+            "    } else {\n");
+          if (!sdef->jsonAsValue) {
+            src = mputprintf(src,
+              "      if (!as_value) {\n"
+              "        enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, \"%s\");\n"
+              "      }\n"
+              , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname);
+          }
+          src = mputprintf(src,
+            "      if (NULL != emb_descr) {\n"
+            "        enc_len += field_%s->JSON_encode_negtest(emb_descr, %s_descr_, p_tok);\n"
+            "      } else {\n"
+            "        enc_len += field_%s->JSON_encode(%s_descr_, p_tok);\n"
+            "      }\n"
+            "    }\n"
+            "    break;\n"
+            , sdef->elements[i].name, sdef->elements[i].typedescrname
+            , sdef->elements[i].name, sdef->elements[i].typedescrname);
+        }
+        src = mputprintf(src, 
+          "  default:\n"
+          "    TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND, \n"
+          "      \"Encoding an unbound value of type %s.\");\n"
+          "    return -1;\n"
+          "  }\n\n"
+          , dispname);
+        if (!sdef->jsonAsValue) {
+          src = mputstr(src,
+            "  if (!as_value) {\n"
+            "    enc_len += p_tok.put_next_token(JSON_TOKEN_OBJECT_END, NULL);\n"
+            "}\n");
+        }
+        src = mputstr(src,
+          "  return enc_len;\n"
+          "}\n\n");
+      }
+      else {
+        src = mputprintf(src,
+          "  TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND, \n"
+          "    \"Cannot encode union of type %s, because it has zero alternatives.\");\n"
+          "  return -1;\n"
+          "}\n\n", dispname);
+      }
     }
     
     // JSON decode
     src = mputprintf(src,
       "int %s::JSON_decode(const TTCN_Typedescriptor_t&%s, JSON_Tokenizer& p_tok, boolean p_silent)\n"
       "{\n"
-      "  json_token_t j_token = JSON_TOKEN_NONE;\n"
-      , name, !sdef->jsonAsValue ? " p_td" : "");
-    if (!sdef->jsonAsValue) {
+      , name, sdef->nElements > 0 && !sdef->jsonAsValue ? " p_td" : "");
+    if (sdef->nElements > 0) {
+      src = mputstr(src, "  json_token_t j_token = JSON_TOKEN_NONE;\n");
+      if (!sdef->jsonAsValue) {
+        src = mputstr(src,
+          " if (NULL != p_td.json && p_td.json->as_value) {\n");
+      }
       src = mputstr(src,
-        " if (NULL != p_td.json && p_td.json->as_value) {\n");
-    }
-    src = mputstr(src,
-      "  size_t buf_pos = p_tok.get_buf_pos();\n"
-      "  p_tok.get_next_token(&j_token, NULL, NULL);\n"
-      "  int ret_val = 0;\n"
-      "  switch(j_token) {\n"
-      "  case JSON_TOKEN_NUMBER: {\n");
-    for (i = 0; i < sdef->nElements; ++i) {
-      if (JSON_NUMBER & sdef->elements[i].jsonValueType) {
-        src = mputprintf(src,
-          "    p_tok.set_buf_pos(buf_pos);\n"
-          "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
-          "    if (0 <= ret_val) {\n"
-          "      return ret_val;\n"
-          "    }\n"
-          , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
+        "  size_t buf_pos = p_tok.get_buf_pos();\n"
+        "  p_tok.get_next_token(&j_token, NULL, NULL);\n"
+        "  int ret_val = 0;\n"
+        "  switch(j_token) {\n"
+        "  case JSON_TOKEN_NUMBER: {\n");
+      for (i = 0; i < sdef->nElements; ++i) {
+        if (JSON_NUMBER & sdef->elements[i].jsonValueType) {
+          src = mputprintf(src,
+            "    p_tok.set_buf_pos(buf_pos);\n"
+            "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
+            "    if (0 <= ret_val) {\n"
+            "      return ret_val;\n"
+            "    }\n"
+            , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
+        }
       }
-    }
-    src = mputstr(src,
-      "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"number\");\n"
-      "    clean_up();\n"
-      "    return JSON_ERROR_FATAL;\n"
-      "  }\n"
-      "  case JSON_TOKEN_STRING: {\n");
-    for (i = 0; i < sdef->nElements; ++i) {
-      if (JSON_STRING & sdef->elements[i].jsonValueType) {
-        src = mputprintf(src,
-          "    p_tok.set_buf_pos(buf_pos);\n"
-          "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
-          "    if (0 <= ret_val) {\n"
-          "      return ret_val;\n"
-          "    }\n"
-          , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
-      }
-    }
-    src = mputstr(src,
-      "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"string\");\n"
-      "    clean_up();\n"
-      "    return JSON_ERROR_FATAL;\n"
-      "  }\n"
-      "  case JSON_TOKEN_LITERAL_TRUE:\n"
-      "  case JSON_TOKEN_LITERAL_FALSE: {\n");
-    for (i = 0; i < sdef->nElements; ++i) {
-      if (JSON_BOOLEAN & sdef->elements[i].jsonValueType) {
-        src = mputprintf(src,
-          "    p_tok.set_buf_pos(buf_pos);\n"
-          "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
-          "    if (0 <= ret_val) {\n"
-          "      return ret_val;\n"
-          "    }\n"
-          , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
-      }
-    }
-    src = mputstr(src,
-      "    char* literal_str = mprintf(\"literal (%s)\",\n"
-      "      (JSON_TOKEN_LITERAL_TRUE == j_token) ? \"true\" : \"false\");\n"
-      "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, literal_str);\n"
-      "    Free(literal_str);\n"
-      "    clean_up();\n"
-      "    return JSON_ERROR_FATAL;\n"
-      "  }\n"
-      "  case JSON_TOKEN_ARRAY_START: {\n");
-    for (i = 0; i < sdef->nElements; ++i) {
-      if (JSON_ARRAY & sdef->elements[i].jsonValueType) {
-        src = mputprintf(src,
-          "    p_tok.set_buf_pos(buf_pos);\n"
-          "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
-          "    if (0 <= ret_val) {\n"
-          "      return ret_val;\n"
-          "    }\n"
-          , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
-      }
-    }
-    src = mputstr(src,
-      "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"array\");\n"
-      "    clean_up();\n"
-      "    return JSON_ERROR_FATAL;\n"
-      "  }\n"
-      "  case JSON_TOKEN_OBJECT_START: {\n");
-    for (i = 0; i < sdef->nElements; ++i) {
-      if (JSON_OBJECT & sdef->elements[i].jsonValueType) {
-        src = mputprintf(src,
-          "    p_tok.set_buf_pos(buf_pos);\n"
-          "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
-          "    if (0 <= ret_val) {\n"
-          "      return ret_val;\n"
-          "    }\n"
-          , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
-      }
-    }
-    src = mputstr(src,
-      "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"object\");\n"
-      "    clean_up();\n"
-      "    return JSON_ERROR_FATAL;\n"
-      "  }\n"
-      "  case JSON_TOKEN_LITERAL_NULL: {\n");
-    for (i = 0; i < sdef->nElements; ++i) {
-      if (JSON_NULL & sdef->elements[i].jsonValueType) {
-        src = mputprintf(src,
-          "    p_tok.set_buf_pos(buf_pos);\n"
-          "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
-          "    if (0 <= ret_val) {\n"
-          "      return ret_val;\n"
-          "    }\n"
-          , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
-      }
-    }
-    src = mputstr(src,
-      "    clean_up();\n"
-      // the caller might be able to decode the null value if it's an optional field
-      // only return an invalid token error, not a fatal error
-      "    return JSON_ERROR_INVALID_TOKEN;\n"
-      "  }\n"
-      "  case JSON_TOKEN_ERROR:\n"
-      "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, \"\");\n"
-      "    return JSON_ERROR_FATAL;\n"
-      "  default:\n"
-      "    return JSON_ERROR_INVALID_TOKEN;\n"
-      "  }\n"
-      "  return ret_val;\n");
-    if (!sdef->jsonAsValue) {
-      src = mputprintf(src,
-        " }\n"
-        " else {\n" // if there is no 'as value' set in the type descriptor
-        "  size_t dec_len = p_tok.get_next_token(&j_token, NULL, NULL);\n"
-        "  if (JSON_TOKEN_ERROR == j_token) {\n"
-        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, \"\");\n"
+      src = mputstr(src,
+        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"number\");\n"
+        "    clean_up();\n"
         "    return JSON_ERROR_FATAL;\n"
         "  }\n"
-        "  else if (JSON_TOKEN_OBJECT_START != j_token) {\n"
-        "    return JSON_ERROR_INVALID_TOKEN;\n"
-        "  }\n\n"
-        "  char* fld_name = 0;\n"
-        "  size_t name_len = 0;\n"
-        "  dec_len += p_tok.get_next_token(&j_token, &fld_name, &name_len);\n"
-        "  if (JSON_TOKEN_NAME != j_token) {\n"
-        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_NAME_TOKEN_ERROR);\n"
-        "    return JSON_ERROR_FATAL;\n"
-        "  } else {\n"
-        "    union_selection = %s;\n    "
-        , unbound_value);
+        "  case JSON_TOKEN_STRING: {\n");
       for (i = 0; i < sdef->nElements; ++i) {
-        src = mputprintf(src,
-          "if (0 == strncmp(fld_name, \"%s\", name_len)) {\n"
-          "      int ret_val = %s%s().JSON_decode(%s_descr_, p_tok, p_silent);\n"
-          "      if (0 > ret_val) {\n"
-          "        if (JSON_ERROR_INVALID_TOKEN) {\n"
-          "          JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_FIELD_TOKEN_ERROR, %lu, \"%s\");\n"
-          "        }\n"
-          "        return JSON_ERROR_FATAL;\n"
-          "      } else {\n"
-          "        dec_len += (size_t)ret_val;\n"
-          "      }\n"
-          "    } else "
-          , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname
-          , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname
-          , (unsigned long) strlen(sdef->elements[i].dispname), sdef->elements[i].dispname);
+        if (JSON_STRING & sdef->elements[i].jsonValueType) {
+          src = mputprintf(src,
+            "    p_tok.set_buf_pos(buf_pos);\n"
+            "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
+            "    if (0 <= ret_val) {\n"
+            "      return ret_val;\n"
+            "    }\n"
+            , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
+        }
       }
       src = mputstr(src,
-        "{\n"
-        "      JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_INVALID_NAME_ERROR, (int)name_len, fld_name);\n"
-        "      return JSON_ERROR_FATAL;\n"
-        "    }\n"
-        "  }\n\n"
-        "  dec_len += p_tok.get_next_token(&j_token, NULL, NULL);\n"
-        "  if (JSON_TOKEN_OBJECT_END != j_token) {\n"
-        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_STATIC_OBJECT_END_TOKEN_ERROR, \"\");\n"
+        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"string\");\n"
+        "    clean_up();\n"
         "    return JSON_ERROR_FATAL;\n"
-        "  }\n\n"
-        "  return (int)dec_len;\n"
-        " }\n");
+        "  }\n"
+        "  case JSON_TOKEN_LITERAL_TRUE:\n"
+        "  case JSON_TOKEN_LITERAL_FALSE: {\n");
+      for (i = 0; i < sdef->nElements; ++i) {
+        if (JSON_BOOLEAN & sdef->elements[i].jsonValueType) {
+          src = mputprintf(src,
+            "    p_tok.set_buf_pos(buf_pos);\n"
+            "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
+            "    if (0 <= ret_val) {\n"
+            "      return ret_val;\n"
+            "    }\n"
+            , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
+        }
+      }
+      src = mputstr(src,
+        "    char* literal_str = mprintf(\"literal (%s)\",\n"
+        "      (JSON_TOKEN_LITERAL_TRUE == j_token) ? \"true\" : \"false\");\n"
+        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, literal_str);\n"
+        "    Free(literal_str);\n"
+        "    clean_up();\n"
+        "    return JSON_ERROR_FATAL;\n"
+        "  }\n"
+        "  case JSON_TOKEN_ARRAY_START: {\n");
+      for (i = 0; i < sdef->nElements; ++i) {
+        if (JSON_ARRAY & sdef->elements[i].jsonValueType) {
+          src = mputprintf(src,
+            "    p_tok.set_buf_pos(buf_pos);\n"
+            "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
+            "    if (0 <= ret_val) {\n"
+            "      return ret_val;\n"
+            "    }\n"
+            , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
+        }
+      }
+      src = mputstr(src,
+        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"array\");\n"
+        "    clean_up();\n"
+        "    return JSON_ERROR_FATAL;\n"
+        "  }\n"
+        "  case JSON_TOKEN_OBJECT_START: {\n");
+      for (i = 0; i < sdef->nElements; ++i) {
+        if (JSON_OBJECT & sdef->elements[i].jsonValueType) {
+          src = mputprintf(src,
+            "    p_tok.set_buf_pos(buf_pos);\n"
+            "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
+            "    if (0 <= ret_val) {\n"
+            "      return ret_val;\n"
+            "    }\n"
+            , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
+        }
+      }
+      src = mputstr(src,
+        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, \"object\");\n"
+        "    clean_up();\n"
+        "    return JSON_ERROR_FATAL;\n"
+        "  }\n"
+        "  case JSON_TOKEN_LITERAL_NULL: {\n");
+      for (i = 0; i < sdef->nElements; ++i) {
+        if (JSON_NULL & sdef->elements[i].jsonValueType) {
+          src = mputprintf(src,
+            "    p_tok.set_buf_pos(buf_pos);\n"
+            "    ret_val = %s%s().JSON_decode(%s_descr_, p_tok, TRUE);\n"
+            "    if (0 <= ret_val) {\n"
+            "      return ret_val;\n"
+            "    }\n"
+            , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname);
+        }
+      }
+      src = mputstr(src,
+        "    clean_up();\n"
+        // the caller might be able to decode the null value if it's an optional field
+        // only return an invalid token error, not a fatal error
+        "    return JSON_ERROR_INVALID_TOKEN;\n"
+        "  }\n"
+        "  case JSON_TOKEN_ERROR:\n"
+        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, \"\");\n"
+        "    return JSON_ERROR_FATAL;\n"
+        "  default:\n"
+        "    return JSON_ERROR_INVALID_TOKEN;\n"
+        "  }\n"
+        "  return ret_val;\n");
+      if (!sdef->jsonAsValue) {
+        src = mputstr(src,
+          " }\n"
+          " else {\n" // if there is no 'as value' set in the type descriptor
+          "  size_t dec_len = p_tok.get_next_token(&j_token, NULL, NULL);\n"
+          "  if (JSON_TOKEN_ERROR == j_token) {\n"
+          "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, \"\");\n"
+          "    return JSON_ERROR_FATAL;\n"
+          "  }\n"
+          "  else if (JSON_TOKEN_OBJECT_START != j_token) {\n"
+          "    return JSON_ERROR_INVALID_TOKEN;\n"
+          "  }\n\n"
+          "  char* fld_name = 0;\n"
+          "  size_t name_len = 0;\n"
+          "  dec_len += p_tok.get_next_token(&j_token, &fld_name, &name_len);\n"
+          "  if (JSON_TOKEN_NAME != j_token) {\n"
+          "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_NAME_TOKEN_ERROR);\n"
+          "    return JSON_ERROR_FATAL;\n"
+          "  } else {\n");
+        for (i = 0; i < sdef->nElements; ++i) {
+          src = mputprintf(src,
+            "if (%d == name_len && 0 == strncmp(fld_name, \"%s\", name_len)) {\n"
+            "      int ret_val = %s%s().JSON_decode(%s_descr_, p_tok, p_silent);\n"
+            "      if (0 > ret_val) {\n"
+            "        if (JSON_ERROR_INVALID_TOKEN) {\n"
+            "          JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_FIELD_TOKEN_ERROR, %lu, \"%s\");\n"
+            "        }\n"
+            "        return JSON_ERROR_FATAL;\n"
+            "      } else {\n"
+            "        dec_len += (size_t)ret_val;\n"
+            "      }\n"
+            "    } else "
+            , (int)strlen(sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname)
+            , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname
+            , at_field, sdef->elements[i].name, sdef->elements[i].typedescrname
+            , (unsigned long) strlen(sdef->elements[i].dispname), sdef->elements[i].dispname);
+        }
+        src = mputstr(src,
+          "{\n"
+          "      JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_INVALID_NAME_ERROR, (int)name_len, fld_name);\n"
+          "      return JSON_ERROR_FATAL;\n"
+          "    }\n"
+          "  }\n\n"
+          "  dec_len += p_tok.get_next_token(&j_token, NULL, NULL);\n"
+          "  if (JSON_TOKEN_OBJECT_END != j_token) {\n"
+          "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_STATIC_OBJECT_END_TOKEN_ERROR, \"\");\n"
+          "    return JSON_ERROR_FATAL;\n"
+          "  }\n\n"
+          "  return (int)dec_len;\n"
+          " }\n");
+      }
+      src = mputstr(src, "}\n\n");
     }
-    src = mputstr(src, "}\n\n");
+    else { // no fields
+      src = mputprintf(src,
+        "  JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, \n"
+        "    \"Cannot decode union of type %s, because it has zero alternatives.\");\n"
+        "  return JSON_ERROR_FATAL;\n"
+        "}\n\n", dispname);
+    }
   }
 
   /* end of class definition */
@@ -2778,31 +2812,18 @@ void defUnionTemplate(const struct_def *sdef, output_struct *output)
       "template of union type %s containing an empty list.\");\n"
     "boolean ret_val = "
       "value_list.list_value[0].ischosen(checked_selection);\n"
-    "boolean all_same = TRUE;\n"
-    "for (unsigned int list_count = 1; list_count < value_list.n_values; "
+    "for (unsigned int list_count = 1; ret_val == TRUE && list_count < value_list.n_values; "
       "list_count++) {\n"
-    "if (value_list.list_value[list_count].ischosen(checked_selection) != "
-      "ret_val) {\n"
-    "all_same = FALSE;\n"
-    "break;\n"
+    "ret_val = value_list.list_value[list_count].ischosen(checked_selection);\n"
     "}\n"
+    "return ret_val;\n"
     "}\n"
-    "if (all_same) return ret_val;\n"
-    "}\n"
-    "case ANY_VALUE:\n"
-    "case ANY_OR_OMIT:\n"
-    "case OMIT_VALUE:\n"
-    "case COMPLEMENTED_LIST:\n"
-    "TTCN_error(\"Performing ischosen() operation on a template of union type "
-      "%s, which does not determine unambiguously the chosen field of the "
-      "matching values.\");\n"
     "default:\n"
-    "TTCN_error(\"Performing ischosen() operation on an uninitialized "
-      "template of union type %s\");\n"
+    "return FALSE;\n"
     "}\n"
     "return FALSE;\n"
     "}\n\n", name, selection_type, unbound_value, dispname, unbound_value,
-    dispname, dispname, dispname, dispname);
+    dispname, dispname);
 
   if (use_runtime_2) {
     def = mputstr(def,

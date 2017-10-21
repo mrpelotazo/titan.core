@@ -216,6 +216,7 @@ static const string anyname("anytype");
   SingleValueRedirect* single_value_redirect;
   param_eval_t eval;
   TypeMappingTargets *typemappingtargets;
+  attribute_modifier_t attrib_mod;
 
   struct {
     bool is_raw;
@@ -470,6 +471,11 @@ static const string anyname("anytype");
     Ttcn::Reference *runsonref;
     Ttcn::Reference *systemref;
   } configspec;
+  
+  struct {
+    Ttcn::Reference *mtcref;
+    Ttcn::Reference *systemref;
+  } alt_tc_configspec;
 
   struct {
     Value *name;
@@ -786,6 +792,7 @@ static const string anyname("anytype");
 %token DeterministicKeyword
 %token FuzzyKeyword
 %token IndexKeyword
+%token LocalKeyword
 
 /* TITAN specific keywords */
 %token TitanSpecificTryKeyword
@@ -832,6 +839,8 @@ static const string anyname("anytype");
 %token bit2intKeyword
 %token bit2octKeyword
 %token bit2strKeyword
+%token bson2JsonKeyword
+%token cbor2JsonKeyword
 %token char2intKeyword
 %token char2octKeyword
 %token decompKeyword
@@ -853,6 +862,8 @@ static const string anyname("anytype");
 %token ischosenKeyword
 %token ispresentKeyword
 %token istemplatekindKeyword
+%token json2bsonKeyword
+%token json2CborKeyword
 %token lengthofKeyword
 %token oct2bitKeyword
 %token oct2charKeyword
@@ -864,6 +875,7 @@ static const string anyname("anytype");
 %token replaceKeyword
 %token rndKeyword
 %token testcasenameKeyword
+%token setencodeKeyword
 %token sizeofKeyword
 %token str2floatKeyword
 %token str2intKeyword
@@ -912,8 +924,8 @@ static const string anyname("anytype");
  * Semantic types of nonterminals
  *********************************************************************/
 
-%type <bool_val> optAliveKeyword optOptionalKeyword optOverrideKeyword
-  optErrValueRaw optAllKeyword
+%type <bool_val> optAliveKeyword optOptionalKeyword
+  optErrValueRaw optAllKeyword optDeterministicModifier
 %type <str> FreeText optLanguageSpec PatternChunk PatternChunkList
 %type <uchar_val> Group Plane Row Cell
 %type <id> FieldIdentifier FieldReference GlobalModuleId
@@ -925,6 +937,7 @@ static const string anyname("anytype");
 %type <typetype> PredefinedType
 %type <portoperationmode> PortOperationMode
 %type <operationtype> PredefinedOpKeyword1 PredefinedOpKeyword2 PredefinedOpKeyword3
+%type <attrib_mod> optAttributeModifier
 
 %type <activateop> ActivateOp
 %type <attribtype> AttribKeyword
@@ -996,7 +1009,7 @@ static const string anyname("anytype");
   StartTimerStatement StopExecutionStatement StopStatement StopTCStatement
   StopTimerStatement TimeoutStatement TimerStatements TriggerStatement
   UnmapStatement VerdictStatements WhileStatement SelectCaseConstruct
-  SelectUnionConstruct UpdateStatement SetstateStatement
+  SelectUnionConstruct UpdateStatement SetstateStatement SetencodeStatement
   StopTestcaseStatement String2TtcnStatement ProfilerStatement int2enumStatement
 %type <statementblock> StatementBlock optElseClause FunctionStatementOrDefList
   ControlStatementOrDefList ModuleControlBody
@@ -1021,6 +1034,7 @@ static const string anyname("anytype");
 %type <reference> PortType optDerivedDef DerivedDef IndexSpec Signature
   VariableRef TimerRef Port PortOrAll ValueStoreSpec
   SenderSpec ComponentType optRunsOnSpec RunsOnSpec optSystemSpec optPortSpec
+  optMtcSpec
 %type <reference_or_any> PortOrAny TimerRefOrAny
 %type <valuerange> Range
 %type <type> NestedEnumDef NestedRecordDef NestedRecordOfDef NestedSetDef
@@ -1087,6 +1101,7 @@ AllOrTypeListWithTo TypeListWithFrom TypeListWithTo
 %type <reforid> Reference
 %type <initial> Initial
 %type <configspec> ConfigSpec
+%type <alt_tc_configspec> AltOrTcConfigSpec
 %type <createpar> optCreateParameter
 %type <applyop> ApplyOp
 %type <identifier_list> IdentifierList IdentifierListOrPredefType
@@ -1346,6 +1361,7 @@ SendParameter
 SendStatement
 SenderSpec
 SetDef
+SetencodeStatement
 SetLocalVerdict
 SetOfDef
 SetstateStatement
@@ -1440,6 +1456,7 @@ optExtendsDef
 optFromClause
 optFunctionActualParList
 optFunctionFormalParList
+optMtcSpec
 optParDefaultValue
 optPortCallBody
 optReceiveParameter
@@ -1742,6 +1759,12 @@ Initial
   delete $$.systemref;
 }
 ConfigSpec
+
+%destructor {
+  delete $$.mtcref;
+  delete $$.systemref;
+}
+AltOrTcConfigSpec
 
 %destructor {
   delete $$.name;
@@ -2096,8 +2119,8 @@ optPackageNameList:
 ;
 
 PackageNameList:
-  ',' FreeText
-|  PackageNameList ',' FreeText
+  ',' FreeText { Free($2); }
+|  PackageNameList ',' FreeText { Free($3); }
 ;
 
 ModuleBody:
@@ -4173,18 +4196,18 @@ ValueofOp: // 162
 
 FunctionDef: // 164
   FunctionKeyword optDeterministicModifier IDentifier '(' optFunctionFormalParList ')'
-  optRunsOnSpec optPortSpec optReturnType optError StatementBlock
+  optRunsOnSpec AltOrTcConfigSpec optPortSpec optReturnType optError StatementBlock
   {
     $5->set_location(infile, @4, @6);
-    $$ = new Def_Function($3, $5, $7, $8, $9.type, $9.returns_template,
-                          $9.template_restriction, $11);
+    $$ = new Def_Function($2, $3, $5, $7, $8.mtcref, $8.systemref, $9, $10.type, $10.returns_template,
+                          $10.template_restriction, $12);
     $$->set_location(infile, @$);
   }
 ;
 
 optDeterministicModifier:
-  /* empty */
-| DeterministicKeyword /* just ignore it for now */
+ /* empty */ { $$ = false; }
+| DeterministicKeyword { $$ = true; }
 ;
 
 optFunctionFormalParList: // [167]
@@ -4359,6 +4382,7 @@ FunctionStatement: // 180
 | int2enumStatement { $$ = $1; }
 | UpdateStatement { $$ = $1; }
 | SetstateStatement { $$ = $1; }
+| SetencodeStatement { $$ = $1; }
 ;
 
 FunctionInstance: /* refpard */ // 181
@@ -4662,10 +4686,24 @@ ConfigSpec: // 202
   }
 ;
 
+AltOrTcConfigSpec:
+  optMtcSpec optSystemSpec
+  {
+    $$.mtcref=$1;
+    $$.systemref=$2;
+  }
+;
+
 optSystemSpec: // [203]
   /* empty */ { $$ = 0; }
 | SystemKeyword ComponentType { $$ = $2; }
 | SystemKeyword error { $$ = 0; }
+;
+
+optMtcSpec:
+  /* empty */ { $$ = 0; }
+| MTCKeyword ComponentType { $$ = $2; }
+| MTCKeyword error { $$ = 0; }
 ;
 
 TestcaseInstance: // 205
@@ -4780,17 +4818,17 @@ TestcaseActualPar:
 
 AltstepDef: // 211
   AltstepKeyword IDentifier '(' optAltstepFormalParList ')' optRunsOnSpec
-  optError '{' AltstepLocalDefList AltGuardList optError '}'
+  AltOrTcConfigSpec optError '{' AltstepLocalDefList AltGuardList optError '}'
   {
     StatementBlock *sb = new StatementBlock;
-    for (size_t i = 0; i < $9.nElements; i++) {
-      Statement *stmt = new Statement(Statement::S_DEF, $9.elements[i]);
-      stmt->set_location(*$9.elements[i]);
+    for (size_t i = 0; i < $10.nElements; i++) {
+      Statement *stmt = new Statement(Statement::S_DEF, $10.elements[i]);
+      stmt->set_location(*$10.elements[i]);
       sb->add_stmt(stmt);
     }
-    Free($9.elements);
+    Free($10.elements);
     $4->set_location(infile, @4);
-    $$ = new Def_Altstep($2, $4, $6, sb, $10);
+    $$ = new Def_Altstep($2, $4, $6, $7.mtcref, $7.systemref, sb, $11);
     $$->set_location(infile, @$);
   }
 ;
@@ -5276,7 +5314,7 @@ ExtFunctionDef: // 276
   '(' optFunctionFormalParList ')' optReturnType
   {
     $6->set_location(infile, @5, @7);
-    $$ = new Def_ExtFunction($4, $6, $8.type, $8.returns_template,
+    $$ = new Def_ExtFunction($3, $4, $6, $8.type, $8.returns_template,
                              $8.template_restriction);
     $$->set_location(infile, @$);
   }
@@ -6285,7 +6323,12 @@ CommunicationStatements: // 353
 SendStatement: // 354
   Port DotSendOpKeyword PortSendOp
   {
-    $$ = new Statement(Statement::S_SEND, $1, $3.templ_inst, $3.val);
+    $$ = new Statement(Statement::S_SEND, $1, $3.templ_inst, $3.val, false);
+    $$->set_location(infile, @$);
+  }
+| PortKeyword DotSendOpKeyword PortSendOp
+  {
+    $$ = new Statement(Statement::S_SEND, NULL, $3.templ_inst, $3.val, true);
     $$->set_location(infile, @$);
   }
 ;
@@ -6514,7 +6557,14 @@ ReceiveStatement: // 380
   {
     $$ = new Statement(Statement::S_RECEIVE, $1.reference, $1.any_from,
                        $3.templ_inst, $3.fromclause, $3.redirectval,
-                       $3.redirectsender, $3.redirectindex);
+                       $3.redirectsender, $3.redirectindex, false);
+    $$->set_location(infile, @$);
+  }
+| PortKeyword DotReceiveOpKeyword PortReceiveOp
+  {
+    $$ = new Statement(Statement::S_RECEIVE, NULL, false,
+                       $3.templ_inst, $3.fromclause, $3.redirectval,
+                       $3.redirectsender, $3.redirectindex, true);
     $$->set_location(infile, @$);
   }
 ;
@@ -6696,7 +6746,7 @@ TriggerStatement: // 393
   {
     $$ = new Statement(Statement::S_TRIGGER, $1.reference, $1.any_from,
                        $3.templ_inst, $3.fromclause, $3.redirectval,
-                       $3.redirectsender, $3.redirectindex);
+                       $3.redirectsender, $3.redirectindex, false);
     $$->set_location(infile, @$);
   }
 ;
@@ -7078,7 +7128,7 @@ CheckStatement: // 415
     case Statement::S_CHECK_RECEIVE:
       $$ = new Statement(Statement::S_CHECK_RECEIVE, $1.reference, $1.any_from,
                          $3.templ_inst, $3.fromclause, $3.redirectval,
-                         $3.redirectsender, $3.redirectindex);
+                         $3.redirectsender, $3.redirectindex, false);
       break;
     case Statement::S_CHECK_GETCALL:
       $$ = new Statement(Statement::S_CHECK_GETCALL, $1.reference, $1.any_from,
@@ -8118,7 +8168,7 @@ MultiWithAttrib: // 529
 ;
 
 SingleWithAttrib: // 530
-  AttribKeyword optOverrideKeyword optAttribQualifier AttribSpec
+  AttribKeyword optAttributeModifier optAttribQualifier AttribSpec
   {
     $$ = new SingleWithAttrib($1,$2,$3,$4);
     $$->set_location(infile, @$);
@@ -8155,9 +8205,10 @@ AttribKeyword: // 531
   }
 ;
 
-optOverrideKeyword: // [536]
-  /* empty */ { $$ = false; }
-| OverrideKeyword { $$ = true; }
+optAttributeModifier: // [536]
+  /* empty */ { $$ = MOD_NONE; }
+| OverrideKeyword { $$ = MOD_OVERRIDE; }
+| LocalKeyword { $$ = MOD_LOCAL; }
 ;
 
 optAttribQualifier: // [537]
@@ -8265,6 +8316,13 @@ AttribSpec: // 542
     $$ = new AttributeSpec(string($1));
     $$->set_location(infile, @$);
     Free($1);
+  }
+| FreeText '.' FreeText
+  {
+    $$ = new AttributeSpec(string($3), string($1));
+    $$->set_location(infile, @$);
+    Free($1);
+    Free($3);
   }
 ;
 
@@ -8441,6 +8499,37 @@ SetstateStatement:
     $$ = new Statement(Statement::S_SETSTATE, $5, $7);
     $$->set_location(infile, @$);
   }
+
+SetencodeStatement:
+  IDentifier '.' setencodeKeyword '(' Type ',' SingleExpression ')'
+  {
+    delete $1;
+    delete $5;
+    delete $7;
+    Location loc(infile, @$);
+    loc.error("'Port.setencode' is not currently supported.");
+    $$ = new Statement(Statement::S_ERROR);
+    $$->set_location(infile, @$);
+  }
+| AllKeyword PortKeyword '.' setencodeKeyword '(' Type ',' SingleExpression ')'
+  {
+    delete $6;
+    delete $8;
+    Location loc(infile, @$);
+    loc.error("'all port.setencode' is not currently supported.");
+    $$ = new Statement(Statement::S_ERROR);
+    $$->set_location(infile, @$);
+  }
+| SelfKeyword '.' setencodeKeyword '(' Type ',' SingleExpression ')'
+  {
+    if (legacy_codec_handling) {
+      Location loc(infile, @$);
+      loc.error("'setencode' is not allowed when using legacy codec handling");
+    }
+    $$ = new Statement(Statement::S_SETENCODE, $5, $7);
+    $$->set_location(infile, @$);
+  }
+;
 
 ProfilerRunningOp:
   TitanSpecificProfilerKeyword DotRunningKeyword
@@ -9421,7 +9510,19 @@ PredefinedOps:
   }
 | encvalueKeyword '(' optError TemplateInstance optError ')'
   {
-    $$ = new Value(Value::OPTYPE_ENCODE, $4);
+    $$ = new Value(Value::OPTYPE_ENCODE, $4, NULL, NULL);
+    $$->set_location(infile, @$);
+  }
+| encvalueKeyword '(' optError TemplateInstance optError ',' optError
+  SingleExpression optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_ENCODE, $4, $8, NULL);
+    $$->set_location(infile, @$);
+  }
+| encvalueKeyword '(' optError TemplateInstance optError ',' optError
+  SingleExpression optError ',' optError SingleExpression optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_ENCODE, $4, $8, $12);
     $$->set_location(infile, @$);
   }
 | encvalueKeyword '(' error ')'
@@ -9479,6 +9580,19 @@ PredefinedOps:
 | decvalueKeyword '(' optError DecValueArg optError ',' optError DecValueArg optError ')'
   {
     $$ = new Value(Value::OPTYPE_DECODE, $4, $8);
+    $$->set_location(infile, @$);
+  }
+| decvalueKeyword '(' optError DecValueArg optError ',' optError DecValueArg
+  optError ',' optError SingleExpression optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_DECODE, $4, $8, $12);
+    $$->set_location(infile, @$);
+  }
+| decvalueKeyword '(' optError DecValueArg optError ',' optError DecValueArg
+  optError ',' optError SingleExpression optError ',' optError SingleExpression
+  optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_DECODE, $4, $8, $12, $16);
     $$->set_location(infile, @$);
   }
 | decvalueKeyword '(' error ')'
@@ -9627,6 +9741,19 @@ PredefinedOps:
     $$ = new Value(Value::OPTYPE_ENCVALUE_UNICHAR, $4, $8);
     $$->set_location(infile, @$);
   }
+| encvalue_unicharKeyWord '(' optError TemplateInstance optError ',' optError
+  Expression optError ',' optError SingleExpression optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_ENCVALUE_UNICHAR, $4, $8, $12);
+    $$->set_location(infile, @$);
+  }
+| encvalue_unicharKeyWord '(' optError TemplateInstance optError ',' optError
+  Expression optError ',' optError SingleExpression optError ','
+  optError SingleExpression optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_ENCVALUE_UNICHAR, $4, $8, $12, $16);
+    $$->set_location(infile, @$);
+  }
 | encvalue_unicharKeyWord '(' optError TemplateInstance optError ')'
   {
     $$ = new Value(Value::OPTYPE_ENCVALUE_UNICHAR, $4);
@@ -9651,6 +9778,20 @@ PredefinedOps:
   DecValueArg optError ',' optError Expression optError ')'
   {
     $$ = new Value(Value::OPTYPE_DECVALUE_UNICHAR, $4, $8, $12);
+    $$->set_location(infile, @$);
+  }
+| decvalue_unicharKeyWord '(' optError DecValueArg optError ',' optError
+  DecValueArg optError ',' optError Expression optError ',' optError
+  SingleExpression optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_DECVALUE_UNICHAR, $4, $8, $12, $16);
+    $$->set_location(infile, @$);
+  }
+| decvalue_unicharKeyWord '(' optError DecValueArg optError ',' optError
+  DecValueArg optError ',' optError Expression optError ',' optError
+  SingleExpression optError ',' optError SingleExpression optError ')'
+  {
+    $$ = new Value(Value::OPTYPE_DECVALUE_UNICHAR, $4, $8, $12, $16, $20);
     $$->set_location(infile, @$);
   }
 | decvalue_unicharKeyWord '(' error ')'
@@ -9743,6 +9884,8 @@ PredefinedOpKeyword1:
 | bit2intKeyword { $$ = Value::OPTYPE_BIT2INT; }
 | bit2octKeyword { $$ = Value::OPTYPE_BIT2OCT; }
 | bit2strKeyword { $$ = Value::OPTYPE_BIT2STR; }
+| cbor2JsonKeyword { $$ = Value::OPTYPE_CBOR2JSON; }
+| bson2JsonKeyword { $$ = Value::OPTYPE_BSON2JSON; }
 | char2intKeyword { $$ = Value::OPTYPE_CHAR2INT; }
 | char2octKeyword { $$ = Value::OPTYPE_CHAR2OCT; }
 | float2intKeyword { $$ = Value::OPTYPE_FLOAT2INT; }
@@ -9755,6 +9898,8 @@ PredefinedOpKeyword1:
 | int2floatKeyword { $$ = Value::OPTYPE_INT2FLOAT; }
 | int2strKeyword { $$ = Value::OPTYPE_INT2STR; }
 | int2unicharKeyword { $$ = Value::OPTYPE_INT2UNICHAR; }
+| json2CborKeyword { $$ = Value::OPTYPE_JSON2CBOR; }
+| json2bsonKeyword { $$ = Value::OPTYPE_JSON2BSON; }
 | oct2bitKeyword { $$ = Value::OPTYPE_OCT2BIT; }
 | oct2charKeyword { $$ = Value::OPTYPE_OCT2CHAR; }
 | oct2hexKeyword { $$ = Value::OPTYPE_OCT2HEX; }

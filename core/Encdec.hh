@@ -48,8 +48,9 @@ public:
     CT_PER,  /**< PER */
     CT_RAW,  /**< RAW */
     CT_TEXT, /**< TEXT */
-    CT_XER,   /**< XER */
-    CT_JSON  /**< JSON */
+    CT_XER,  /**< XER */
+    CT_JSON, /**< JSON */
+    CT_OER   /**< OER */
   };
   /** Error type enum type. If you want to add new values, please put
     * them before ET_ALL. Values must be consecutive, starting at zero.
@@ -158,6 +159,11 @@ public:
 
   /* The stuff below this line is for internal use only */
   static void error(error_type_t p_et, char *msg);
+  
+  /** Extract the parameters (coding type and extra settings) from the dynamic
+    * coding string of coding predefined functions. */
+  static void get_coding_from_str(const UNIVERSAL_CHARSTRING& coding_str,
+    coding_t* coding, unsigned int* extra, boolean encode);
 
 private:
   /** Default error behaviours for all error types */

@@ -180,6 +180,7 @@ void RAW_enc_tree::calc_fields()
         atm = get_node(calcof.lengthto.fields[0]);
         if (atm) szumm = atm->body.node.num_of_nodes;
       }
+      szumm += calcof.lengthto.offset;
       INTEGER temp(szumm);
       temp.RAW_encode(*coding_descr, *this);
       break; }
@@ -350,7 +351,7 @@ int RAW_encode_enum_type(const TTCN_Typedescriptor_t& p_td,
   my_raw.prepadding      = p_td.raw->prepadding;
   my_raw.ptroffset       = p_td.raw->ptroffset;
   my_raw.unit            = p_td.raw->unit;
-  TTCN_Typedescriptor_t my_descr = { p_td.name, 0, &my_raw, NULL, NULL, NULL,
+  TTCN_Typedescriptor_t my_descr = { p_td.name, 0, &my_raw, NULL, NULL, NULL, NULL,
     NULL, TTCN_Typedescriptor_t::DONTCARE };
   INTEGER i(integer_value);
   i.RAW_encode(my_descr, myleaf);
@@ -379,7 +380,7 @@ int RAW_decode_enum_type(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff,
   my_raw.prepadding      = p_td.raw->prepadding;
   my_raw.ptroffset       = p_td.raw->ptroffset;
   my_raw.unit            = p_td.raw->unit;
-  TTCN_Typedescriptor_t my_descr = { p_td.name, 0, &my_raw, NULL, NULL, NULL,
+  TTCN_Typedescriptor_t my_descr = { p_td.name, 0, &my_raw, NULL, NULL, NULL, NULL,
     NULL, TTCN_Typedescriptor_t::DONTCARE };
   INTEGER i;
   /*  if(p_td.raw->endianness==ORDER_MSB)
@@ -414,15 +415,15 @@ void free_tree_pos(int* ptr){
   Free(ptr);
 }
 
-int min_of_ints(int num_of_int,...)
+int min_of_ints(unsigned int num_of_int,...)
 {
   va_list pvar;
   va_start(pvar,num_of_int);
-  int min_val = 0;
+  unsigned int min_val = 0;
   if (num_of_int > 0) {
-    min_val = va_arg(pvar, int);
-    for (int a = 1; a < num_of_int; a++) {
-      int b = va_arg(pvar, int);
+    min_val = va_arg(pvar, unsigned int);
+    for (unsigned int a = 1; a < num_of_int; a++) {
+      unsigned int b = va_arg(pvar, unsigned int);
       if (b < min_val) min_val = b;
     }
   }

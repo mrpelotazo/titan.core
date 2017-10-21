@@ -12,11 +12,20 @@
 #   Szabo, Bence Janos
 #
 ##############################################################################
-SADIRS := ver xer encode param template any_from pattern_ref float recof_index \
-port_translation
+include ../../Makefile.personal
+
+SADIRS := ver param template any_from pattern_ref float recof_index \
+port_translation mtc_and_system_clause port_map_connect deterministic
 ifdef RT2
 SADIRS += deprecated erroneous_attributes template_concat
 endif
+
+ifdef LEGACY_CODEC_HANDLING
+SADIRS += encode_legacy xer
+else
+SADIRS += encode
+endif
+
 #$(wildcard TTCN3_[a0-9]* ASN_[a0-9]*) ver xer
 
 all run check clean distclean:

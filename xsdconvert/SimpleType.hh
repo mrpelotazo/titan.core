@@ -275,6 +275,8 @@ public:
   // Parent of the element (both complexType, and AttributeType) has this
   // Not responsible for this member
   ComplexType * parent;
+  
+  SimpleType * nameDep; // not owned
 
   /** Virtual methods
    *  inherited from RootType
@@ -305,6 +307,10 @@ public:
     return length;
   }
 
+  ValueType & getValue() {
+    return value;
+  }
+  
   const ValueType & getValue() const {
     return value;
   }
@@ -418,6 +424,12 @@ public:
   // Returns true if the type really restricts or extends the type not
   // just aliases it.
   bool hasRestrictionOrExtension() const;
+  
+  ComplexType* getMainType();
+  
+  virtual Mstring getPath() {
+    return Mstring("");
+  }
 
 };
 

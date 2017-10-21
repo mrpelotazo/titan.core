@@ -526,6 +526,7 @@ xor4b		RETURN(Xor4bKeyword);
 "@deterministic" RETURN(DeterministicKeyword);
 "@fuzzy"         RETURN(FuzzyKeyword);
 "@index"         RETURN(IndexKeyword);
+"@local"         RETURN(LocalKeyword);
 
   /* special TITAN specific keywords */
 
@@ -540,6 +541,8 @@ bit2hex		RETURN(bit2hexKeyword);
 bit2int		RETURN(bit2intKeyword);
 bit2oct		RETURN(bit2octKeyword);
 bit2str		RETURN(bit2strKeyword);
+bson2json	RETURN(bson2JsonKeyword);
+cbor2json	RETURN(cbor2JsonKeyword);
 char2int	RETURN(char2intKeyword);
 char2oct	RETURN(char2octKeyword);
 decomp		RETURN(decompKeyword);
@@ -562,6 +565,8 @@ isbound		RETURN(isboundKeyword);
 ischosen	RETURN(ischosenKeyword);
 ispresent	RETURN(ispresentKeyword);
 istemplatekind  RETURN(istemplatekindKeyword);
+json2bson	RETURN(json2bsonKeyword);
+json2cbor	RETURN(json2CborKeyword);
 lengthof	RETURN(lengthofKeyword);
 oct2bit		RETURN(oct2bitKeyword);
 oct2char	RETURN(oct2charKeyword);
@@ -571,6 +576,7 @@ oct2str		RETURN(oct2strKeyword);
 regexp		RETURN(regexpKeyword);
 replace		RETURN(replaceKeyword);
 rnd			RETURN(rndKeyword);
+setencode RETURN(setencodeKeyword);
 sizeof		RETURN(sizeofKeyword);
 str2bit		RETURN(str2bitKeyword);
 str2float	RETURN(str2floatKeyword);

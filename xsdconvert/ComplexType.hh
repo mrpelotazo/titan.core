@@ -50,7 +50,7 @@ public:
     fromTagUnion,
     fromTagNillable,
     fromTagComplexType,
-    fromTagSubstitution,
+    fromElementSubstitution,
     fromTypeSubstitution
   };
 
@@ -79,7 +79,6 @@ private:
   TagName lastType;
   Mstring actualPath;
   RootType * actfield;
-  SimpleType * nameDep; // not owned
   RootType * nillable_field;
   ComplexType * basefield;
   ComplexType_Mode cmode;
@@ -108,14 +107,14 @@ private:
   //Reference resolving functions
   void reference_resolving_funtion();
   void resolveAttribute(AttributeType *attr);
-  void resolveAttributeGroup(SimpleType *st);
-  void resolveGroup(SimpleType *st);
-  void resolveElement(SimpleType *st);
+  void resolveAttributeGroup();
+  void resolveGroup();
+  void resolveElement();
   void resolveSimpleTypeExtension();
   void resolveSimpleTypeRestriction();
   void resolveComplexTypeExtension();
   void resolveComplexTypeRestriction();
-  void resolveUnion(SimpleType *st);
+  void resolveUnion();
   bool hasMatchingFields(const List<ComplexType*>& a, const List<ComplexType*>& b) const;
   // True if a restriction really restricts the type not just aliases
   bool hasComplexRestriction(ComplexType* ct) const;
@@ -154,6 +153,7 @@ public:
   void modifyList();
   void setNameDep(SimpleType * dep) { nameDep = dep; }
   void setParentTypeSubsGroup(ComplexType * dep) { parentTypeSubsGroup = dep; }
+  Mstring getPath() { return actualPath; }
 
   void dump(unsigned int depth) const;
 

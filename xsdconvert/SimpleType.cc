@@ -66,7 +66,8 @@ SimpleType::SimpleType(XMLParser * a_parser, TTCN3Module * a_module, ConstructTy
 , inList(false)
 , alias(NULL)
 , defaultForEmptyConstant(NULL)
-, parent(NULL) {
+, parent(NULL)
+, nameDep(NULL) {
 }
 
 SimpleType::SimpleType(const SimpleType& other)
@@ -93,12 +94,17 @@ SimpleType::SimpleType(const SimpleType& other)
 , inList(other.inList)
 , alias(other.alias)
 , defaultForEmptyConstant(other.defaultForEmptyConstant)
-, parent(NULL) {
+, parent(NULL)
+, nameDep(other.nameDep) {
   length.parent = this;
   pattern.parent = this;
   enumeration.parent = this;
   whitespace.p_parent = this;
   value.parent = this;
+  
+  if (nameDep != NULL) {
+    nameDep->addToNameDepList(this);
+  }
 }
 
 void SimpleType::loadWithValues() {
@@ -266,7 +272,7 @@ void SimpleType::applyDefaultAttribute(const Mstring& default_value) {
     value.default_value = default_value;
     const Mstring typeT = type.originalValueWoPrefix.getValueWithoutPrefix(':');
     //Not supported for hexBinary and base64Binary
-    if (typeT != "hexBinary" && typeT != "base64Binary") {
+    if (typeT != "hexBinary" && typeT != "base64Binary" && typeT != "NMTOKENS" && typeT != "IDREFS" && typeT != "ENTITIES") {
       Constant * c = new Constant(this, type.convertedValue, default_value);
       module->addConstant(c);
       defaultForEmptyConstant = c;
@@ -282,7 +288,7 @@ void SimpleType::applyFixedAttribute(const Mstring& fixed_value) {
     value.modified = true;
     const Mstring typeT = type.originalValueWoPrefix.getValueWithoutPrefix(':');
     //Not supported for hexBinary and base64Binary
-    if (typeT != "hexBinary" && typeT != "base64Binary") {
+    if (typeT != "hexBinary" && typeT != "base64Binary" && typeT != "NMTOKENS" && typeT != "IDREFS" && typeT != "ENTITIES") {
       Constant * c = new Constant(this, type.convertedValue, fixed_value);
       module->addConstant(c);
       defaultForEmptyConstant = c;
@@ -323,7 +329,7 @@ void SimpleType::addToSubstitutions(){
   if(!g_flag_used || substitutionGroup.empty()){
     return;
   }
-  SimpleType * st_ = (SimpleType*) TTCN3ModuleInventory::getInstance().lookup(this, substitutionGroup, want_BOTH);
+  SimpleType * st_ = (SimpleType*) TTCN3ModuleInventory::getInstance().lookup(this, substitutionGroup, want_BOTH, c_element);
   if(st_ == NULL){
     printError(module->getSchemaname(), name.convertedValue,
         "Reference for a non-defined type: " + substitutionGroup);
@@ -337,9 +343,9 @@ void SimpleType::addToSubstitutions(){
 
   st->referenceResolving();
   substitutionGroup = empty_string;
-  //Simpletype
+  //SimpleType
   if(st->subsGroup == NULL){
-    ComplexType * head_element = new ComplexType(*st, ComplexType::fromTagSubstitution);
+    ComplexType * head_element = new ComplexType(*st, ComplexType::fromElementSubstitution);
     for(List<RootType*>::iterator simpletype = st->nameDepList.begin(); simpletype; simpletype = simpletype->Next){
       head_element->getNameDepList().push_back(simpletype->Data);
     }
@@ -450,7 +456,7 @@ void SimpleType::collectElementTypes(SimpleType* found_ST, ComplexType* found_CT
   //Only if type substitution is enabled and it is a top level(simpletype) element or
   //it is a not top level element(complextype)
   if(h_flag_used && (hasVariant(Mstring("\"element\"")) || xsdtype == n_element)){
-    SimpleType * st =  NULL, *nameDep = NULL;
+    SimpleType * st =  NULL, *nameDepType = NULL;
     Mstring uri, value_, type_;
     if(found_ST != NULL || found_CT != NULL){
       // st := found_ST or found_CT, which is not null
@@ -464,7 +470,7 @@ void SimpleType::collectElementTypes(SimpleType* found_ST, ComplexType* found_CT
       value_ = type.convertedValue;
       if(outside_reference.empty()){
         type_ = value_;
-        nameDep = this;
+        nameDepType = this;
       }else {
         type_ = outside_reference.get_val();
       }
@@ -482,7 +488,7 @@ void SimpleType::collectElementTypes(SimpleType* found_ST, ComplexType* found_CT
         complex->Data->setVisible();
         if(st->getXsdtype() != n_NOTSET && this == st){ //otherwise records would be renamed too
           complex->Data->addToNameDepList(st);
-          ((ComplexType*)st)->setNameDep(nameDep);
+          ((ComplexType*)st)->setNameDep(nameDepType);
         }
         found = true;
         break;
@@ -494,7 +500,7 @@ void SimpleType::collectElementTypes(SimpleType* found_ST, ComplexType* found_CT
       if(prefix != empty_string){
         prefix += ":";
       }
-      st->getModule()->addElementType(prefix + type_, nameDep);
+      st->getModule()->addElementType(prefix + type_, nameDepType);
     }
   }
 }
@@ -591,11 +597,16 @@ void SimpleType::referenceResolving() {
   
   if(!outside_reference.empty()){
     SimpleType * found_ST = static_cast<SimpleType*> (
-      TTCN3ModuleInventory::getInstance().lookup(this, want_ST));
+      TTCN3ModuleInventory::getInstance().lookup(this, want_ST, c_simpleType));
     ComplexType * found_CT = static_cast<ComplexType*> (
-      TTCN3ModuleInventory::getInstance().lookup(this, want_CT));
+      TTCN3ModuleInventory::getInstance().lookup(this, want_CT, c_complexType));
     // It _is_ possible to find both
     collectElementTypes(found_ST, found_CT);
+    // If found_ST is a complexType with an xsd:union restricted to certain values
+    if (found_ST != NULL && found_ST->getType().convertedValue == Mstring("union") && mode == restrictionMode) {
+      found_CT = (ComplexType*)found_ST;
+      found_ST = NULL;
+    }
     if (found_ST != NULL) {
       if (!found_ST->outside_reference.empty() && !found_ST->outside_reference.is_resolved() && found_ST != this) {
         found_ST->referenceResolving();
@@ -614,9 +625,9 @@ void SimpleType::referenceResolving() {
       if (!isBuiltInType(type.convertedValue)) {
         found_CT->addToNameDepList(this);
       }
-    }else {
+    } else {
       printError(module->getSchemaname(), name.convertedValue,
-        "Reference for a non-defined type: " + outside_reference.repr());
+        "Reference for a non-defined simpleType or complexType type: " + outside_reference.repr());
       TTCN3ModuleInventory::getInstance().incrNumErrors();
       outside_reference.set_resolved(NULL);
     }
@@ -847,7 +858,7 @@ void SimpleType::finalModification() {
 void SimpleType::finalModification2() {
   // Delayed adding the defaultForEmpty variant after the nameconversion
   // happened on the constants
-  if (defaultForEmptyConstant != NULL) {
+  if (defaultForEmptyConstant != NULL && !defaultForEmptyConstant->isUnsupported()) {
     TTCN3Module * mod = parent != NULL ? parent->getModule() : getModule();
     addVariant(V_defaultForEmpty, defaultForEmptyConstant->getAlterego()->getConstantName(mod));
   }
@@ -880,6 +891,15 @@ bool SimpleType::hasRestrictionOrExtension() const {
     pattern.modified ||
     whitespace.modified;
 }
+
+ ComplexType * SimpleType::getMainType() {
+    ComplexType * par = parent;
+    if (par == NULL) return NULL;
+    while (par->parent != NULL) {
+      par = par->parent;
+    }
+    return par;
+  }
 
 void SimpleType::printToFile(FILE * file) {
   if (!visible) {
@@ -1242,12 +1262,12 @@ void EnumerationType::applyReference(const EnumerationType & other) {
 void EnumerationType::applyFacets() // string types, integer types, float types, time types
 {
   if (!modified) return;
-
+  
   facets.remove_dups();
 
   const Mstring & base = parent->getBuiltInBase();
 
-  if (isStringType(base)) // here length restriction is applicable
+  if (isStringType(base) || (isSequenceType(base) && base != "QName")) // here length restriction is applicable
   {
     List<Mstring> text_variants;
     for (List<Mstring>::iterator facet = facets.begin(); facet; facet = facet->Next) {
@@ -1335,7 +1355,7 @@ void EnumerationType::applyFacets() // string types, integer types, float types,
     printWarning(parent->getModule()->getSchemaname(), parent->getName().convertedValue,
       Mstring("Enumeration restriction is not supported on type '") + base + Mstring("'."));
     TTCN3ModuleInventory::getInstance().incrNumWarnings();
-    parent->setInvisible();
+    modified = false;
   }
 }
 
@@ -1350,7 +1370,7 @@ void EnumerationType::printToFile(FILE * file, unsigned int indent_level) const 
   if (!modified) return;
 
   const Mstring & base = parent->getBuiltInBase();
-  if (isStringType(base)) {
+  if (isStringType(base) || (isSequenceType(base) && base != "QName")) {
     for (QualifiedNames::iterator itemString = items_string.begin(); itemString; itemString = itemString->Next) {
       if (itemString != items_string.begin()) fputs(",\n", file);
       for (unsigned int l = 0; l != indent_level; ++l) fputs("\t", file);
@@ -1536,7 +1556,7 @@ void ValueType::applyFacets() // only for integer and float types
     if (facet_maxInclusive != DBL_MAX && upper > facet_maxInclusive) upper = facet_maxInclusive;
     if (facet_minExclusive != -DBL_MAX && lower < facet_minExclusive) lower = facet_minExclusive;
     if (facet_maxExclusive != DBL_MAX && upper > facet_maxExclusive) upper = facet_maxExclusive;
-  } else if (isAnyType(base) || isTimeType(base) || isBooleanType(base)) {
+  } else if ((isAnyType(base) && base.getValueWithoutPrefix(':') != "anyType") || isTimeType(base) || isBooleanType(base)) {
   } else if (isStringType(base) && (
     base.getValueWithoutPrefix(':') != "hexBinary" && base.getValueWithoutPrefix(':') != "base64Binary")) {
   } else if (base.empty()) {
@@ -1614,8 +1634,8 @@ void ValueType::printToFile(FILE * file) const {
       if(!isBuiltInType(type)){
         type = findBuiltInType(parent, type);
       }
+      const Mstring& name = type.getValueWithoutPrefix(':');
       if (isStringType(type) || isTimeType(type) || isQNameType(type) || isAnyType(type)) {
-        const Mstring& name = type.getValueWithoutPrefix(':');
         if (name != "hexBinary" && name != "base64Binary") {
           fprintf(file, " (\"%s\")", fixed_value.c_str());
         }
@@ -1632,7 +1652,7 @@ void ValueType::printToFile(FILE * file) const {
       } else if (isFloatType(type)) {
         Mstring val = xmlFloat2TTCN3FloatStr(fixed_value);
         fprintf(file, " (%s)", val.c_str());
-      } else {
+      } else if (name != "NMTOKENS" && name != "IDREFS" && name != "ENTITIES"){
         fprintf(file, " (%s)", fixed_value.c_str());
       }
     }

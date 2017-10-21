@@ -515,11 +515,11 @@ void append_to_library_list (const char* prjName,
     actcfg);
   XPathObject exeObj(run_xpath(xpathCtx, exeXpath));
   Free(exeXpath);
-  std::string lib_name;
   if (exeObj->nodesetval && exeObj->nodesetval->nodeNr > 0) {
     const char* target_executable = (const char*)exeObj->nodesetval->nodeTab[0]->content;
     autostring target_exe_dir(get_dir_from_path(target_executable));
     autostring target_exe_file(get_file_from_path(target_executable));
+    std::string lib_name;
     lib_name = target_exe_file;
     ProjectDescriptor* projDesc = projGenHelper.getTargetOfProject(prjName);
     if (projDesc) {
@@ -1269,7 +1269,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char* tpdName, c
   char** cxxcompiler, char** optlevel, char** optflags, boolean* p_dbflag, boolean* p_drflag, boolean* p_dtflag, boolean* p_dxflag,
   boolean* p_djflag, boolean* p_fxflag, boolean* p_doflag, boolean* p_gfflag, boolean* p_lnflag, boolean* p_isflag,
   boolean* p_asflag, boolean* p_swflag, boolean* p_Yflag, boolean* p_Mflag, boolean *p_Eflag, boolean* p_nflag, boolean* p_Nflag,
-  boolean* p_diflag, struct string_list* solspeclibs, struct string_list* sol8speclibs,
+  boolean* p_diflag, boolean* p_enable_legacy_encoding, struct string_list* solspeclibs, struct string_list* sol8speclibs,
   struct string_list* linuxspeclibs, struct string_list* freebsdspeclibs, struct string_list* win32speclibs, char** ttcn3prep,
   struct string_list* linkerlibs, struct string_list* additionalObjects, struct string_list* linkerlibsearchp, boolean Vflag, boolean Dflag,
   boolean *p_Zflag, boolean *p_Hflag, char** generatorCommandOutput, struct string2_list* target_placement_list, boolean prefix_workdir, 
@@ -1289,7 +1289,7 @@ extern "C" tpd_result process_tpd(const char **p_tpd_name, const char *actcfg,
   char** cxxcompiler, char** optlevel, char** optflags, boolean* p_dbflag, boolean* p_drflag, boolean* p_dtflag, boolean* p_dxflag, 
   boolean* p_djflag, boolean* p_fxflag, boolean* p_doflag, boolean* p_gfflag, boolean* p_lnflag, boolean* p_isflag,
   boolean* p_asflag, boolean* p_swflag, boolean* p_Yflag, boolean* p_Mflag, boolean* p_Eflag, boolean* p_nflag, boolean* p_Nflag,
-  boolean* p_diflag, struct string_list* solspeclibs, struct string_list* sol8speclibs,
+  boolean* p_diflag, boolean* p_enable_legacy_encoding, struct string_list* solspeclibs, struct string_list* sol8speclibs,
   struct string_list* linuxspeclibs, struct string_list* freebsdspeclibs, struct string_list* win32speclibs, char** ttcn3prep,
   string_list* linkerlibs, string_list* additionalObjects, string_list* linkerlibsearchp, boolean Vflag, boolean Dflag, boolean *p_Zflag,
   boolean *p_Hflag, char** generatorCommandOutput, struct string2_list* target_placement_list, boolean prefix_workdir,
@@ -1319,7 +1319,7 @@ extern "C" tpd_result process_tpd(const char **p_tpd_name, const char *actcfg,
       optlevel, optflags, p_dbflag, p_drflag, p_dtflag, p_dxflag, p_djflag,
       p_fxflag, p_doflag, p_gfflag, p_lnflag, p_isflag,
       p_asflag, p_swflag, p_Yflag, p_Mflag, p_Eflag, p_nflag, p_Nflag,
-      p_diflag, solspeclibs, sol8speclibs,
+      p_diflag, p_enable_legacy_encoding, solspeclibs, sol8speclibs,
       linuxspeclibs, freebsdspeclibs, win32speclibs, ttcn3prep,
       linkerlibs, additionalObjects, linkerlibsearchp, Vflag, Dflag, p_Zflag,
       p_Hflag, generatorCommandOutput, target_placement_list, prefix_workdir, 
@@ -1348,7 +1348,7 @@ extern "C" tpd_result process_tpd(const char **p_tpd_name, const char *actcfg,
       optlevel, optflags, p_dbflag, p_drflag, p_dtflag, p_dxflag, p_djflag,
       p_fxflag, p_doflag, p_gfflag, p_lnflag, p_isflag,
       p_asflag, p_swflag, p_Yflag, p_Mflag, p_Eflag, p_nflag, p_Nflag,
-      p_diflag, solspeclibs, sol8speclibs,
+      p_diflag, p_enable_legacy_encoding, solspeclibs, sol8speclibs,
       linuxspeclibs, freebsdspeclibs, win32speclibs, ttcn3prep,
       linkerlibs, additionalObjects, linkerlibsearchp, Vflag, Dflag, p_Zflag,
       p_Hflag, generatorCommandOutput, target_placement_list, prefix_workdir, 
@@ -1452,7 +1452,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
   char** cxxcompiler, char** optlevel, char** optflags, boolean* p_dbflag, boolean* p_drflag, boolean* p_dtflag, boolean* p_dxflag,
   boolean* p_djflag, boolean* p_fxflag, boolean* p_doflag, boolean* p_gfflag, boolean* p_lnflag, boolean* p_isflag,
   boolean* p_asflag, boolean* p_swflag, boolean* p_Yflag, boolean* p_Mflag, boolean* p_Eflag, boolean* p_nflag, boolean* p_Nflag,
-  boolean* p_diflag, struct string_list* solspeclibs, struct string_list* sol8speclibs,
+  boolean* p_diflag, boolean* p_enable_legacy_encoding, struct string_list* solspeclibs, struct string_list* sol8speclibs,
   struct string_list* linuxspeclibs, struct string_list* freebsdspeclibs, struct string_list* win32speclibs, char** ttcn3prep,
   string_list* linkerlibs, string_list* additionalObjects, string_list* linkerlibsearchp, boolean Vflag, boolean Dflag, boolean *p_Zflag,
   boolean *p_Hflag, char** generatorCommandOutput, struct string2_list* target_placement_list, boolean prefix_workdir,
@@ -1588,8 +1588,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
   map<cstring, const char> path_vars;
   
   autostring workdir;
-  
-  autostring proj_abs_workdir;
 
   autostring abs_workdir;
 
@@ -1798,6 +1796,8 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
   }
   const char *real_workdir = folders[workdir]; // This is relative to the location of the tpd file
   excluded_folders.add(real_workdir); // excluded by convention
+  
+  autostring proj_abs_workdir;
 
   // If -D flag was specified then we ignore the workdir
   // in the TPD (the current dir is considered the work dir).
@@ -2057,6 +2057,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
   xsdbool2boolean(xpathCtx, actcfg, "activateDebugger", p_nflag);
   xsdbool2boolean(xpathCtx, actcfg, "disablePredefinedExternalFolder", p_diflag);
   xsdbool2boolean(xpathCtx, actcfg, "ignoreUntaggedOnTopLevelUnion", p_Nflag);
+  xsdbool2boolean(xpathCtx, actcfg, "enableLegacyEncoding", p_enable_legacy_encoding);
 
   projDesc = projGenHelper.getTargetOfProject(*p_project_name);
   if (projDesc) projDesc->setLinkingStrategy(*p_lflag);
@@ -2193,7 +2194,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = preincludeObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)preincludeObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (ttcn3_prep_includes) {
@@ -2206,6 +2206,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)preincludeObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2223,7 +2224,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = ttcn3predefinesObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      const char* content = (const char*)ttcn3predefinesObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (ttcn3_prep_defines) {
@@ -2236,6 +2236,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        const char* content = (const char*)ttcn3predefinesObj->nodesetval->nodeTab[i]->content;
         last_elem->str = mcopystr(content);
       }
     }
@@ -2252,7 +2253,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = ttcn3preUndefinesObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      const char* content = (const char*)ttcn3preUndefinesObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (ttcn3_prep_undefines) {
@@ -2265,6 +2265,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        const char* content = (const char*)ttcn3preUndefinesObj->nodesetval->nodeTab[i]->content;
         last_elem->str = mcopystr(content);
       }
     }
@@ -2282,7 +2283,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = preincludesObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)preincludesObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (prep_includes) {
@@ -2295,6 +2295,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)preincludesObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2312,7 +2313,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = predefinesObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      const char* content = (const char*)predefinesObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (prep_defines) {
@@ -2325,6 +2325,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        const char* content = (const char*)predefinesObj->nodesetval->nodeTab[i]->content;
         last_elem->str = mcopystr(content);
       }
     }
@@ -2341,7 +2342,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = preUndefinesObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      const char* content = (const char*)preUndefinesObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (prep_undefines) {
@@ -2354,6 +2354,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        const char* content = (const char*)preUndefinesObj->nodesetval->nodeTab[i]->content;
         last_elem->str = mcopystr(content);
       }
     }
@@ -2406,12 +2407,11 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = solspeclibObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)solspeclibObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (solspeclibs) {
         // go to last element
-        struct string_list* last_elem =solspeclibs;
+        struct string_list* last_elem = solspeclibs;
         while (last_elem->next) last_elem = last_elem->next;
         // add string to last element if empty or create new last element and add it to that
         if (last_elem->str) {
@@ -2419,6 +2419,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)solspeclibObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2436,7 +2437,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = sol8speclibObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)sol8speclibObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (sol8speclibs) {
@@ -2449,6 +2449,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)sol8speclibObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2466,7 +2467,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = linuxspeclibObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)linuxspeclibObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (linuxspeclibs) {
@@ -2479,6 +2479,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)linuxspeclibObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2496,7 +2497,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = freebsdspeclibObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)freebsdspeclibObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (freebsdspeclibs) {
@@ -2509,6 +2509,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)freebsdspeclibObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2526,7 +2527,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = win32speclibObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)win32speclibObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (win32speclibs) {
@@ -2539,6 +2539,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)win32speclibObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2570,7 +2571,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = additionalObjectsObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)additionalObjectsObj->nodesetval->nodeTab[i]->content;
 
       // add to the end of list
       if (additionalObjects) {
@@ -2583,6 +2583,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)additionalObjectsObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
       }
@@ -2610,7 +2611,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = linkerlibsObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)linkerlibsObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (linkerlibs) {
@@ -2623,6 +2623,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)linkerlibsObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
 
@@ -2643,7 +2644,6 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     xmlNodeSetPtr nodes = linkerlibsearchObj->nodesetval;
 
     if (nodes) for (int i = 0; i < nodes->nodeNr; ++i) {
-      char* content = (char*)linkerlibsearchObj->nodesetval->nodeTab[i]->content;
 
       // add includes to the end of list
       if (linkerlibsearchp) {
@@ -2656,6 +2656,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           last_elem = last_elem->next;
           last_elem->next = NULL;
         }
+        char* content = (char*)linkerlibsearchObj->nodesetval->nodeTab[i]->content;
         replacechar(&content);
         last_elem->str = content;
 
@@ -2672,8 +2673,8 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
       actcfg);
     XPathObject generatorCommandObj(run_xpath(xpathCtx, generatorCommandXpath));
     Free(generatorCommandXpath);
-    autostring generatorCommand;
     if (generatorCommandObj->nodesetval && generatorCommandObj->nodesetval->nodeNr > 0) {
+      autostring generatorCommand;
       generatorCommand = mcopystr((const char*)generatorCommandObj->nodesetval->nodeTab[0]->content);
       // run the command and capture the output
       printf("Executing generator command `%s' specified in `%s'...\n", (const char*)generatorCommand, (const char*)abs_tpd_name);
@@ -2949,6 +2950,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           my_swflag = 0, my_Yflag = 0, my_Mflag = *p_Mflag, my_Eflag = 0, my_nflag = *p_nflag,
           my_Nflag = 0,
           my_diflag = *p_diflag;
+        boolean my_enable_legacy_encoding = 0;
 
         char *my_ets = NULL;
         char *my_proj_name = NULL;
@@ -3001,7 +3003,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
           &my_quflag, &my_dsflag, cxxcompiler, optlevel, optflags, &my_dbflag, &my_drflag,
           &my_dtflag, &my_dxflag, &my_djflag, &my_fxflag, &my_doflag,
           &my_gfflag, &my_lnflag, &my_isflag, &my_asflag, &my_swflag, &my_Yflag, &my_Mflag, &my_Eflag, &my_nflag, &my_Nflag, &my_diflag,
-          solspeclibs, sol8speclibs, linuxspeclibs, freebsdspeclibs, win32speclibs,
+          &my_enable_legacy_encoding, solspeclibs, sol8speclibs, linuxspeclibs, freebsdspeclibs, win32speclibs,
           ttcn3prep, linkerlibs, additionalObjects, linkerlibsearchp, Vflag, FALSE, &my_Zflag, 
           &my_Hflag, NULL, NULL, prefix_workdir, run_command_list, seen_tpd_files, required_configs, profiled_file_list,
           search_paths, n_search_paths, makefileScript, all_configs);
@@ -3212,11 +3214,11 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
   }
   // Print the TPD too.
   if (*p_Pflag) {
-    autostring dir_part(get_dir_from_path(*p_tpd_name));
-    autostring file_part(get_file_from_path(*p_tpd_name));
     if (*p_aflag) {
       puts((const char *)abs_tpd_name);
     } else {
+      autostring dir_part(get_dir_from_path(*p_tpd_name));
+      autostring file_part(get_file_from_path(*p_tpd_name));
       autostring rel_dir_part(get_relative_dir(dir_part, file_list_path ? file_list_path : abs_tpd_dir));
       autostring rel_dir_file_part(compose_path_name(rel_dir_part, file_part));
       const char *rel_tpd_name = (const char *)rel_dir_file_part;

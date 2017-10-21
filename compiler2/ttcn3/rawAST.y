@@ -287,6 +287,7 @@ static void yyprint(FILE *file, int type, const YYSTYPE& value);
 %token XKWmetainfo        "metainfo"
 %token XKWfor             "for"
 %token XKWunbound         "unbound"
+%token XKWnumber          "number"
 %token XJsonValueStart    "("
 %token XJsonValueEnd      ")"
 %token XJsonValueSegment  "JSON value"
@@ -567,7 +568,13 @@ XExtensionBitGroupDef: XExtensionBitGroupKeyword '(' XYesOrNoOrReverse ','
 
 /* LengthTo */
 XLengthToDef : XLengthToKeyword '(' XRecordFieldRefList ')'
-        {  };
+        {  }
+| XLengthToKeyword '(' XRecordFieldRefList ')' '+' XNumber
+{ rawstruct->lengthto_offset = $6; }
+
+| XLengthToKeyword '(' XRecordFieldRefList ')' '-' XNumber
+{ rawstruct->lengthto_offset = -$6; }
+;
 
 /* PointerTo */
 XPointerToDef : XPointerToKeyword '(' XRecordFieldRef ')'
@@ -1582,9 +1589,22 @@ xsddata: /* XSD:something */
     | XSDgMonthDay        { xerstruct->xsd_type = XSD_GMONTHDAY; }
     | XSDgDay             { xerstruct->xsd_type = XSD_GDAY; }
     | XSDgMonth           { xerstruct->xsd_type = XSD_GMONTH; }
-    | XSDNMTOKENS         { xerstruct->xsd_type = XSD_NMTOKENS; }
-    | XSDIDREFS           { xerstruct->xsd_type = XSD_IDREFS; }
-    | XSDENTITIES         { xerstruct->xsd_type = XSD_ENTITIES; }
+    // XSD:NMTOKENS, XSD:IDREFS and XSD:ENTIITES should behave it they have list variant
+    | XSDNMTOKENS
+    { 
+      xerstruct->xsd_type = XSD_NMTOKENS;
+      xerstruct->list_ = true;
+    }
+    | XSDIDREFS
+    { 
+      xerstruct->xsd_type = XSD_IDREFS;
+      xerstruct->list_ = true;
+    }
+    | XSDENTITIES
+    { 
+      xerstruct->xsd_type = XSD_ENTITIES;
+      xerstruct->list_ = true;
+    }
     | XSDboolean          { xerstruct->xsd_type = XSD_BOOLEAN; }
 
     | XSDanySimpleType    { xerstruct->xsd_type = XSD_ANYSIMPLETYPE; }
@@ -1604,6 +1624,7 @@ XJsonAttribute:
 | XDefault
 | XExtend
 | XMetainfoForUnbound
+| XAsNumber
 ;
 
 XOmitAsNull:
@@ -1626,6 +1647,7 @@ XJsonAlias: // include all keywords, so they can be used as aliases for fields, 
 | XKWmetainfo { $$ = mcopystr("metainfo"); }
 | XKWfor      { $$ = mcopystr("for"); }
 | XKWunbound  { $$ = mcopystr("unbound"); }
+| XKWnumber   { $$ = mcopystr("number"); }
 
 XAsValue:
   XKWas XSpaces XKWvalue { jsonstruct->as_value = true; }
@@ -1653,6 +1675,9 @@ XJsonValueCore:
 XMetainfoForUnbound:
   XKWmetainfo XOptSpaces XKWfor XOptSpaces XKWunbound { jsonstruct->metainfo_unbound = true; }
 ;
+
+XAsNumber:
+  XKWas XOptSpaces XKWnumber { jsonstruct->as_number = true; }
 
 XOptSpaces:
   /* Empty */

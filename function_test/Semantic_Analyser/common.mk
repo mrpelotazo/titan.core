@@ -61,6 +61,11 @@ ifeq ($(DEBUG), yes)
 CPPFLAGS += -DMEMORY_DEBUG
 endif
 
+# Use the legacy handling of 'encode' and 'variant' attributes in tests.
+ifdef LEGACY_CODEC_HANDLING
+COMPILER_FLAGS += -e
+endif
+
 #
 # Rules for building the executable...
 #

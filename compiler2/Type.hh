@@ -18,6 +18,7 @@
  *   Kovacs, Ferenc
  *   Raduly, Csaba
  *   Szabados, Kristof
+ *   Szabo, Bence Janos
  *   Szabo, Janos Zoltan – initial implementation
  *   Szalai, Gabor
  *   Tatarka, Gabor
@@ -37,6 +38,7 @@
 #include "ttcn3/TextAST.hh"
 #include "ttcn3/BerAST.hh"
 #include "ttcn3/JsonAST.hh"
+#include "ttcn3/OerAST.hh"
 #include <float.h>
 
 class XerAttributes;
@@ -45,7 +47,8 @@ enum namedbool { INCOMPLETE_NOT_ALLOWED = 0, INCOMPLETE_ALLOWED = 1, WARNING_FOR
   OMIT_NOT_ALLOWED = 0, OMIT_ALLOWED = 4,
   ANY_OR_OMIT_NOT_ALLOWED = 0, ANY_OR_OMIT_ALLOWED = 5,
   NOT_IMPLICIT_OMIT = 0, IMPLICIT_OMIT = 6,
-  NOT_STR_ELEM = 0, IS_STR_ELEM = 7
+  NOT_STR_ELEM = 0, IS_STR_ELEM = 7,
+  ISBOUND = 8, ISPRESENT = 9, ISCHOSEN = 10
 };
 
 namespace Asn {
@@ -74,6 +77,13 @@ namespace Ttcn {
   class PortTypeBody;
   class Def_Type;
   class Ref_pard;
+  
+  /** Stores the modifier of an attribute */
+  enum attribute_modifier_t {
+    MOD_NONE, ///< no modifier
+    MOD_OVERRIDE, ///< 'override' modifier
+    MOD_LOCAL ///< '@local' modifier
+  };
 } // namespace Ttcn
 
 // not defined here
@@ -200,6 +210,7 @@ namespace Common {
       CT_UNDEF, /**< undefined/unused */
       CT_BER,   /**< ASN.1 BER (built-in) */
       CT_PER,   /**< ASN.1 PER (through user defined coder functions) */
+      CT_OER,   /**< ASN.1 OER (built-in) */
       CT_RAW,   /**< TTCN-3 RAW (built-in) */
       CT_TEXT,  /**< TTCN-3 TEXT (built-in) */
       CT_XER,    /**< TTCN-3 XER (built-in) */
@@ -276,17 +287,40 @@ namespace Common {
     };
     
     /**
-     * Structure containing the default encoding or decoding settings for a type.
+     * Structure containing the default encoding or decoding settings for a type
+     * when using legacy codec handling.
      * These settings determine how values of the type are encoded or decoded by
      * the following TTCN-3 language elements:
      * 'encvalue' (encode), 'encvalue_unichar' (encode), 'decvalue' (decode),
      * 'decvalue_unichar' (decode), 'decmatch' (decode) and '@decoded' (decode).
      */
-    struct coding_t {
+    struct legacy_coding_t {
       coding_type_t type; ///< Type of encoding/decoding
       union {
         MessageEncodingType_t built_in_coding; ///< Built-in codec (if type is CODING_BUILT_IN)
         Assignment* function_def; ///< Pointer to external function definition (if type is CODING_BY_FUNCTION)
+      };
+    };
+    
+    /** Stores information about the custom encoder or decoder function of a type */
+    struct coder_function_t {
+      Assignment* func_def; ///< definition of the encoder or decoder function
+      boolean conflict; ///< indicates whether there are multiple encoder/decoder functions for this type and codec
+    };
+    
+    /** Stores information related to an encoding type (codec), when using new
+      * codec handling. */
+    struct coding_t {
+      boolean built_in; ///< built-in or user defined codec
+      Ttcn::attribute_modifier_t modifier; ///< the 'encode' attribute's modifier
+      union {
+        MessageEncodingType_t built_in_coding; ///< built-in codec
+        struct {
+          char* name; ///< name of the user defined codec (the string in the 'encode' attribute)
+          // note: other types that use this type's coding table may have their own encoder/decoder functions
+          map<Type*, coder_function_t>* encoders; ///< the map of encoder functions per type
+          map<Type*, coder_function_t>* decoders; ///< the map of decoder functions per type
+        } custom_coding;
       };
     };
 
@@ -329,12 +363,17 @@ namespace Common {
     XerAttributes *xerattrib;
     BerAST *berattrib;
     JsonAST *jsonattrib;
+    OerAST *oerattrib;
 
     vector<SubTypeParse> *parsed_restr; ///< parsed subtype restrictions are stored here until they are moved to the sub_type member
     SubType *sub_type; ///< effective/aggregate subtype of this type, NULL if neither inherited nor own subtype restrictions exist
 
-    coding_t default_encoding; ///< default settings for encoding values of this type
-    coding_t default_decoding; ///< default settings for decoding values of this type
+    legacy_coding_t default_encoding; ///< default settings for encoding values of this type (when using legacy codec handling)
+    legacy_coding_t default_decoding; ///< default settings for decoding values of this type (when using legacy codec handling)
+    
+    /** Stores the list of encodings this type supports (when using new codec
+     * handling). */
+    vector<coding_t> coding_table;
     
     /** What kind of AST element owns the type.
      *  It may not be known at creation type, so it's initially OT_UNKNOWN.
@@ -441,11 +480,29 @@ namespace Common {
       * this type. */
     bool needs_any_from_done;
     
-    /** True if JSON coder functions need to be generated for this type.
-      * This is not the same as enabling JSON encoding, since other types that
-      * refer to this type may have JSON encoding, in which case this type needs
-      * to have JSON coder functions to code them. */
-    bool gen_json_coder_functions;
+    /** True if we already checked this type for default or port field*/
+    bool checked_incorrect_field;
+    
+    /** Contains a list of the built-in coder functions that need to be
+      * generated for this type.
+      * When using legacy codec handling, only the JSON coders are set with this
+      * method. */
+    vector<MessageEncodingType_t> coders_to_generate;
+    
+    /** Indicates whether an 'encode' attribute modifier conflict error has
+      * already been displayed for the type. */
+    bool encode_attrib_mod_conflict;
+    
+    /** Helper class that tracks the execution of recursive functions in the 
+      * Type class in order to prevent infinite recursions. */
+    class RecursionTracker {
+      static map<Type*, void> types;
+      Type* key;
+    public:
+      RecursionTracker(Type* t): key(t) { types.add(t, NULL); }
+      ~RecursionTracker() { types.erase(key); }
+      static bool is_happening(Type* t) { return types.has_key(t); }
+    };
 
     /** Copy constructor, for the use of Type::clone() only. */
     Type(const Type& p);
@@ -470,6 +527,13 @@ namespace Common {
     static void destroy_pooltypes();
     /** Returns the TTCN-3 equivalent of \a p_tt. */
     static typetype_t get_typetype_ttcn3(typetype_t p_tt);
+    
+    /** Fills the list parameter with the types that have an empty coding table.
+      * The types considered are the type itself and its field and element types.
+      * Recursive.
+      * @param only_own_table if true, then only the type's own coding table is
+      * checked, otherwise inherited coding tables are also checked */
+    void get_types_w_no_coding_table(vector<Type>& type_list, bool only_own_table);
 
   public:
     /** @name Constructors
@@ -586,6 +650,55 @@ namespace Common {
     virtual void set_my_scope(Scope *p_scope);
     /** Checks the type (including tags). */
     virtual void chk();
+    
+    /** Checks the encodings supported by the type (when using new codec handling).
+      * TTCN-3 types need to have an 'encode' attribute to support an encoding.
+      * ASN.1 types automatically support BER, PER and JSON encodings, and XER
+      * encoding, if set by the compiler option. */
+    void chk_encodings();
+    
+    /** Checks the type's variant attributes (when using the new codec handling). */
+    void chk_variants();
+    
+    /** Parses the specified variant attribute and checks its validity (when 
+      * using the new codec handling). */
+    void chk_this_variant(const Ttcn::SingleWithAttrib* swa, bool global);
+    
+    /** Checks the coding instructions set by the parsed variant attributes.
+      * The check is performed recursively on the type's fields and elements
+      * when using the new codec handling.
+      * The check is only performed on this type, when using legacy codec handling. */
+    void chk_coding_attribs();
+    
+    /** Adds support for an encoding by the type (when using new codec handling),
+      * if the type can have that encoding.
+      * @param name name of the encoding as it appears in the 'encode' attribute;
+      * this may be the name of a built-in or a user-defined encoding */
+    void add_coding(const string& name, Ttcn::attribute_modifier_t modifier, bool silent);
+    
+    /** Sets the encoder or decoder function for the user-defined encoding with
+      * the specified name (when using new codec handling). */
+    void set_coding_function(const char* coding_name, boolean encode,
+      Assignment* function_def);
+    
+    /** Returns the custom encoder or decoder function at the specified index in
+      * the coding table related to this type (when using the new codec handling). */
+    coder_function_t* get_coding_function(size_t index, boolean encode);
+    
+    /** Returns the type that contains this type's coding table (since types
+      * with no 'encode' attributes of their own inherit the 'encode' attributes
+      * of a referenced type or a parent type).
+      * @param ignore_local indicates whether to ignore attributes with the
+      * '@local' modifier
+      * Only used with new codec handling. */
+    Type* get_type_w_coding_table(bool ignore_local = false);
+    
+    const vector<coding_t>& get_coding_table() const { return coding_table; }
+    
+    /** Returns whether this type can have the specified encoding.
+      * Only used with new codec handling. */
+    bool can_have_coding(MessageEncodingType_t coding);
+    
     /** Return whether the two typetypes are compatible.  Sometimes, this is
      *  just a question of \p p_tt1 == \p p_tt2.  When there are multiple
      *  typetypes for a type (e.g. T_ENUM_A and T_ENUM_T) then all
@@ -619,6 +732,9 @@ namespace Common {
                        TypeChain *p_left_chain = NULL,
                        TypeChain *p_right_chain = NULL,
                        bool p_is_inline_template = false);
+    /** Check if the port definitions of the component types are the same
+     */
+    bool is_compatible_component_by_port(Type *p_type);
     /** Check if the restrictions of a T_SEQOF/T_SETOF are "compatible" with
      *  the given type \a p_type.  Can be called only as a T_SEQOF/T_SETOF.
      *  Currently, used for structured types only.  \a p_type can be any kind
@@ -689,10 +805,11 @@ namespace Common {
     bool is_list_type(bool allow_array);
 
     /** Sets the encoding or decoding function for the type (in case of custom
-      * or PER encoding). */
-    void set_coding_function(bool encode, Assignment* function_def);
+      * or PER encoding). Only used with legacy codec handling. */
+    void set_legacy_coding_function(bool encode, Assignment* function_def);
     
-    /** Sets the codec to use when encoding or decoding the ASN.1 type */
+    /** Sets the codec to use when encoding or decoding the ASN.1 type.
+      * Only used with legacy codec handling. */
     void set_asn_coding(bool encode, MessageEncodingType_t new_coding);
     
     /** Determines the method of encoding or decoding for values of this type
@@ -715,12 +832,13 @@ namespace Common {
     string get_coding(bool encode) const;
     
     /** Returns the function definition of the type's encoder/decoder function.
-      * Used during code generation for types encoded/decoded by functions. */
-    Assignment* get_coding_function(bool encode) const;
+      * Used during code generation for types encoded/decoded by functions.
+      * Only used with legacy codec handling. */
+    Assignment* get_legacy_coding_function(bool encode) const;
+    
+    static MessageEncodingType_t get_enc_type(const string& enc);
     
   private:
-    static MessageEncodingType_t get_enc_type(const Ttcn::SingleWithAttrib& enc);
-
     void chk_Int_A();
     void chk_Enum_A();
     void chk_Enum_item(EnumItem *ei, bool after_ellipsis,
@@ -769,6 +887,7 @@ namespace Common {
     void chk_raw();
     /** If the type does not have a rawattrib, create one. */
     void force_raw();
+    int get_default_raw_fieldlength();
     void chk_text();
     void chk_text_matching_values(textAST_matching_values *matching_values,
       const char *attrib_name);
@@ -794,6 +913,8 @@ namespace Common {
     void chk_xer_use_order(int num_attributes);
     void chk_xer_use_type();
     void chk_xer_use_union();
+    
+    void chk_oer();
 
     bool is_root_basic();
     int get_raw_length();
@@ -883,6 +1004,8 @@ namespace Common {
     bool chk_this_template_generic(Template *t, namedbool incomplete_allowed,
      namedbool allow_omit, namedbool allow_any_or_omit, namedbool sub_chk,
      namedbool implicit_omit, Common::Assignment *lhs);
+    /** Checks if a template's type contains default or port field somehow.*/
+    void chk_this_template_incorrect_field();
   private:
     bool chk_this_refd_template(Template *t, Common::Assignment *lhs);
     void chk_this_template_length_restriction(Template *t);
@@ -1107,8 +1230,9 @@ namespace Common {
     void generate_code_berdescriptor(output_struct *target);
     void generate_code_rawdescriptor(output_struct *target);
     void generate_code_textdescriptor(output_struct *target);
-    void generate_code_jsondescriptor(output_struct *target);
     void generate_code_xerdescriptor(output_struct *target);
+    void generate_code_jsondescriptor(output_struct *target);
+    void generate_code_oerdescriptor(output_struct *target);
     void generate_code_alias(output_struct *target);
     void generate_code_Enum(output_struct *target);
     void generate_code_Choice(output_struct *target);
@@ -1119,6 +1243,7 @@ namespace Common {
     void generate_code_Array(output_struct *target);
     void generate_code_Fat(output_struct *target);
     void generate_code_Signature(output_struct *target);
+    void generate_code_coding_handlers(output_struct *target);
     /** Returns whether the type needs an explicit C++ typedef alias and/or
      * an alias to a type descriptor of another type. It returns true for those
      * types that are defined in module-level type definitions hence are
@@ -1141,20 +1266,26 @@ namespace Common {
       * or false if it still needs to be generated */
     bool is_pregenerated();
   public:
-    /** Generates type specific call for the reference used in isbound call
+    
+    /** Returns true if the type supports at least one built-in encoding.
+      * Only used with new codec handling. */
+    bool has_built_in_encoding();
+    
+    /** Generates type specific call for the reference used in isbound/ispresent/ischosen call
      * into argument \a expr. Argument \a subrefs holds the reference path
      * that needs to be checked. Argument \a module is the actual module of
      * the reference and is used to gain access to temporal identifiers.
      * Argument \a global_id is the name of the bool variable where the result
-     * of the isbound check is calculated. Argument \a external_id is the name
+     * of the isbound/ispresent/ischosen check is calculated. Argument \a external_id is the name
      * of the assignment where the call chain starts.
      * Argument \a is_template tells if the assignment is a template or not.
-     * Argument \a isbound tells if the function is isbound or ispresent.
+     * Argument \a optype tells if the function is isbound or ispresent or ischosen.
+     * Argument \a field contains the inspected field of the union when the optype is ischosen.
      */
-    void generate_code_ispresentbound(expression_struct *expr,
+    void generate_code_ispresentboundchosen(expression_struct *expr,
       Ttcn::FieldOrArrayRefs *subrefs, Common::Module* module,
       const string& global_id, const string& external_id,
-      const bool is_template, const bool isbound);
+      const bool is_template, const namedbool optype, const char* field);
 
     /** Extension attribute for optimized code generation of structured types:
      *    with { extension "optimize:xxx" }
@@ -1208,6 +1339,8 @@ namespace Common {
     /** User visible type name for built-in types */
     static const char * get_typename_builtin(typetype_t tt);
     string get_genname_typedescriptor(Scope *p_scope);
+    string get_genname_coder(Scope* p_scope);
+    string get_genname_default_coding(Scope* p_scope);
   private:
     /** Returns the name prefix of type descriptors, etc. that belong to the
      * equivalent C++ class referenced from the module of scope \a p_scope.
@@ -1224,6 +1357,7 @@ namespace Common {
     string get_genname_textdescriptor();
     string get_genname_xerdescriptor();
     string get_genname_jsondescriptor();
+    string get_genname_oerdescriptor();
     /** Return the ASN base type to be written into the type descriptor */
     const char* get_genname_typedescr_asnbasetype();
     /** parse subtype information and add parent's subtype information to
@@ -1266,7 +1400,8 @@ namespace Common {
     
     inline void set_needs_any_from_done() { needs_any_from_done = true; }
     
-    inline void set_gen_json_coder_functions() { gen_json_coder_functions = true; }
+    bool get_gen_coder_functions(MessageEncodingType_t coding);
+    void set_gen_coder_functions(MessageEncodingType_t coding);
     
     /** Calculates the type's display name from the genname (replaces double
       * underscore characters with single ones) */

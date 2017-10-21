@@ -2244,7 +2244,18 @@ int UNIVERSAL_CHARSTRING::XER_decode(const XERdescriptor_t& p_td,
               "Invalid escape sequence '<%s/>'", name);
           }
           break; }
-
+        
+        case XML_READER_TYPE_ATTRIBUTE: {
+          if (omit_tag) {
+            const char * text = (const char*)reader.Value();
+            int len = strlen(text);
+            accumulator.put_s(len, (cbyte*)text);
+            decode_utf8(accumulator.get_len(), accumulator.get_data());
+            goto fini;
+          }
+          break;
+        }
+        
         case XML_READER_TYPE_END_ELEMENT: {
           decode_utf8(accumulator.get_len(), accumulator.get_data());
           if (!omit_tag) {
@@ -2367,9 +2378,14 @@ int UNIVERSAL_CHARSTRING::RAW_encode(const TTCN_Typedescriptor_t& p_td,
     TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_INTERNAL,
       "Invalid string serialization type.");
   }
+  if(p_td.raw->fieldlength < 0){
+    // NULL terminated string
+    buff.put_c(0);
+  }
+  
   int buff_len = buff.get_len();
   int bl = buff_len * 8; // bit length
-  int align_length = p_td.raw->fieldlength ? p_td.raw->fieldlength - bl : 0;
+  int align_length = p_td.raw->fieldlength > 0 ? p_td.raw->fieldlength - bl : 0;
   if (align_length < 0) {
     TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_LEN_ERR,
       "There are insufficient bits to encode '%s': ", p_td.name);
@@ -2982,8 +2998,13 @@ int UNIVERSAL_CHARSTRING::check_BOM(CharCoding::CharCodingType expected_coding,
       TTCN_error("Internal error: invalid expected coding (%d)", expected_coding);
       break;
   }
-  TTCN_EncDec_ErrorContext::warning("No %s Byte Order Mark(BOM) detected. It may result decoding errors",
-  coding_str.c_str());
+  if (TTCN_Logger::log_this_event(TTCN_Logger::DEBUG_UNQUALIFIED)) {
+    TTCN_Logger::begin_event(TTCN_Logger::DEBUG_UNQUALIFIED);
+    TTCN_Logger::log_event_str("Warning: No ");
+    TTCN_Logger::log_event_str(coding_str.c_str());
+    TTCN_Logger::log_event_str(" Byte Order Mark(BOM) detected. It may result decoding errors");
+    TTCN_Logger::end_event();
+  }
   return 0;
 }
 
@@ -3033,7 +3054,9 @@ UNIVERSAL_CHARSTRING_ELEMENT& UNIVERSAL_CHARSTRING_ELEMENT::operator=
   bound_flag = TRUE;
   if (str_val.charstring) {
     if (other_value.is_char()) {
-      str_val.cstr.val_ptr->chars_ptr[uchar_pos] = other_value.uc_cell;
+      // The [] operator of CHARSTRING will change the reference into
+      // a copy if needed.
+      str_val.cstr[uchar_pos] = other_value.uc_cell;
       return *this;
     } else
       str_val.convert_cstr_to_uni();
@@ -3050,9 +3073,11 @@ UNIVERSAL_CHARSTRING_ELEMENT& UNIVERSAL_CHARSTRING_ELEMENT::operator=
     TTCN_error("Assignment of a charstring value with length other than 1 to "
       "a universal charstring element.");
   bound_flag = TRUE;
-  if (str_val.charstring)
-    str_val.cstr.val_ptr->chars_ptr[uchar_pos] = other_value[0];
-  else {
+  if (str_val.charstring) {
+    // The [] operator of CHARSTRING will change the reference into
+    // a copy if needed.
+    str_val.cstr[uchar_pos] = other_value[0];
+  } else {
     str_val.copy_value();
     str_val.val_ptr->uchars_ptr[uchar_pos].uc_group = 0;
     str_val.val_ptr->uchars_ptr[uchar_pos].uc_plane = 0;
@@ -3071,10 +3096,12 @@ UNIVERSAL_CHARSTRING_ELEMENT& UNIVERSAL_CHARSTRING_ELEMENT::operator=
     TTCN_error("Assignment of a charstring value with length other than 1 to "
       "a universal charstring element.");
   bound_flag = TRUE;
-  if (str_val.charstring)
-    str_val.cstr.val_ptr->chars_ptr[uchar_pos] =
+  if (str_val.charstring) {
+    // The [] operator of CHARSTRING will change the reference into
+    // a copy if needed.
+    str_val.cstr[uchar_pos] =
       other_value.val_ptr->chars_ptr[0];
-  else {
+  } else {
     str_val.copy_value();
     str_val.val_ptr->uchars_ptr[uchar_pos].uc_group = 0;
     str_val.val_ptr->uchars_ptr[uchar_pos].uc_plane = 0;
@@ -3091,9 +3118,11 @@ UNIVERSAL_CHARSTRING_ELEMENT& UNIVERSAL_CHARSTRING_ELEMENT::operator=
   other_value.must_bound("Assignment of an unbound charstring element to a "
     "universal charstring element.");
   bound_flag = TRUE;
-  if (str_val.charstring)
-    str_val.cstr.val_ptr->chars_ptr[uchar_pos] = other_value.get_char();
-  else {
+  if (str_val.charstring) {
+    // The [] operator of CHARSTRING will change the reference into
+    // a copy if needed.
+    str_val.cstr[uchar_pos] = other_value.get_char();
+  } else {
     str_val.copy_value();
     str_val.val_ptr->uchars_ptr[uchar_pos].uc_group = 0;
     str_val.val_ptr->uchars_ptr[uchar_pos].uc_plane = 0;
@@ -3126,10 +3155,12 @@ UNIVERSAL_CHARSTRING_ELEMENT& UNIVERSAL_CHARSTRING_ELEMENT::operator=
   if (&other_value != this) {
     bound_flag = TRUE;
     if (str_val.charstring) {
-      if (other_value.str_val.charstring)
-        str_val.cstr.val_ptr->chars_ptr[uchar_pos] =
+      if (other_value.str_val.charstring) {
+        // The [] operator of CHARSTRING will change the reference into
+        // a copy if needed.
+        str_val.cstr[uchar_pos] =
           other_value.str_val.cstr.val_ptr->chars_ptr[other_value.uchar_pos];
-      else {
+      } else {
         str_val.convert_cstr_to_uni();
         str_val.val_ptr->uchars_ptr[uchar_pos] =
           other_value.str_val.val_ptr->uchars_ptr[other_value.uchar_pos];

@@ -48,7 +48,7 @@ XML ipv6 implicitOmit testcase_defparam transparent HQ16404 cfgFile \
 all_from lazyEval tryCatch text2ttcn json ttcn2json profiler templateOmit \
 customEncoding makefilegen uidChars checkstate hostid templateIstemplatekind \
 selectUnion templateExclusiveRange any_from templatePatternRef indexWithRecofArray \
-connectMapOperTest fuzzy portTranslation
+connectMapOperTest fuzzy portTranslation ischosen OER
 
 ifdef DYN
 DIRS += loggerplugin junitlogger 
@@ -60,6 +60,10 @@ endif
 
 ifeq (LTTNGUSTLOGGER, yes)
 DIRS += LTTngUSTLogger
+endif
+
+ifndef LEGACY_CODEC_HANDLING
+DIRS += multipleEncodings
 endif
 
 # List of fake targets:

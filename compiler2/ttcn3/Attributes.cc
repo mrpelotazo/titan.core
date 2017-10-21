@@ -666,7 +666,8 @@ namespace Ttcn {
                 (type->has_encoding(Type::CT_RAW)&&ti_type->has_encoding(Type::CT_RAW)) ||
                 (type->has_encoding(Type::CT_TEXT)&&ti_type->has_encoding(Type::CT_TEXT)) ||
                 (type->has_encoding(Type::CT_XER)&&ti_type->has_encoding(Type::CT_XER)) ||
-                (type->has_encoding(Type::CT_JSON)&&ti_type->has_encoding(Type::CT_JSON)))) {
+                (type->has_encoding(Type::CT_JSON)&&ti_type->has_encoding(Type::CT_JSON)) ||
+                (type->has_encoding(Type::CT_OER)&&ti_type->has_encoding(Type::CT_OER)))) {
             act_attr->error("Type `%s' and type `%s' have no common encoding",
               ti_type->get_typename().c_str(), type->get_typename().c_str());
           }
@@ -706,9 +707,9 @@ namespace Ttcn {
           act_field_err.qualifier->get_stringRepr().c_str(), omit_after_qual->get_stringRepr().c_str());
         continue;
       }
-      ErroneousAttributeSpec::indicator_t act_indicator = act_field_err.err_attr->get_indicator();
-      bool is_omit = act_field_err.err_attr->get_is_omit();
       if (act_field_err.subrefs_array.size()==1) { // erroneous value
+        ErroneousAttributeSpec::indicator_t act_indicator = act_field_err.err_attr->get_indicator();
+        bool is_omit = act_field_err.err_attr->get_is_omit();
         if (act_field_err.type_array.size()!=1) FATAL_ERROR("ErroneousAttributes::build_descr_tree()");
         if ((act_field_err.type_array[0]->get_typetype()==Type::T_SET_A) &&
             is_omit && (act_indicator!=ErroneousAttributeSpec::I_VALUE)) {
@@ -896,23 +897,26 @@ namespace Ttcn {
   void AttributeSpec::dump(unsigned level) const
   {
     DEBUG(level,"spec: %s", spec.c_str());
+    if (!encoding.empty()) {
+      DEBUG(level, "encoding: %s", encoding.c_str());
+    }
   }
 
   // ==== SingleWithAttrib ====
 
   SingleWithAttrib::SingleWithAttrib(const SingleWithAttrib& p)
     : Node(p), Location(p), attribKeyword(p.attribKeyword),
-      hasOverride(p.hasOverride)
+      modifier(p.modifier)
   {
     attribQualifiers = p.attribQualifiers ? p.attribQualifiers->clone() : 0;
     attribSpec = p.attribSpec->clone();
   }
 
   SingleWithAttrib::SingleWithAttrib(
-        attribtype_t p_attribKeyword, bool p_hasOverride,
+        attribtype_t p_attribKeyword, attribute_modifier_t p_modifier,
         Qualifiers *p_attribQualifiers, AttributeSpec* p_attribSpec)
     : Node(), Location(), attribKeyword(p_attribKeyword),
-      hasOverride(p_hasOverride), attribQualifiers(p_attribQualifiers),
+      modifier(p_modifier), attribQualifiers(p_attribQualifiers),
       attribSpec(p_attribSpec)
   {
     if(!p_attribSpec)
@@ -968,7 +972,8 @@ namespace Ttcn {
 	FATAL_ERROR("SingleWithAttrib::dump()");
     }
 
-    DEBUG(level + 1, hasOverride ? "has override" : "hasn't got override");
+    DEBUG(level + 1, "modifier: %s", modifier == MOD_NONE ? "none" :
+      (modifier == MOD_OVERRIDE ? "override" : "@local"));
 
     if(attribSpec)
       attribSpec->dump(level + 1);
@@ -1042,7 +1047,8 @@ namespace Ttcn {
 
   WithAttribPath::WithAttribPath(const WithAttribPath& p)
     : Node(p), had_global_variants(false), attributes_checked(false),
-      cached(false), s_o_encode(false), parent(p.parent)
+      global_attrib_checked(false), cached(false), s_o_encode(false),
+      parent(p.parent)
   {
     m_w_attrib = p.m_w_attrib ? p.m_w_attrib->clone() : 0;
   }
@@ -1128,7 +1134,7 @@ namespace Ttcn {
    */
   void WithAttribPath::chk_global_attrib(bool erroneous_allowed)
   {
-    if(!m_w_attrib)
+    if(!m_w_attrib || global_attrib_checked)
       return;
 
     if (!erroneous_allowed) {
@@ -1155,8 +1161,9 @@ namespace Ttcn {
       {
         case SingleWithAttrib::AT_ENCODE:
         {
-          if (temp_attrib->get_attribQualifiers() != NULL &&
-              temp_attrib->get_attribQualifiers()->get_nof_qualifiers() != 0) {
+          if (!legacy_codec_handling ||
+              (temp_attrib->get_attribQualifiers() != NULL &&
+              temp_attrib->get_attribQualifiers()->get_nof_qualifiers() != 0)) {
             // TODO: check the attributes grouped per qualifier (for now
             // ignoring this check for attributes with qualifiers is enough)
             break;
@@ -1173,7 +1180,7 @@ namespace Ttcn {
         break;
         case SingleWithAttrib::AT_ERRONEOUS:
         {
-          if (temp_attrib->has_override()) {
+          if (temp_attrib->get_modifier() == MOD_OVERRIDE) {
             temp_attrib->error("Override cannot be used with erroneous");
           }
         }
@@ -1186,6 +1193,22 @@ namespace Ttcn {
     for(size_t i = 0; i < m_w_attrib->get_nof_elements();)
     {
       const SingleWithAttrib* const temp_attrib = m_w_attrib->get_element(i);
+      if (temp_attrib->get_modifier() == MOD_LOCAL) {
+        if (legacy_codec_handling) {
+          temp_attrib->error("The '@local' modifier cannot be used with legacy "
+            "codec handling");
+        }
+        else if (temp_attrib->get_attribKeyword() != SingleWithAttrib::AT_ENCODE) {
+          temp_attrib->warning("The '@local' modifier only affects 'encode' "
+            "attributes. Modifier ignored.");
+        }
+      }
+      if (!temp_attrib->get_attribSpec().get_encoding().empty() &&
+          (legacy_codec_handling ||
+           temp_attrib->get_attribKeyword() != SingleWithAttrib::AT_VARIANT)) {
+        temp_attrib->error("Invalid attribute format. Dot notation is only "
+          "allowed for variant attributes when using the new codec handling.");
+      }
       switch(temp_attrib->get_attribKeyword())
       {
         case SingleWithAttrib::AT_VARIANT:
@@ -1196,7 +1219,7 @@ namespace Ttcn {
             " variant of the with statement will have effect");
             m_w_attrib->delete_element(i);
           }else{
-            if(temp_attrib->has_override())
+            if(temp_attrib->get_modifier() == MOD_OVERRIDE)
               has_override_variant = true;
             i++;
           }
@@ -1210,7 +1233,7 @@ namespace Ttcn {
             " display of the with statement will have effect");
             m_w_attrib->delete_element(i);
           }else{
-            if(temp_attrib->has_override())
+            if(temp_attrib->get_modifier() == MOD_OVERRIDE)
               has_override_display = true;
             i++;
           }
@@ -1224,7 +1247,7 @@ namespace Ttcn {
             " extension of the with statement will have effect");
             m_w_attrib->delete_element(i);
           }else{
-            if(temp_attrib->has_override())
+            if(temp_attrib->get_modifier() == MOD_OVERRIDE)
               has_override_extension = true;
             i++;
           }
@@ -1244,7 +1267,7 @@ namespace Ttcn {
               " optional of the with statement will have effect");
             m_w_attrib->delete_element(i);
           }else{
-            if(temp_attrib->has_override())
+            if(temp_attrib->get_modifier() == MOD_OVERRIDE)
               has_override_optional = true;
             i++;
           }
@@ -1255,6 +1278,7 @@ namespace Ttcn {
         break;
       } // switch
     } // next i
+    global_attrib_checked = true;
   }
 
   void WithAttribPath::set_with_attr(MultiWithAttrib* p_m_w_attr)
@@ -1262,6 +1286,7 @@ namespace Ttcn {
     if(m_w_attrib) FATAL_ERROR("WithAttribPath::set_with_attr()");
     m_w_attrib = p_m_w_attr;
     attributes_checked = false;
+    global_attrib_checked = false;
   }
 
   /**
@@ -1366,7 +1391,7 @@ namespace Ttcn {
         {
         case SingleWithAttrib::AT_ENCODE:
           par_has_encode = true;
-          par_has_override_encode |= act_single->has_override();
+          par_has_override_encode |= act_single->get_modifier() == MOD_OVERRIDE;
           if(self_encode_index != -1)
           {
             // We also have an encode. See if they differ.
@@ -1377,16 +1402,16 @@ namespace Ttcn {
           break;
 
         case SingleWithAttrib::AT_VARIANT:
-          par_has_override_variant |= act_single->has_override();
+          par_has_override_variant |= act_single->get_modifier() == MOD_OVERRIDE;
           break;
         case SingleWithAttrib::AT_DISPLAY:
-          par_has_override_display |= act_single->has_override();
+          par_has_override_display |= act_single->get_modifier() == MOD_OVERRIDE;
           break;
         case SingleWithAttrib::AT_EXTENSION:
-          par_has_override_extension |= act_single->has_override();
+          par_has_override_extension |= act_single->get_modifier() == MOD_OVERRIDE;
           break;
         case SingleWithAttrib::AT_OPTIONAL:
-          par_has_override_optional |= act_single->has_override();
+          par_has_override_optional |= act_single->get_modifier() == MOD_OVERRIDE;
           break;
         case SingleWithAttrib::AT_ERRONEOUS:
         case SingleWithAttrib::AT_INVALID:
@@ -1397,7 +1422,8 @@ namespace Ttcn {
         }
       }
 
-      if(!par_has_encode && self_encode_index == -1 && self_has_variant)
+      if(legacy_codec_handling &&
+         !par_has_encode && self_encode_index == -1 && self_has_variant)
       {
         // There is no encode, but there is at least one variant.
         // Find them and issue warnings.

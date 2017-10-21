@@ -777,8 +777,8 @@ namespace Ttcn {
   }
 
   //FIXME quick hack
-  void Reference::generate_code_ispresentbound(expression_struct_t *expr,
-    bool is_template, const bool isbound)
+  void Reference::generate_code_ispresentboundchosen(expression_struct_t *expr,
+    bool is_template, const Value::operationtype_t optype, const char* field)
   {
     ref_usage_found();
     Common::Assignment *ass = get_refd_assignment();
@@ -809,8 +809,18 @@ namespace Ttcn {
       isbound_expr.preamble = mputprintf(isbound_expr.preamble,
           "boolean %s = %s.is_bound();\n", tmp_generalid_str,
           ass_id_str);
-      ass->get_Type()->generate_code_ispresentbound(&isbound_expr, &subrefs, my_scope->get_scope_mod_gen(),
-          tmp_generalid, ass_id2, is_template, isbound);
+      namedbool p_optype;
+      if (optype == Value::OPTYPE_ISBOUND) {
+        p_optype = ISBOUND;
+      } else if (optype == Value::OPTYPE_ISPRESENT) {
+        p_optype = ISPRESENT;
+      } else if (optype == Value::OPTYPE_ISCHOSEN_T || optype == Value::OPTYPE_ISCHOSEN_V) {
+        p_optype = ISCHOSEN;
+      } else {
+        FATAL_ERROR("AST_ttcn3.cc::generate_code_ispresentboundchosen()");
+      }
+      ass->get_Type()->generate_code_ispresentboundchosen(&isbound_expr, &subrefs, my_scope->get_scope_mod_gen(),
+          tmp_generalid, ass_id2, is_template, p_optype, field);
 
       expr->preamble = mputstr(expr->preamble, isbound_expr.preamble);
       expr->preamble = mputstr(expr->preamble, isbound_expr.expr);
@@ -818,9 +828,22 @@ namespace Ttcn {
 
       expr->expr = mputprintf(expr->expr, "%s", tmp_generalid_str);
     } else {
-      expr->expr = mputprintf(expr->expr, "%s.%s(%s)", ass_id_str,
-        isbound ? "is_bound":"is_present",
-        (!isbound && is_template && omit_in_value_list) ? "TRUE" : "");
+      expr->expr = mputprintf(expr->expr, "%s.", ass_id_str);
+      switch (optype) {
+        case Value::OPTYPE_ISBOUND:
+          expr->expr = mputstr(expr->expr, "is_bound()");
+          break;
+        case Value::OPTYPE_ISPRESENT:
+          expr->expr = mputprintf(expr->expr, "is_present(%s)",
+            is_template && omit_in_value_list ? "TRUE" : "");
+          break;
+        case Value::OPTYPE_ISCHOSEN_T:
+        case Value::OPTYPE_ISCHOSEN_V:
+          expr->expr = mputprintf(expr->expr, "ischosen(%s)", field);
+          break;
+        default:
+          FATAL_ERROR("AST_ttcn3.cc::generate_code_ispresentboundchosen()");
+      }
     }
   }
 
@@ -1435,8 +1458,6 @@ namespace Ttcn {
 
           for (size_t t = 0; t < imp.impmods_v.size(); t++) {
             const ImpMod *im = imp.impmods_v[t];
-            const Identifier& im_id = im->get_modid();
-            Common::Module *cm = modules->get_mod_byId(im_id); // never NULL
 
             refch.mark_state();
             if (PRIVATE != im->get_visibility()) {
@@ -1448,6 +1469,8 @@ namespace Ttcn {
                 refch.prev_state();
                 continue;
               } else {
+                const Identifier& im_id = im->get_modid();
+                Common::Module *cm = modules->get_mod_byId(im_id); // never NULL
                 refch.add(m->get_fullname());
                 cm->chk_imp(refch, moduleStack);
               }
@@ -3630,7 +3653,7 @@ namespace Ttcn {
       break;
     default:
       value_under_check = true;
-      type->chk_this_value(value, 0, Type::EXPECTED_CONSTANT, WARNING_FOR_INCOMPLETE,
+        type->chk_this_value(value, 0, Type::EXPECTED_STATIC_VALUE, WARNING_FOR_INCOMPLETE,
         OMIT_NOT_ALLOWED, SUB_CHK, has_implicit_omit_attr());
       value_under_check = false;
       erroneous_attrs = chk_erroneous_attr(w_attrib_path, type, get_my_scope(),
@@ -3688,9 +3711,15 @@ namespace Ttcn {
     const_def cdef;
     Code::init_cdef(&cdef);
     type->generate_code_object(&cdef, value);
+    if (value->is_unfoldable()) {
+    cdef.post = update_location_object(cdef.post);
+    cdef.post = value->generate_code_init(cdef.post,
+      value->get_lhs_name().c_str());
+    } else {
     cdef.init = update_location_object(cdef.init);
     cdef.init = value->generate_code_init(cdef.init,
       value->get_lhs_name().c_str());
+    }
     Code::merge_cdef(target, &cdef);
     Code::free_cdef(&cdef);
   }
@@ -4123,6 +4152,7 @@ namespace Ttcn {
         checked = true;
         type->chk_this_template_generic(def_template, INCOMPLETE_ALLOWED,
           OMIT_ALLOWED, ANY_OR_OMIT_ALLOWED, SUB_CHK, IMPLICIT_OMIT == has_implicit_omit_attr() ? IMPLICIT_OMIT : NOT_IMPLICIT_OMIT, 0);
+        type->chk_this_template_incorrect_field();
         if (!semantic_check_only) {
           def_template->set_genname_prefix("modulepar_");
           def_template->set_genname_recursive(get_genname());
@@ -4321,7 +4351,7 @@ namespace Ttcn {
       derived_ref != NULL ? INCOMPLETE_ALLOWED : WARNING_FOR_INCOMPLETE,
       OMIT_ALLOWED, ANY_OR_OMIT_ALLOWED, SUB_CHK,
       IMPLICIT_OMIT == has_implicit_omit_attr() ? IMPLICIT_OMIT : NOT_IMPLICIT_OMIT, 0);
-
+    type->chk_this_template_incorrect_field();
     erroneous_attrs = chk_erroneous_attr(w_attrib_path, type, get_my_scope(),
       get_fullname(), false);
     if (erroneous_attrs) body->add_err_descr(NULL, erroneous_attrs->get_err_descr());
@@ -4718,10 +4748,6 @@ namespace Ttcn {
 
   char *Def_Template::generate_code_str(char *str)
   {
-    const string& t_genname = get_genname();
-    const char *genname_str = t_genname.c_str();
-    const string& type_genname = type->get_genname_template(my_scope);
-    const char *type_genname_str = type_genname.c_str();
     if (fp_list) {
       const char *dispname_str = id->get_dispname().c_str();
       NOTSUPP("Code generation for parameterized local template `%s'",
@@ -4729,6 +4755,10 @@ namespace Ttcn {
       str = mputprintf(str, "/* NOT SUPPORTED: template %s */\n",
                        dispname_str);
     } else {
+      const string& t_genname = get_genname();
+      const char *genname_str = t_genname.c_str();
+      const string& type_genname = type->get_genname_template(my_scope);
+      const char *type_genname_str = type_genname.c_str();
       if (base_template) {
         // non-parameterized modified template
         if (use_runtime_2 && body->get_needs_conversion()) {
@@ -4785,8 +4815,6 @@ namespace Ttcn {
 
   void Def_Template::ilt_generate_code(ILT *ilt)
   {
-    const string& t_genname = get_genname();
-    const char *genname_str = t_genname.c_str();
     char*& def=ilt->get_out_def();
     char*& init=ilt->get_out_branches();
     if (fp_list) {
@@ -4797,6 +4825,8 @@ namespace Ttcn {
       init = mputprintf(init, "/* NOT SUPPORTED: template %s */\n",
         dispname_str);
     } else {
+      const string& t_genname = get_genname();
+      const char *genname_str = t_genname.c_str();
       // non-parameterized template
       // use the default constructor for initialization
       def = mputprintf(def, "%s %s;\n",
@@ -5113,6 +5143,7 @@ namespace Ttcn {
       gen_restriction_check =
         initial_value->chk_restriction("template variable definition",
                                        template_restriction, initial_value);
+      type->chk_this_template_incorrect_field();
       if (!semantic_check_only) {
         initial_value->set_genname_recursive(get_genname());
         initial_value->set_code_section(GovernedSimple::CS_INLINE);
@@ -5242,10 +5273,10 @@ namespace Ttcn {
     const string& t_genname = get_genname();
     const char *genname_str = t_genname.c_str();
     char*& def=ilt->get_out_def();
-    char*& init=ilt->get_out_branches();
     def = mputprintf(def, "%s %s;\n",
       type->get_genname_template(my_scope).c_str(), genname_str);
     if (initial_value) {
+      char*& init=ilt->get_out_branches();
       init = initial_value->generate_code_init(init, genname_str);
       if (template_restriction!=TR_NONE && gen_restriction_check)
         init = Template::generate_restriction_check_code(init, genname_str,
@@ -6259,8 +6290,9 @@ namespace Ttcn {
   // ===== Def_Function
   // =================================
 
-  Def_Function::Def_Function(Identifier *p_id, FormalParList *p_fpl,
-                             Reference *p_runs_on_ref, Reference *p_port_ref,
+  Def_Function::Def_Function(bool p_deterministic, Identifier *p_id, FormalParList *p_fpl,
+                             Reference *p_runs_on_ref, Reference *p_mtc_ref,
+                             Reference *p_system_ref, Reference *p_port_ref,
                              Type *p_return_type,
                              bool returns_template,
                              template_restriction_t p_template_restriction,
@@ -6268,8 +6300,10 @@ namespace Ttcn {
     : Def_Function_Base(false, p_id, p_fpl, p_return_type, returns_template,
         p_template_restriction),
         runs_on_ref(p_runs_on_ref), runs_on_type(0),
+        mtc_ref(p_mtc_ref), mtc_type(0),
+        system_ref(p_system_ref), system_type(0),
         port_ref(p_port_ref), port_type(0), block(p_block),
-        is_startable(false), transparent(false)
+        is_startable(false), transparent(false), deterministic(p_deterministic)
   {
     if (!p_block) FATAL_ERROR("Def_Function::Def_Function()");
     block->set_my_def(this);
@@ -6278,6 +6312,8 @@ namespace Ttcn {
   Def_Function::~Def_Function()
   {
     delete runs_on_ref;
+    delete mtc_ref;
+    delete system_ref;
     delete port_ref;
     delete block;
   }
@@ -6291,6 +6327,8 @@ namespace Ttcn {
   {
     Def_Function_Base::set_fullname(p_fullname);
     if (runs_on_ref) runs_on_ref->set_fullname(p_fullname + ".<runs_on_type>");
+    if (mtc_ref) mtc_ref->set_fullname(p_fullname + ".<mtc_type>");
+    if (system_ref) system_ref->set_fullname(p_fullname + ".<system_type>");
     if (port_ref) port_ref->set_fullname(p_fullname + ".<port_type>");
     block->set_fullname(p_fullname + ".<statement_block>");
   }
@@ -6302,10 +6340,24 @@ namespace Ttcn {
 
     Def_Function_Base::set_my_scope(&bridgeScope);
     if (runs_on_ref) runs_on_ref->set_my_scope(&bridgeScope);
+    if (mtc_ref) mtc_ref->set_my_scope(&bridgeScope);
+    if (system_ref) system_ref->set_my_scope(&bridgeScope);
     if (port_ref) port_ref->set_my_scope(&bridgeScope);
     block->set_my_scope(fp_list);
   }
 
+  Type *Def_Function::get_MtcType()
+  {
+    if (!checked) chk();
+    return mtc_type;
+  }
+  
+  Type *Def_Function::get_SystemType()
+  {
+    if (!checked) chk();
+    return system_type;
+  }
+  
   Type *Def_Function::get_RunsOnType()
   {
     if (!checked) chk();
@@ -6338,6 +6390,11 @@ namespace Ttcn {
     checked = true;
     Error_Context cntxt(this, "In function definition `%s'",
       id->get_dispname().c_str());
+    if (deterministic) {
+      note("Please ensure that the `%s' function complies with the requirements"
+        " in clause 16.1.4 of the TTCN-3 core language standard (ES 201 873-1)",
+        id->get_dispname().c_str());
+    }
     // `runs on' clause and `port' clause are mutually exclusive
     if (runs_on_ref && port_ref) {
       runs_on_ref->error("A `runs on' and a `port' clause cannot be present at the same time.");
@@ -6352,6 +6409,28 @@ namespace Ttcn {
         runs_on_scope->set_parent_scope(my_scope);
         fp_list->set_my_scope(runs_on_scope);
       }
+    }
+    
+    // checking the `mtc' clause
+    if (mtc_ref) {
+      Error_Context cntxt2(mtc_ref, "In `mtc' clause");
+      mtc_type = mtc_ref->chk_comptype_ref();
+    }
+    
+    // checking the `system' clause
+    if (system_ref) {
+      Error_Context cntxt2(system_ref, "In `system' clause");
+      system_type = system_ref->chk_comptype_ref();
+    }
+    
+    // checking the formal parameter list, the check must come before the 
+    // chk_prototype() function call.
+    fp_list->chk(asstype);
+    // checking of return type
+    if (return_type) {
+      Error_Context cntxt2(return_type, "In return type");
+      return_type->chk();
+      return_type->chk_as_return_type(asstype == A_FUNCTION_RVAL,"function");
     }
     
     if (w_attrib_path) {
@@ -6421,14 +6500,7 @@ namespace Ttcn {
         }
       }
     }
-    // checking the formal parameter list
-    fp_list->chk(asstype);
-    // checking of return type
-    if (return_type) {
-      Error_Context cntxt2(return_type, "In return type");
-      return_type->chk();
-      return_type->chk_as_return_type(asstype == A_FUNCTION_RVAL,"function");
-    }
+
     // decision of startability
     is_startable = runs_on_ref != 0;
     if (is_startable && !fp_list->get_startability()) is_startable = false;
@@ -6677,6 +6749,7 @@ namespace Ttcn {
       return_type->dump(level + 2);
       if (asstype == A_FUNCTION_RTEMP) DEBUG(level + 1, "Returns template");
     }
+    DEBUG(level + 1, "Deterministic: %s", deterministic ? "true" : "false");
     if (prototype != PROTOTYPE_NONE)
       DEBUG(level + 1, "Prototype: %s", get_prototype_name());
     //DEBUG(level + 1, "Statement block:");
@@ -6696,8 +6769,8 @@ namespace Ttcn {
   {
     delete encoding_options;
     delete eb_list;
-    if (NULL != json_printing) {
-      delete json_printing;
+    if (NULL != printing) {
+      delete printing;
     }
   }
 
@@ -6775,26 +6848,28 @@ namespace Ttcn {
             // First collect the fields of a record, set, union type which
             // does not support the encoding, then write it in the error message.
             char* message = NULL;
-            Type *t = input_type;
-            if (t->is_ref()) t = t->get_type_refd();
-            switch(t->get_typetype()) {
-              case Type::T_SEQ_T:
-              case Type::T_SET_T:
-              case Type::T_CHOICE_T: {
-                for (size_t i = 0; i < t->get_nof_comps(); i++) {
-                  if (!t->get_comp_byIndex(i)->get_type()->has_encoding(encoding_type, encoding_options)) {
-                    if (i == 0) {
-                      message = mputprintf(message, " The following fields do not support %s encoding: ",
-                        Type::get_encoding_name(encoding_type));
-                    } else {
-                      message = mputstr(message, ", ");
+            if (legacy_codec_handling) {
+              Type *t = input_type;
+              if (t->is_ref()) t = t->get_type_refd();
+              switch(t->get_typetype()) {
+                case Type::T_SEQ_T:
+                case Type::T_SET_T:
+                case Type::T_CHOICE_T: {
+                  for (size_t i = 0; i < t->get_nof_comps(); i++) {
+                    if (!t->get_comp_byIndex(i)->get_type()->has_encoding(encoding_type, encoding_options)) {
+                      if (i == 0) {
+                        message = mputprintf(message, " The following fields do not support %s encoding: ",
+                          Type::get_encoding_name(encoding_type));
+                      } else {
+                        message = mputstr(message, ", ");
+                      }
+                      message = mputstr(message, t->get_comp_id_byIndex(i).get_ttcnname().c_str());
                     }
-                    message = mputstr(message, t->get_comp_id_byIndex(i).get_ttcnname().c_str());
                   }
-                }
-                break; }
-              default:
-                break;
+                  break; }
+                default:
+                  break;
+              }
             }
             input_type->error("Input type `%s' does not support %s encoding.%s",
               input_type->get_typename().c_str(),
@@ -6822,12 +6897,20 @@ namespace Ttcn {
             }
             else if (input_type->is_ref()) {
               // let the input type know that this is its encoding function
-              input_type->get_type_refd()->set_coding_function(true, this);
+              if (legacy_codec_handling) {
+                input_type->get_type_refd()->set_legacy_coding_function(true, this);
+              }
+              else {
+                input_type->get_type_refd()->set_coding_function(
+                  encoding_type == Common::Type::CT_PER ? "PER" :
+                  encoding_options->c_str(), TRUE, this);
+              }
               // treat this as a manual external function during code generation
               function_type = EXTFUNC_MANUAL;
             }
           }
-          else if (input_type->is_ref() && input_type->get_type_refd()->is_asn1()) {
+          else if (legacy_codec_handling && // for now, this only works with legacy codec handling
+                   input_type->is_ref() && input_type->get_type_refd()->is_asn1()) {
             // let the input ASN.1 type know that this is its encoding type
             input_type->get_type_refd()->set_asn_coding(true, encoding_type);
           }
@@ -6944,12 +7027,20 @@ namespace Ttcn {
           }
           else if (output_type != NULL && output_type->is_ref()) {
             // let the output type know that this is its decoding function
-            output_type->get_type_refd()->set_coding_function(false, this);
+            if (legacy_codec_handling) {
+              output_type->get_type_refd()->set_legacy_coding_function(false, this);
+            }
+            else {
+              output_type->get_type_refd()->set_coding_function(
+                encoding_type == Common::Type::CT_PER ? "PER" :
+                encoding_options->c_str(), FALSE, this);
+            }
             // treat this as a manual external function during code generation
             function_type = EXTFUNC_MANUAL;
           }
         }
-        else if (output_type != NULL && output_type->is_ref() &&
+        else if (legacy_codec_handling && // for now, this only works with legacy codec handling
+                 output_type != NULL && output_type->is_ref() &&
                  output_type->get_type_refd()->is_asn1()) {
           // let the output ASN.1 type know that this is its decoding type
           output_type->get_type_refd()->set_asn_coding(false, encoding_type);
@@ -6960,6 +7051,12 @@ namespace Ttcn {
       break;
     default:
       FATAL_ERROR("Def_ExtFunction::chk()");
+    }
+    if (deterministic) {
+      note("Please ensure that the `%s' external function complies with the"
+        " requirements in clause 16.1.4 of the TTCN-3 core language"
+        " standard (ES 201 873-1)",
+        id->get_dispname().c_str());
     }
   }
 
@@ -6983,6 +7080,9 @@ namespace Ttcn {
       break;
     case Type::CT_JSON:
       if (enable_json()) return;
+      break;
+    case Type::CT_OER:
+      if (enable_oer()) return;
       break;
     case Type::CT_CUSTOM:
       return; // cannot be disabled
@@ -7071,7 +7171,7 @@ namespace Ttcn {
             break; }
           
           case ExtensionAttribute::PRINTING: {
-            json_printing = ea.get_printing();
+            printing = ea.get_printing();
             break; }
 
           case ExtensionAttribute::ANYTYPELIST:
@@ -7097,9 +7197,9 @@ namespace Ttcn {
     chk_prototype();
     chk_function_type();
     
-    if (NULL != json_printing && (EXTFUNC_ENCODE != function_type ||
-        Type::CT_JSON != encoding_type)) {
-      error("Attribute 'printing' is only allowed for JSON encoding functions.");
+    if (NULL != printing && (EXTFUNC_ENCODE != function_type ||
+        (Type::CT_JSON != encoding_type && Type::CT_XER != encoding_type))) {
+      error("Attribute 'printing' is only allowed for JSON and XER encoding functions.");
     }
   }
 
@@ -7134,14 +7234,32 @@ namespace Ttcn {
       input_type->get_genname_typedescriptor(my_scope).c_str(),
       Type::get_encoding_name(encoding_type));
     if (encoding_type == Type::CT_JSON) {
-      if (json_printing != NULL) {
-        str = json_printing->generate_code(str);
+      if (printing != NULL) {
+        str = printing->generate_code(str);
+      } else {
+        str = mputstr(str, ", 0");
+      }
+    } else if (encoding_type == Type::CT_XER) {
+      bool compact_printing =
+        printing != NULL && printing->get_printing() == PrintingType::PT_COMPACT;
+      if (compact_printing || encoding_options) {
+        str = mputstr(str, ", ");
+        if (compact_printing) {
+          str = mputprintf(str, "XER_CANONICAL%s",
+            encoding_options ? "|" : "");
+        }
+        if (encoding_options) str = mputprintf(str, "%s",
+          encoding_options->c_str());
+      } else {
+        str = mputstr(str, ", 0");
+      }
+    } else {
+      if (encoding_options) {
+        str = mputprintf(str, ", %s", encoding_options->c_str());
       } else {
         str = mputstr(str, ", 0");
       }
     }
-    if (encoding_options) str = mputprintf(str, ", %s",
-      encoding_options->c_str());
     str = mputstr(str, ");\n");
     const char *result_name;
     switch (prototype) {
@@ -7312,7 +7430,7 @@ namespace Ttcn {
     } else {
       // result handling and debug printout for sliding decoders
       str = mputstr(str, "switch (TTCN_EncDec::get_last_error_type()) {\n"
-        "case TTCN_EncDec::ET_NONE:\n"
+        "case TTCN_EncDec::ET_NONE: {\n"
         // TTCN_Buffer::get_string will call OCTETSTRING::clean_up()
         "ttcn_buffer.cut();\n");
       if (input_type->get_type_refd_last()->get_typetype_ttcn3() ==
@@ -7332,7 +7450,7 @@ namespace Ttcn {
         "%s.log();\n"
         "TTCN_Logger::end_event();\n"
         "}\n"
-        "%sreturn 0;\n"
+        "%sreturn 0; }\n"
         "case TTCN_EncDec::ET_INCOMPL_MSG:\n"
         "case TTCN_EncDec::ET_LEN_ERR:\n"
         "%sreturn 2;\n"
@@ -7423,6 +7541,7 @@ namespace Ttcn {
       return_type->dump(level + 2);
       if(asstype == A_EXT_FUNCTION_RTEMP) DEBUG(level + 1, "Returns template");
     }
+    DEBUG(level + 1, "Deterministic: %s", deterministic ? "true" : "false");
     if (prototype != PROTOTYPE_NONE)
       DEBUG(level + 1, "Prototype: %s", get_prototype_name());
     if (function_type != EXTFUNC_MANUAL) {
@@ -7539,10 +7658,10 @@ namespace Ttcn {
       }
       
       // insert printing type
-      if (json_printing != NULL) {
+      if (printing != NULL) {
         json->put_next_token(JSON_TOKEN_NAME, "printing");
         json->put_next_token(JSON_TOKEN_STRING, 
-          (json_printing->get_printing() == PrintingType::PT_PRETTY) ? 
+          (printing->get_printing() == PrintingType::PT_PRETTY) ? 
           "\"pretty\"" : "\"compact\"");
       }
       
@@ -7556,10 +7675,12 @@ namespace Ttcn {
   // =================================
 
   Def_Altstep::Def_Altstep(Identifier *p_id, FormalParList *p_fpl,
-                           Reference *p_runs_on_ref, StatementBlock *p_sb,
+                           Reference *p_runs_on_ref, Reference *p_mtc_ref,
+                           Reference *p_system_ref, StatementBlock *p_sb,
                            AltGuards *p_ags)
     : Definition(A_ALTSTEP, p_id), fp_list(p_fpl), runs_on_ref(p_runs_on_ref),
-      runs_on_type(0), sb(p_sb), ags(p_ags)
+      runs_on_type(0), mtc_ref(p_mtc_ref), mtc_type(0),
+      system_ref(p_system_ref), system_type(0), sb(p_sb), ags(p_ags)
   {
     if (!p_fpl || !p_sb || !p_ags)
       FATAL_ERROR("Def_Altstep::Def_Altstep()");
@@ -7573,6 +7694,8 @@ namespace Ttcn {
   {
     delete fp_list;
     delete runs_on_ref;
+    delete mtc_ref;
+    delete system_ref;
     delete sb;
     delete ags;
   }
@@ -7587,6 +7710,8 @@ namespace Ttcn {
     Definition::set_fullname(p_fullname);
     fp_list->set_fullname(p_fullname + ".<formal_par_list>");
     if (runs_on_ref) runs_on_ref->set_fullname(p_fullname + ".<runs_on_type>");
+    if (mtc_ref) mtc_ref->set_fullname(p_fullname + ".<mtc_type>");
+    if (system_ref) system_ref->set_fullname(p_fullname + ".<system_type>");
     sb->set_fullname(p_fullname+".<block>");
     ags->set_fullname(p_fullname + ".<guards>");
   }
@@ -7599,6 +7724,8 @@ namespace Ttcn {
     Definition::set_my_scope(&bridgeScope);
     // the scope of the parameter list is set during checking
     if (runs_on_ref) runs_on_ref->set_my_scope(&bridgeScope);
+    if (mtc_ref) mtc_ref->set_my_scope(&bridgeScope);
+    if (system_ref) system_ref->set_my_scope(&bridgeScope);
     sb->set_my_scope(fp_list);
     ags->set_my_scope(sb);
   }
@@ -7607,6 +7734,18 @@ namespace Ttcn {
   {
     if (!checked) chk();
     return runs_on_type;
+  }
+  
+  Type *Def_Altstep::get_MtcType()
+  {
+    if (!checked) chk();
+    return mtc_type;
+  }
+  
+  Type *Def_Altstep::get_SystemType()
+  {
+    if (!checked) chk();
+    return system_type;
   }
 
   FormalParList *Def_Altstep::get_FormalParList()
@@ -7637,6 +7776,14 @@ namespace Ttcn {
         runs_on_scope->set_parent_scope(my_scope);
         parlist_scope = runs_on_scope;
       }
+    }
+    if (mtc_ref) {
+      Error_Context cntxt2(mtc_ref, "In `mtc' clause");
+      mtc_type = mtc_ref->chk_comptype_ref();
+    }
+    if (system_ref) {
+      Error_Context cntxt2(system_ref, "In `system' clause");
+      system_type = system_ref->chk_comptype_ref();
     }
     fp_list->set_my_scope(parlist_scope);
     fp_list->chk(asstype);
@@ -7803,6 +7950,14 @@ namespace Ttcn {
     if (runs_on_ref) {
       DEBUG(level + 1, "Runs on clause:");
       runs_on_ref->dump(level + 2);
+    }
+    if (mtc_ref) {
+      DEBUG(level + 1, "Mtc clause:");
+      mtc_ref->dump(level + 2);
+    }
+    if (system_ref) {
+      DEBUG(level + 1, "System clause:");
+      system_ref->dump(level + 2);
     }
     /*
     DEBUG(level + 1, "Local definitions:");
@@ -9296,6 +9451,8 @@ namespace Ttcn {
       case Common::Assignment::A_PAR_TEMPL_IN:
       case Common::Assignment::A_PAR_VAL_INOUT:
       case Common::Assignment::A_PAR_TEMPL_INOUT:
+      case Common::Assignment::A_PAR_VAL_OUT:
+      case Common::Assignment::A_PAR_TEMPL_OUT:
         if (is_startable && par->get_Type()->is_component_internal())
           is_startable = false;
         break;
@@ -9332,6 +9489,8 @@ namespace Ttcn {
       case Common::Assignment::A_PAR_TEMPL_IN:
       case Common::Assignment::A_PAR_VAL_INOUT:
       case Common::Assignment::A_PAR_TEMPL_INOUT:
+      case Common::Assignment::A_PAR_VAL_OUT:
+      case Common::Assignment::A_PAR_TEMPL_OUT:
         if (par->get_Type()->is_component_internal()) {
           map<Type*,void> type_chain;
           char* err_str = mprintf("a parameter or embedded in a parameter of "

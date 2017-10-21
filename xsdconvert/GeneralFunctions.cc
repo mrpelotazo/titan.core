@@ -49,7 +49,7 @@ extern bool t_flag_used;
 // 				variant - generated variant string for TTCN-3
 //
 
-void XSDName2TTCN3Name(const Mstring& in, QualifiedNames & used_names, modeType type_of_the_name,
+void XSDName2TTCN3Name(const Mstring& in_str, QualifiedNames & used_names, modeType type_of_the_name,
   Mstring & res, Mstring & variant, bool no_replace) {
   static const char* TTCN3_reserved_words[] = {
     "action", "activate", "address", "alive", "all", "alt", "altstep", "and", "and4b", "any", "any2unistr", "anytype", "apply",
@@ -89,7 +89,7 @@ void XSDName2TTCN3Name(const Mstring& in, QualifiedNames & used_names, modeType 
     "int2bit", "int2char", "int2enum", "int2float", "int2hex", "int2oct", "int2str", "int2unichar",
     "isvalue", "ischosen", "ispresent",
     "lengthof", "log2str",
-    "oct2bit", "oct2char", "oct2hex", "oct2int", "oct2str", "oct2unichar"
+    "oct2bit", "oct2char", "oct2hex", "oct2int", "oct2str", "oct2unichar",
     "regexp", "replace", "rnd", "remove_bom", "get_stringencoding",
     "sizeof", "str2bit", "str2float", "str2hex", "str2int", "str2oct", "substr",
     "testcasename",
@@ -121,6 +121,21 @@ void XSDName2TTCN3Name(const Mstring& in, QualifiedNames & used_names, modeType 
   };
 
   Mstring ns_uri(variant);
+  
+  Mstring in = in_str;
+  
+  // First of all if the enum value contains &#38; , change it to &
+  if (type_of_the_name == enum_id_name) {
+    for (size_t i = 0; i < in.size(); i++) {
+      if (in[i] == '&' && i+4 < in.size() && in[i+1] == '#' && in[i+2] == '3' && in[i+3] == '8' && in[i+4] == ';') {
+        // Here convert the &#38; to &
+        in.eraseChar(i+4);
+        in.eraseChar(i+3);
+        in.eraseChar(i+2);
+        in.eraseChar(i+1);
+      }
+    }
+  }
 
   res.clear();
   variant.clear();
@@ -387,17 +402,40 @@ void XSDName2TTCN3Name(const Mstring& in, QualifiedNames & used_names, modeType 
           variant += "\"name as '" + in + "'\"";
         }
         break;
-      case enum_id_name:
-        if (tmp1 == tmp2) { // If the only difference is the case of the first letter
+      case enum_id_name: {
+        // Escape some special characters.
+        Mstring escaped_in;
+        bool found_spec = false;
+        for (size_t i = 0; i < in.size(); i++) {
+          if (in[i] == '\'') {
+            escaped_in = escaped_in + "&apos;";
+            found_spec = true;
+          } else if (in[i] == '\"') {
+            escaped_in = escaped_in + "&quot;";
+            found_spec = true;
+          } else if (in[i] == '>') {
+            escaped_in = escaped_in + "&gt;";
+            found_spec = true;
+          } else if (in[i] == '<') {
+            escaped_in = escaped_in + "&lt;";
+            found_spec = true;
+          } else if (in[i] == '&') {
+            escaped_in = escaped_in + "&amp;";
+            found_spec = true;
+          } else {
+            escaped_in = escaped_in + in[i];
+          }
+        }
+        if (tmp1 == tmp2 && found_spec == false) { // If the only difference is the case of the first letter
           if (isupper(in[0])) {
             variant += "\"text \'" + res + "\' as capitalized\"";
           } else {
             variant += "\"text \'" + res + "\' as uncapitalized\"";
           }
         } else { // Otherwise if other letters have changed too
-          variant += "\"text \'" + res + "\' as '" + in + "'\"";
+          variant += "\"text \'" + res + "\' as '" + escaped_in + "'\"";
         }
-        break;
+        break; }
       default:
         break;
     }
@@ -666,7 +704,7 @@ const Mstring& getPrefixByNameSpace(const RootType * root, const Mstring& namesp
 }
 
 const Mstring findBuiltInType(const RootType* ref, Mstring type){
-  RootType * root = TTCN3ModuleInventory::getInstance().lookup(ref, type, want_BOTH);
+  RootType * root = TTCN3ModuleInventory::getInstance().lookup(ref, type, want_BOTH, c_unknown);
   if(root != NULL && isBuiltInType(root->getType().originalValueWoPrefix)){
     return root->getType().originalValueWoPrefix;
   }else if(root != NULL){
@@ -676,18 +714,18 @@ const Mstring findBuiltInType(const RootType* ref, Mstring type){
   }
 }
 
-RootType * lookup(const List<TTCN3Module*> mods, const SimpleType * reference, wanted w) {
+RootType * lookup(const List<TTCN3Module*> mods, const SimpleType * reference, wanted w, ConstructType construct) {
   const Mstring& uri = reference->getReference().get_uri();
   const Mstring& name = reference->getReference().get_val();
 
-  return lookup(mods, name, uri, reference, w);
+  return lookup(mods, name, uri, reference, w, construct);
 }
 
 RootType * lookup(const List<TTCN3Module*> mods,
-  const Mstring& name, const Mstring& nsuri, const RootType *reference, wanted w) {
+  const Mstring& name, const Mstring& nsuri, const RootType *reference, wanted w, ConstructType construct) {
   RootType *ret = NULL;
   for (List<TTCN3Module*>::iterator module = mods.begin(); module; module = module->Next) {
-    ret = lookup1(module->Data, name, nsuri, reference, w);
+    ret = lookup1(module->Data, name, nsuri, reference, w, construct);
     if (ret != NULL) break;
   } // next doc
 
@@ -695,14 +733,26 @@ RootType * lookup(const List<TTCN3Module*> mods,
 }
 
 RootType *lookup1(const TTCN3Module *module,
-  const Mstring& name, const Mstring& nsuri, const RootType *reference, wanted w) {
+  const Mstring& name, const Mstring& nsuri, const RootType *reference, wanted w, ConstructType construct) {
   if (nsuri != module->getTargetNamespace()) return NULL;
-      
+  
   for (List<RootType*>::iterator type = module->getDefinedTypes().begin(); type; type = type->Next) {
-    switch (type->Data->getConstruct()) {
+    switch (type->Data->getNewConstruct()) {
       case c_simpleType:
+        if (construct != c_simpleType && construct != c_simpleOrComplexType && construct != c_unknown) {
+          break;
+        }
+        goto wantST;
       case c_element:
+        if (construct != c_element && construct != c_unknown) {
+          break;
+        }
+        goto wantST;
       case c_attribute:
+        if (construct != c_attribute && construct != c_unknown) {
+          break;
+        }
+wantST:
         if (w == want_ST || w == want_BOTH) {
           if ((const RootType*) reference != type->Data
             && name == type->Data->getName().originalValueWoPrefix) {
@@ -712,8 +762,20 @@ RootType *lookup1(const TTCN3Module *module,
         break;
 
       case c_complexType:
+        if (construct != c_complexType && construct != c_simpleOrComplexType && construct != c_unknown) {
+          break;
+        }
+        goto wantCT;
       case c_group:
+        if (construct != c_group && construct != c_unknown) {
+          break;
+        }
+        goto wantCT;
       case c_attributeGroup:
+        if (construct != c_attributeGroup && construct != c_unknown) {
+          break;
+        }
+wantCT:
         if (w == want_CT || w == want_BOTH) {
           if ((const RootType*) reference != type->Data
             && name == type->Data->getName().originalValueWoPrefix) {
@@ -733,7 +795,7 @@ RootType *lookup1(const TTCN3Module *module,
     if (it->Data != NULL && it->Data->getConstruct() == c_include &&
         ((ImportStatement*)(it->Data))->getSourceModule() != NULL &&
         ((ImportStatement*)(it->Data))->getSourceModule()->getTargetNamespace() == Mstring("NoTargetNamespace")) {
-      return lookup1(((ImportStatement*)(it->Data))->getSourceModule(), name, Mstring("NoTargetNamespace"), reference, w);
+      return lookup1(((ImportStatement*)(it->Data))->getSourceModule(), name, Mstring("NoTargetNamespace"), reference, w, construct);
     }
   }
   return NULL;
@@ -743,8 +805,8 @@ int multi(const TTCN3Module *module, ReferenceData const& outside_reference,
   const RootType *obj) {
   int multiplicity = 0;
 
-  RootType * st = ::lookup1(module, outside_reference.get_val(), outside_reference.get_uri(), obj, want_ST);
-  RootType * ct = ::lookup1(module, outside_reference.get_val(), outside_reference.get_uri(), obj, want_CT);
+  RootType * st = ::lookup1(module, outside_reference.get_val(), outside_reference.get_uri(), obj, want_ST, c_unknown);
+  RootType * ct = ::lookup1(module, outside_reference.get_val(), outside_reference.get_uri(), obj, want_CT, c_unknown);
   if (st || ct) {
     multiplicity = 1; // locally defined, no qualif needed
     // means that outside_reference.get_uri() == module->getTargetNamespace())
@@ -752,8 +814,8 @@ int multi(const TTCN3Module *module, ReferenceData const& outside_reference,
     // Look for definitions in the imported modules
     for (List<const TTCN3Module*>::iterator it = module->getImportedModules().begin(); it; it = it->Next) {
       // Artificial lookup
-      st = ::lookup1(it->Data, outside_reference.get_val(), it->Data->getTargetNamespace(), obj, want_ST);
-      ct = ::lookup1(it->Data, outside_reference.get_val(), it->Data->getTargetNamespace(), obj, want_CT);
+      st = ::lookup1(it->Data, outside_reference.get_val(), it->Data->getTargetNamespace(), obj, want_ST, c_unknown);
+      ct = ::lookup1(it->Data, outside_reference.get_val(), it->Data->getTargetNamespace(), obj, want_CT, c_unknown);
       if (st || ct) {
         ++multiplicity;
       }
@@ -762,8 +824,8 @@ int multi(const TTCN3Module *module, ReferenceData const& outside_reference,
     // But if == 1 we need to check this module for a type definition with
     // the same name as outsize_reference.get_val()
     if (multiplicity == 1) {
-      st = ::lookup1(module, outside_reference.get_val(), module->getTargetNamespace(), obj, want_ST);
-      ct = ::lookup1(module, outside_reference.get_val(), module->getTargetNamespace(), obj, want_CT);
+      st = ::lookup1(module, outside_reference.get_val(), module->getTargetNamespace(), obj, want_ST, c_unknown);
+      ct = ::lookup1(module, outside_reference.get_val(), module->getTargetNamespace(), obj, want_CT, c_unknown);
       if (st || ct) {
         ++multiplicity;
       }

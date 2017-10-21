@@ -29,17 +29,6 @@ type record Outer1 {
 external function f_enc1(in Outer1 x) return octetstring
   with { extension "prototype(convert) encode(JSON)" }
 
-// Same thing, but Outer2 only has a JSON variant attribute to specify the encoding (no 'encode' attribute)
-type record Outer2 {
-  octetstring bytes,
-  Inner rec
-} with {
-  variant(rec) "JSON : name as stuff";
-}
-
-external function f_enc2(in Outer2 x) return octetstring
-  with { extension "prototype(convert) encode(JSON)" }
-
 // Embedded union with the "as value" attribute
 type record HasUnion
 {
@@ -58,6 +47,7 @@ type union EmbeddedUnion
   octetstring bytes
 }
 with {
+  encode "JSON";
   variant "JSON: as value";
 }
 

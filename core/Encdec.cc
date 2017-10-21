@@ -25,6 +25,7 @@
 #include "Charstring.hh"
 #include "String_struct.hh"
 #include "RAW.hh"
+#include "XER.hh"
 #include "Error.hh"
 #include "Logger.hh"
 #include "string.h"
@@ -155,6 +156,55 @@ void TTCN_EncDec::error(error_type_t p_et, char *msg)
     default:
       break;
     } // switch
+  }
+}
+
+void TTCN_EncDec::get_coding_from_str(const UNIVERSAL_CHARSTRING& coding_str,
+                                      coding_t* coding, unsigned int* extra,
+                                      boolean encode)
+{
+  if (coding_str == "BER:2002" || coding_str == "CER:2002" ||
+      coding_str == "DER:2002") {
+    *coding = CT_BER;
+    if (extra != NULL) {
+      if (encode) {
+        if (coding_str == "CER:2002") {
+          *extra = BER_ENCODE_CER;
+        }
+        else {
+          *extra = BER_ENCODE_DER;
+        }
+      }
+      else {
+        *extra = BER_ACCEPT_ALL;
+      }
+    }
+  }
+  else if (coding_str == "RAW") {
+    *coding = CT_RAW;
+  }
+  else if (coding_str == "TEXT") {
+    *coding = CT_TEXT;
+  }
+  else if (coding_str == "JSON") {
+    *coding = CT_JSON;
+  }
+  else if (coding_str == "XML" || coding_str == "XER") {
+    *coding = CT_XER;
+    if (extra != NULL) {
+      *extra = XER_EXTENDED;
+    }
+  } else if (coding_str == "OER") {
+    *coding = CT_OER;
+  }
+  else if (coding_str.lengthof() == 0) {
+    TTCN_error("Missing dynamic encoding string or default encoding string");
+  }
+  else {
+    TTCN_Logger::begin_event_log2str();
+    coding_str.log();
+    TTCN_error("Invalid encoding string: %s",
+      (const char*) TTCN_Logger::end_event_log2str());
   }
 }
 

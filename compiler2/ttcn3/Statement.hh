@@ -237,6 +237,7 @@ namespace Ttcn {
       S_START_PORT, // port
       S_STOP_PORT, // port
       S_HALT, // port
+      S_SETSTATE, // setstate_op
       /* component statements */
       S_START_COMP, // comp_op
       S_START_COMP_REFD, // comp_op
@@ -268,7 +269,8 @@ namespace Ttcn {
       S_INT2ENUM, // convert_op
       /* update statement */
       S_UPDATE, // update_op
-      S_SETSTATE // setstate_op
+      /* encoding-related statements */
+      S_SETENCODE // setencode_op
     };
 
     enum component_t {
@@ -287,6 +289,8 @@ namespace Ttcn {
       LogArguments *logargs; ///< used by S_ACTION, S_LOG, S_STOP_TESTCASE
       struct {
         Reference *portref; /**< NULL means any/all */
+        bool translate; /**< true if it an operation from a translation function:
+                         * For example: port.send(3) or port.receive(4)*/
         bool anyfrom;
 	union {
 	  struct {
@@ -488,6 +492,11 @@ namespace Ttcn {
         Value* val;
         TemplateInstance* ti;
       } setstate_op; /**< S_SETSTATE */
+      
+      struct {
+        Type* type;
+        Value* encoding;
+      } setencode_op;
     };
 
     Statement(const Statement& p); ///< copy disabled
@@ -540,7 +549,7 @@ namespace Ttcn {
     Statement(statementtype_t p_st, Value *p_val, LogArguments *p_logargs);
     /** Constructor used by S_SEND */
     Statement(statementtype_t p_st, Reference *p_ref,
-              TemplateInstance *p_templinst, Value *p_val);
+              TemplateInstance *p_templinst, Value *p_val, bool p_translate);
     /** Constructor used by S_CALL */
     Statement(statementtype_t p_st, Reference *p_ref,
               TemplateInstance *p_templinst, Value *p_timerval,
@@ -558,7 +567,7 @@ namespace Ttcn {
     Statement(statementtype_t p_st, Reference *p_ref, bool p_anyfrom,
               TemplateInstance *p_templinst, TemplateInstance *p_fromclause,
               ValueRedirect *p_redirectval, Reference *p_redirectsender,
-              Reference* p_redirectindex);
+              Reference* p_redirectindex, bool p_translate);
     /** Constructor used by S_GETCALL and S_CHECK_GETCALL. p_ref==0
      *  means any port. */
     Statement(statementtype_t p_st, Reference *p_ref, bool p_anyfrom,
@@ -615,6 +624,8 @@ namespace Ttcn {
     Statement(statementtype_t p_st, Reference* p_ref, MultiWithAttrib* p_attrib);
     /** Constructor used by S_SETSTATE */
     Statement(statementtype_t p_st, Value* p_val, TemplateInstance* p_ti);
+    /** Constructor used by S_SETENCODE */
+    Statement(statementtype_t p_st, Type* p_type, Value* p_encoding);
     virtual ~Statement();
     virtual Statement* clone() const;
     virtual void dump(unsigned int level) const;
@@ -796,6 +807,7 @@ namespace Ttcn {
     void chk_int2enum();
     void chk_update();
     void chk_setstate();
+    void chk_setencode();
   public:
     /** Sets the code section selector of all embedded values and
      *  templates to \a p_code_section. */
@@ -868,6 +880,7 @@ namespace Ttcn {
     char *generate_code_execute_refd(char *str);
     char* generate_code_update(char *str, char*& def_glob_vars, char*& src_glob_vars);
     char* generate_code_setstate(char *str);
+    char* generate_code_setencode(char* str);
     /** used for receive, check-receive, trigger */
     void generate_code_expr_receive(expression_struct *expr,
       const char *opname);
@@ -1489,7 +1502,7 @@ namespace Ttcn {
     StatementBlock *get_block() const { return block; }
     void add_id(Identifier* id);
     /* checking functions */
-    void chk(Type *p_gov);
+    void chk();
     void set_code_section(GovernedSimple::code_section_t p_code_section);
     char* generate_code_case(char *str, char*& def_glob_vars, char*& src_glob_vars,
       const char *type_name, bool &else_branch);
@@ -1524,8 +1537,7 @@ namespace Ttcn {
     StatementBlock::returnstatus_t has_return() const;
     bool has_receiving_stmt() const;
     /* checking functions */
-    /** p_gov is the governor type of select expression */
-    void chk(Type *p_gov);
+    void chk();
     /** checks whether all embedded statements are allowed in an interleaved
      * construct */
     void chk_allowed_interleave();

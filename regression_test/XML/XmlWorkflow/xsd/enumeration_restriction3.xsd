@@ -14,6 +14,9 @@
 		<maxLength value="32" />
 		<enumeration value="B2" />
 		<enumeration value="UNKNOWN" />
+		<enumeration value="'>something'>" />
+		<enumeration value='">something">&amp;&#38;' />
+		<enumeration value="&lt;&gt;&quot;&amp;&apos;numbers&#60;&#62;&#34;&#38;&#39;" />
 	</restriction>
 </simpleType>
 
@@ -49,5 +52,33 @@
 	</simpleContent>
 </complexType>
 
+<simpleType name="NMTokens" id="nmtokens_ref">
+   <restriction base="NMTOKENS">
+      <enumeration value="vxml:digits"/>
+      <enumeration value="vxml:number"/>
+      <enumeration value="vxml:time"/>
+      <enumeration value="vxml:date"/>
+      <enumeration value="vxml:currency"/>
+   </restriction>
+</simpleType>
+
+<simpleType name="IDRefs">
+   <restriction base="IDREFS">
+      <enumeration value="nmtokens_ref"/>
+      <enumeration value="qname_ref"/>
+   </restriction>
+</simpleType>
+
+
+<!-- Still unsupported QName -->
+<simpleType name="QName" id="qname_ref">
+   <restriction base="QName">
+      <enumeration value="digits"/>
+      <enumeration value="number"/>
+      <enumeration value="time"/>
+      <enumeration value="date"/>
+      <enumeration value="currency"/>
+   </restriction>
+</simpleType>
 
 </schema>

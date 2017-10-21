@@ -60,6 +60,8 @@ extern Ttcn::ExtensionAttributes * parse_extattributes(
   Ttcn::WithAttribPath *w_attrib_path);
 
 namespace Common {
+  
+  map<Type*, void> Type::RecursionTracker::types;
 
   using Ttcn::MultiWithAttrib;
   using Ttcn::SingleWithAttrib;
@@ -167,6 +169,8 @@ namespace Common {
       return "TEXT";
     case CT_JSON:
       return "JSON";
+    case CT_OER:
+      return "OER";
     case CT_CUSTOM:
       return "custom";
     default:
@@ -185,6 +189,7 @@ namespace Common {
     case CT_RAW:
     case CT_XER: // UTF-8 doesn't fit into charstring and universal is wasteful
     case CT_JSON:
+    case CT_OER:
       return get_pooltype(T_OSTR);
     case CT_TEXT:
       if(stream_variant==1){
@@ -413,6 +418,9 @@ namespace Common {
       }
     }
     else parsed_restr=0;
+    if (coding_table.size() != 0 || coders_to_generate.size() != 0) {
+      FATAL_ERROR("Type::Type()");
+    }
     switch(typetype) {
     case T_ERROR:
     case T_NULL:
@@ -600,6 +608,7 @@ namespace Common {
     xerattrib = 0;
     berattrib = 0;
     jsonattrib = 0;
+    oerattrib = 0;
     sub_type = 0;
     parsed_restr = 0;
     ownertype = OT_UNKNOWN;
@@ -607,9 +616,10 @@ namespace Common {
     chk_finished = false;
     pard_type_instance = false;
     needs_any_from_done = false;
-    gen_json_coder_functions = false;
     default_encoding.type = CODING_UNSET;
     default_decoding.type = CODING_UNSET;
+    checked_incorrect_field = false;
+    encode_attrib_mod_conflict = false;
   }
 
   void Type::clean_up()
@@ -754,6 +764,8 @@ namespace Common {
     berattrib = 0;
     delete jsonattrib;
     jsonattrib = 0;
+    delete oerattrib;
+    oerattrib = 0;
     if (parsed_restr) {
       for (size_t i = 0; i < parsed_restr->size(); i++)
         delete (*parsed_restr)[i];
@@ -765,6 +777,27 @@ namespace Common {
     w_attrib_path = 0;
     delete encode_attrib_path;
     encode_attrib_path = 0;
+    for (size_t i = 0; i < coding_table.size(); ++i) {
+      if (!coding_table[i]->built_in) {
+        Free(coding_table[i]->custom_coding.name);
+        for (size_t j = 0; j < coding_table[i]->custom_coding.encoders->size(); ++j) {
+          delete coding_table[i]->custom_coding.encoders->get_nth_elem(j);
+        }
+        coding_table[i]->custom_coding.encoders->clear();
+        delete coding_table[i]->custom_coding.encoders;
+        for (size_t j = 0; j < coding_table[i]->custom_coding.decoders->size(); ++j) {
+          delete coding_table[i]->custom_coding.decoders->get_nth_elem(j);
+        }
+        coding_table[i]->custom_coding.decoders->clear();
+        delete coding_table[i]->custom_coding.decoders;
+      }
+      delete coding_table[i];
+    }
+    coding_table.clear();
+    for (size_t i = 0; i < coders_to_generate.size(); ++i) {
+      delete coders_to_generate[i];
+    }
+    coders_to_generate.clear();
   }
 
   Type::Type(typetype_t p_tt)
@@ -1190,6 +1223,11 @@ namespace Common {
 
   Type::truth Type::is_charenc()
   {
+    // this helps avoid infinite recursions in self-referencing types
+    if (RecursionTracker::is_happening(this)) {
+      return Maybe;
+    }
+    RecursionTracker tracker(this);
     switch(typetype) {
     case T_CHOICE_A:
     case T_CHOICE_T:
@@ -1895,6 +1933,26 @@ namespace Common {
     return false;
   }
 
+  int Type::get_default_raw_fieldlength(){
+    switch(typetype) {
+    case T_REFD:
+      return get_type_refd_last()->get_default_raw_fieldlength();
+      break;
+    case T_INT:
+      return 8;
+      break;
+    case T_BOOL:
+      return 1;
+      break;
+    case T_REAL:
+      return 64;
+      break;
+    default:
+      break;
+    }
+    return 0;
+  }
+
   int Type::get_raw_length(){
     if(!raw_checked) FATAL_ERROR("Type::get_raw_length()");
     if(raw_length_calculated) return raw_length;
@@ -1903,19 +1961,17 @@ namespace Common {
     case T_REFD:
       raw_length=get_type_refd()->get_raw_length();
       break;
-    case T_INT:
-      if(rawattrib) raw_length=rawattrib->fieldlength;
-      else raw_length=8;
-      break;
     case T_BOOL:
+    case T_INT:
+    case T_REAL:
       if(rawattrib) raw_length=rawattrib->fieldlength;
-      else raw_length=1;
+      else raw_length=get_default_raw_fieldlength();
       break;
     case T_BSTR:
     case T_HSTR:
     case T_OSTR:
     case T_CSTR:
-      if(rawattrib && rawattrib->fieldlength) raw_length=rawattrib->fieldlength;
+      if(rawattrib && rawattrib->fieldlength>0) raw_length=rawattrib->fieldlength;
       else raw_length=-1;
       break;
     case T_ENUM_T:
@@ -1942,7 +1998,7 @@ namespace Common {
           raw_length=-1;
           return raw_length;
         }
-        l=cf->get_type()->get_raw_length();
+        l=cf->get_type()->get_type_refd_last()->get_raw_length();
         if(l==-1){
           raw_length=-1;
           return raw_length;
@@ -1961,7 +2017,7 @@ namespace Common {
       for(size_t i = 0; i < get_nof_comps(); i++){
         CompField *cf=get_comp_byIndex(i);
         int l=0;
-        l=cf->get_type()->get_raw_length();
+        l=cf->get_type()->get_type_refd_last()->get_raw_length();
         if(l==-1){
           raw_length=-1;
           return raw_length;
@@ -1995,10 +2051,7 @@ namespace Common {
       restrlength=(int)sub_type->get_length_restriction();
     if(restrlength!=-1){
       if(!rawattrib){
-        Type *t=get_type_refd_last();
-        typetype_t basic_type=t->typetype;
-        rawattrib=new RawAST(basic_type==T_INT);
-        if(basic_type==T_REAL) rawattrib->fieldlength=64;
+        rawattrib=new RawAST(get_default_raw_fieldlength());
       }
       rawattrib->length_restrition=restrlength;
     }
@@ -2183,14 +2236,11 @@ namespace Common {
             CompField *cfield=get_comp_byIndex(i);
             RawAST *field_rawattr=cfield->get_type()->rawattrib;
             if(field_rawattr==NULL){
-              Type *t=cfield->get_type()->get_type_refd_last();
-              typetype_t basic_type=t->typetype;
-              t=cfield->get_type();
+              Type *t=cfield->get_type();
               if(t->is_ref()) t=t->get_type_refd();
               while(!t->rawattrib && t->is_ref()) t=t->get_type_refd();
-              field_rawattr= new RawAST(t->rawattrib,basic_type==T_INT);
-              if(!t->rawattrib && basic_type==T_REAL) field_rawattr->fieldlength=64;
-              cfield->get_type()->rawattrib=field_rawattr;
+              cfield->get_type()->rawattrib= new RawAST(t->rawattrib,cfield->get_type()->get_default_raw_fieldlength());
+              field_rawattr=cfield->get_type()->rawattrib;
             }
             if(field_rawattr->padding==0)
               field_rawattr->padding=rawattrib->padding;
@@ -2211,14 +2261,11 @@ namespace Common {
             CompField *cfield=get_comp_byIndex(i);
             RawAST *field_rawattr=cfield->get_type()->rawattrib;
             if(field_rawattr==NULL){
-              Type *t=cfield->get_type()->get_type_refd_last();
-              typetype_t basic_type=t->typetype;
-              t=cfield->get_type();
+              Type *t=cfield->get_type();
               if(t->is_ref()) t=t->get_type_refd();
               while(!t->rawattrib && t->is_ref()) t=t->get_type_refd();
-              field_rawattr= new RawAST(t->rawattrib,basic_type==T_INT);
-              if(!t->rawattrib && basic_type==T_REAL) field_rawattr->fieldlength=64;
-              cfield->get_type()->rawattrib=field_rawattr;
+              cfield->get_type()->rawattrib= new RawAST(t->rawattrib,cfield->get_type()->get_default_raw_fieldlength());
+              field_rawattr=cfield->get_type()->rawattrib;
             }
             if(field_rawattr->fieldorder==XDEFDEFAULT)
               field_rawattr->fieldorder=rawattrib->fieldorder;
@@ -2267,12 +2314,12 @@ namespace Common {
       int used_bits = 0; // number of bits used to store all previous fields
       for(size_t i = 0; i < get_nof_comps(); i++) { // field attributes
         CompField *cf = get_comp_byIndex(i);
-        const Identifier& field_id = cf->get_name();
         Type *field_type = cf->get_type();
-        Type *field_type_last = field_type->get_type_refd_last();
         field_type->force_raw();
         RawAST *rawpar = field_type->rawattrib;
         if (rawpar) {
+          const Identifier& field_id = cf->get_name();
+          Type *field_type_last = field_type->get_type_refd_last();
           if (rawpar->prepadding != 0) {
             used_bits = (used_bits + rawpar->prepadding - 1) / rawpar->prepadding *
               rawpar->prepadding;
@@ -2287,7 +2334,7 @@ namespace Common {
                 field_id.get_dispname().c_str());
             }
           }
-          else {
+          else if(rawpar->fieldlength>0) {
             used_bits += rawpar->fieldlength;
           }
           if (rawpar->padding != 0) {
@@ -2492,7 +2539,7 @@ namespace Common {
                   allow_omit = true;
               }
               if(!hiba){
-                Error_Context cntx(this, "In Raw parmeter CROSSTAG");
+                Error_Context cntx(this, "In Raw parameter CROSSTAG");
                 Value *v = rawpar->crosstaglist.tag[c].keyList[a].v_value;
                 v->set_my_scope(get_my_scope());
                 v->set_my_governor(t2);
@@ -2588,7 +2635,7 @@ namespace Common {
       case T_ENUM_T:
       case T_SEQ_T:
       case T_SET_T:
-        rawattrib = new RawAST(false);
+        rawattrib = new RawAST(get_default_raw_fieldlength());
         break;
       default:
         if (is_ref()) get_type_refd()->force_raw();
@@ -2740,7 +2787,7 @@ namespace Common {
     "$ref", "type", "properties", "items", "anyOf", "enum", "pattern",
     "default", "minItems", "maxItems", "additionalProperties", "fieldOrder",
     "required", "$schema", "minLength", "maxLength", "minimum", "maximum",
-    "excludeMinimum", "excludeMaximum", "allOf"
+    "excludeMinimum", "excludeMaximum", "allOf",
     // TITAN-specific keywords
     "originalName", "unusedAlias", "subType", "numericValues", "omitAsNull",
     "encoding", "decoding", "valueList"
@@ -2912,6 +2959,11 @@ namespace Common {
           error("Invalid attribute 'metainfo for unbound', requires record, set, "
             "record of, set of, array or field of a record or set");
         }
+      }
+      if (jsonattrib->as_number &&
+          get_type_refd_last()->get_typetype_ttcn3() != T_ENUM_T) {
+        error("Invalid attribute, 'as number' is only allowed for enumerated "
+          "types");
       }
     }
   }
@@ -3098,7 +3150,7 @@ namespace Common {
     if (err) {
       if (last->typetype == T_ENUM_T) {
         error("Invalid JSON default value for enumerated type `%s'",
-          last->get_stringRepr().c_str());
+          last->get_typename().c_str());
       } else {
         error("Invalid %s JSON default value", get_typename_builtin(last->typetype));
       }
@@ -3151,6 +3203,421 @@ namespace Common {
       break;
     }
     return 1;
+  }
+  
+  bool Type::get_gen_coder_functions(MessageEncodingType_t coding)
+  {
+    for (size_t i = 0; i < coders_to_generate.size(); ++i) {
+      if (coding == *coders_to_generate[i]) {
+        return true;
+      }
+    }
+    switch (typetype) {
+    case T_SEQ_T:
+    case T_SEQ_A:
+    case T_SET_T:
+    case T_SET_A:
+    case T_CHOICE_T:
+    case T_CHOICE_A:
+    case T_ANYTYPE:
+    case T_OPENTYPE:
+    case T_SEQOF:
+    case T_SETOF:
+    case T_ARRAY:
+    case T_ENUM_T:
+    case T_ENUM_A:
+      // no 'encode' attribute for this type or any types that reference it, so
+      // don't generate coder functions
+      return false;
+    default:
+      // no need to generate coder functions for basic types, but this function
+      // is also used to determine codec-specific descriptor generation
+      return can_have_coding(coding);
+    }
+  }
+  
+  void Type::set_gen_coder_functions(MessageEncodingType_t coding)
+  {
+    // TODO: this should also influence type descriptor generation
+    switch (coding) {
+    case CT_BER:
+    case CT_RAW:
+    case CT_TEXT:
+    case CT_XER:
+    case CT_JSON:
+    case CT_OER:
+      break; // OK
+    default:
+      FATAL_ERROR("Type::set_gen_coder_functions");
+    }
+    if (get_gen_coder_functions(coding)) {
+      return; // already set
+    }
+    coders_to_generate.add(new MessageEncodingType_t(coding));
+    switch (typetype) {
+    case T_SEQ_T:
+    case T_SEQ_A:
+    case T_SET_T:
+    case T_SET_A:
+    case T_CHOICE_T:
+    case T_CHOICE_A:
+    case T_ANYTYPE:
+    case T_OPENTYPE:
+      for (size_t i = 0; i < get_nof_comps(); ++i) {
+        Type* field_type = get_comp_byIndex(i)->get_type();
+        field_type->get_type_refd_last()->set_gen_coder_functions(coding);
+      }
+      break;
+    case T_SEQOF:
+    case T_SETOF:
+    case T_ARRAY:
+      get_ofType()->get_type_refd_last()->set_gen_coder_functions(coding);
+      break;
+    default:
+      break;
+    }
+  }
+  
+  void Type::add_coding(const string& name, Ttcn::attribute_modifier_t modifier, bool silent)
+  {
+    if (legacy_codec_handling) {
+      FATAL_ERROR("Type::add_coding");
+    }
+    for (size_t i = 0; i < coding_table.size(); ++i) {
+      if (!encode_attrib_mod_conflict && modifier != coding_table[i]->modifier) {
+        encode_attrib_mod_conflict = true;
+        error("All 'encode' attributes of a type must have the same modifier "
+          "('override', '@local' or none)");
+      }
+      const char* coding_name = coding_table[i]->built_in ?
+        get_encoding_name(coding_table[i]->built_in_coding) :
+        coding_table[i]->custom_coding.name;
+      if (name == coding_name) {
+        return; // coding already added
+      }
+    }
+    MessageEncodingType_t built_in_coding = get_enc_type(name);
+    if (built_in_coding != CT_CUSTOM && built_in_coding != CT_PER) {
+      if (get_type_refd_last()->can_have_coding(built_in_coding)) {
+        coding_t* new_coding = new coding_t;
+        new_coding->built_in = TRUE;
+        new_coding->modifier = modifier;
+        new_coding->built_in_coding = built_in_coding;
+        coding_table.add(new_coding);
+        get_type_refd_last()->set_gen_coder_functions(built_in_coding);
+      }
+      else if (!silent) {
+        // TODO: if an ASN.1 type cannot have a specific encoding,
+        // it shouldn't be given that encoding in 'Type::chk_encodings'
+        warning("Type `%s' cannot have %s encoding. Encode attribute ignored.",
+          get_typename().c_str(), get_encoding_name(built_in_coding));
+      }
+    }
+    else {
+      coding_t* new_coding = new coding_t;
+      new_coding->built_in = FALSE;
+      new_coding->modifier = modifier;
+      new_coding->custom_coding.name = mcopystr(name.c_str());
+      new_coding->custom_coding.encoders = new map<Type*, coder_function_t>;
+      new_coding->custom_coding.decoders = new map<Type*, coder_function_t>;
+      coding_table.add(new_coding);
+    }
+  }
+  
+  void Type::set_coding_function(const char* coding_name, boolean encode,
+                                 Assignment* function_def)
+  {
+    if (legacy_codec_handling) {
+      FATAL_ERROR("Type::set_coding_function");
+    }
+    Type* t = get_type_w_coding_table();
+    if (t == NULL) {
+      return;
+    }
+    for (size_t i = 0; i < t->coding_table.size(); ++i) {
+      if (!t->coding_table[i]->built_in &&
+          strcmp(t->coding_table[i]->custom_coding.name, coding_name) == 0) {
+        map<Type*, coder_function_t>* coders = encode ?
+          t->coding_table[i]->custom_coding.encoders :
+          t->coding_table[i]->custom_coding.decoders;
+        if (coders->has_key(this)) {
+          (*coders)[this]->conflict = TRUE;
+        }
+        else {
+          coder_function_t* new_coder = new coder_function_t;
+          new_coder->func_def = function_def;
+          new_coder->conflict = FALSE;
+          coders->add(this, new_coder);
+          Common::Module* func_mod = function_def->get_my_scope()->get_scope_mod();
+          Common::Module* type_mod = my_scope->get_scope_mod();
+          if (func_mod != type_mod) {
+            // add a phantom import for the coder function's module, to make
+            // sure it is visible from the type's module
+            Ttcn::Module* type_mod_ttcn = dynamic_cast<Ttcn::Module*>(type_mod);
+            if (type_mod_ttcn != NULL) {
+              Ttcn::ImpMod* new_imp = new Ttcn::ImpMod(func_mod->get_modid().clone());
+              new_imp->set_mod(func_mod);
+              new_imp->set_imptype(Ttcn::ImpMod::I_DEPENDENCY);
+              type_mod_ttcn->add_impmod(new_imp);
+            }
+            else {
+              Asn::Module* type_mod_asn = dynamic_cast<Asn::Module*>(type_mod);
+              Asn::ImpMod* new_imp = new Asn::ImpMod(func_mod->get_modid().clone(),
+                NULL);
+              new_imp->set_mod(func_mod);
+              type_mod_asn->add_impmod(new_imp);
+            }
+          }
+        }
+        return;
+      }
+    }
+  }
+  
+  Type::coder_function_t* Type::get_coding_function(size_t index, boolean encode)
+  {
+    if (legacy_codec_handling) {
+      FATAL_ERROR("Type::get_coding_function");
+    }
+    Type* t_ct = get_type_w_coding_table();
+    if (t_ct == NULL || t_ct->coding_table.size() <= index ||
+        t_ct->coding_table[index]->built_in) {
+      FATAL_ERROR("Type::get_coding_function");
+    }
+    map<Type*, coder_function_t>* coders = encode ?
+      t_ct->coding_table[index]->custom_coding.encoders :
+      t_ct->coding_table[index]->custom_coding.decoders;
+    if (coders->has_key(this)) {
+      return (*coders)[this];
+    }
+    Type* t = this;
+    while (t->is_ref()) {
+      t = t->get_type_refd();
+      if (coders->has_key(t)) {
+        return (*coders)[t];
+      }
+    }
+    return NULL; // not found
+  }
+  
+  Type* Type::get_type_w_coding_table(bool ignore_local /* = false */)
+  {
+    // 1st priority: if local attributes are not ignored, and if the type 
+    // has its own 'encode' attributes (its coding table is not empty), then
+    // return the type
+    if (!ignore_local && coding_table.size() != 0) {
+      return this;
+    }
+    
+    // 2nd priority: if this is a field or element type, and one of its parents
+    // has an 'encode' attribute with the 'override' modifier, then return the
+    // parent type
+    Type* t_parent = NULL;
+    if (parent_type != NULL && (ownertype == OT_COMP_FIELD ||
+        ownertype == OT_RECORD_OF || ownertype == OT_ARRAY)) {
+      // note: if one of the parent types has an overriding 'encode' attribute,
+      // then this returns the furthest parent with an overriding 'encode';
+      // if none of the 'encode' attributes are overriding, then the nearest
+      // parent with at least one 'encode' attribute is returned
+      t_parent = parent_type->get_type_w_coding_table(true);
+    }
+    if (t_parent != NULL) {
+      for (size_t i = 0; i < t_parent->coding_table.size(); ++i) {
+        if (t_parent->coding_table[i]->modifier == Ttcn::MOD_OVERRIDE) {
+          return t_parent;
+        }
+      }
+    }
+    
+    // 3rd priority: if local attributes are ignored, and if the type has its
+    // own (non-local) 'encode' attributes, then return the type
+    if (ignore_local && coding_table.size() != 0) {
+      bool local = false;
+      for (size_t i = 0; i < coding_table.size(); ++i) {
+        if (coding_table[i]->modifier == Ttcn::MOD_LOCAL) {
+          local = true;
+          break;
+        }
+      }
+      if (!local) {
+        return this;
+      }
+    }
+    
+    // 4th priority, if a referenced type has an 'encode' attribute, then return
+    // the referenced type
+    if (is_ref()) {
+      // note: this always returns the nearest referenced type with at least one
+      // 'encode' attribute
+      Type* t = get_type_refd()->get_type_w_coding_table(false);
+      if (t != NULL) {
+        return t;
+      }
+    }
+    
+    // otherwise return the parent type pointer (whether it's null or not)
+    return t_parent;
+  }
+  
+  bool Type::can_have_coding(MessageEncodingType_t coding)
+  {
+    // this helps avoid infinite recursions in self-referencing types
+    if (RecursionTracker::is_happening(this)) {
+      return true;
+    }
+    RecursionTracker tracker(this);
+    
+    // check whether the codec has been disabled by a compiler option or by
+    // the license
+    if ((coding == CT_BER && !enable_ber()) ||
+        (coding == CT_RAW && !enable_raw()) ||
+        (coding == CT_TEXT && !enable_text()) ||
+        (coding == CT_XER && !enable_xer()) ||
+        (coding == CT_JSON && !enable_json()) ||
+        (coding == CT_OER && !enable_oer())) {
+      return false;
+    }
+    
+    // BER encoding is handled by 'has_encoding'
+    if (coding == CT_BER) {
+      return has_encoding(CT_BER);
+    }
+    
+    // XER encoding for ASN.1 types can only be enabled by a compiler option 
+    if (coding == CT_XER && !asn1_xer && is_asn1()) {
+      return false;
+    }
+    
+    switch (typetype) {
+    case T_SEQ_T:
+    case T_SEQ_A:
+    case T_SET_T:
+    case T_SET_A:
+    case T_CHOICE_T:
+    case T_CHOICE_A:
+    case T_ANYTYPE:
+    case T_OPENTYPE:
+      // all field types must be able to have the specified encoding
+      for (size_t i = 0; i < get_nof_comps(); ++i) {
+        Type* field_type = get_comp_byIndex(i)->get_type()->get_type_refd_last();
+        if (!field_type->can_have_coding(coding)) {
+          return false;
+        }
+      }
+      return true;
+      
+    case T_ARRAY:
+      if (coding != CT_JSON) {
+        return false; // arrays can only have JSON encoding
+      }
+      // else fall through
+    case T_SEQOF:
+    case T_SETOF:
+      // the element type must be able to have the specified encoding
+      return get_ofType()->get_type_refd_last()->can_have_coding(coding);
+      
+    default:
+      // each encoding has its own set of supported basic types
+      switch (coding) {
+      case CT_RAW:
+        switch (typetype) {
+        case T_ERROR:
+        case T_BOOL:
+        case T_INT:
+        case T_REAL:
+        case T_BSTR:
+        case T_HSTR:
+        case T_OSTR:
+        case T_CSTR:
+        case T_USTR:
+        case T_ENUM_T:
+          return true;
+        default:
+          return false;
+        }
+        
+      case CT_TEXT:
+        switch (typetype) {
+        case T_ERROR:
+        case T_BOOL:
+        case T_INT:
+        case T_OSTR:
+        case T_CSTR:
+        case T_USTR:
+        case T_ENUM_T:
+          return true;
+        default:
+          return false;
+        }
+        
+      case CT_XER:
+        switch (get_typetype_ttcn3()) {
+        case T_NULL:
+        case T_BOOL:
+        case T_INT:
+        case T_REAL:
+        case T_BSTR:
+        case T_OSTR:
+        case T_OID:
+        case T_HSTR:
+        case T_VERDICT:
+        case T_CSTR:
+        case T_USTR:
+        case T_ENUM_T:
+          return true; // TODO: what about T_ERROR?
+        default:
+          return false;
+        }
+        
+      case CT_JSON:
+        switch (typetype) {
+        case T_BOOL:
+        case T_INT:
+        case T_INT_A:
+        case T_REAL:
+        case T_BSTR:
+        case T_BSTR_A:
+        case T_HSTR:
+        case T_OSTR:
+        case T_CSTR:
+        case T_USTR:
+        case T_UTF8STRING:
+        case T_NUMERICSTRING:
+        case T_PRINTABLESTRING:
+        case T_TELETEXSTRING:
+        case T_VIDEOTEXSTRING:
+        case T_IA5STRING:
+        case T_GRAPHICSTRING:
+        case T_VISIBLESTRING:
+        case T_GENERALSTRING:  
+        case T_UNIVERSALSTRING:
+        case T_BMPSTRING:
+        case T_VERDICT:
+        case T_NULL:
+        case T_OID:
+        case T_ROID:
+        case T_ANY:
+        case T_ENUM_T:
+        case T_ENUM_A:
+          return true; // TODO: what about T_ERROR?
+        default:
+          return false;
+        }
+        
+      case CT_OER:
+        switch (typetype) {
+          case T_BOOL:
+          case T_INT_A:
+            // TODO: add more types as they are implemented in
+            // the enc/decoding
+            return true;
+          default:
+            return false;
+        }
+      default:
+        FATAL_ERROR("Type::can_have_coding");
+      }
+    }
   }
 
   /** \todo review, especially the string types... */
@@ -3337,6 +3804,47 @@ namespace Common {
       return is_compatible_tt_tt(t1->typetype, p_tt, is_asn1(), p_is_asn1, same_mod);
     }
     }
+  }
+  
+
+  bool Type::is_compatible_component_by_port(Type *p_type) {
+    chk();
+    p_type->chk();
+    Type *t1 = get_type_refd_last();
+    Type *t2 = p_type->get_type_refd_last();
+    if (t1->typetype != T_COMPONENT || t2->typetype != T_COMPONENT) {
+      return false;
+    }
+    ComponentTypeBody* b1 = t1->get_CompBody();
+    ComponentTypeBody* b2 = t2->get_CompBody();
+     
+    // Does b2 contains every port with the same type and name as b1?
+    for (size_t i = 0; i < b1->get_nof_asss(); i++) {
+      Assignment * ass = b1->get_ass_byIndex(i);
+      if (ass->get_asstype() == Assignment::A_PORT) {
+        Type *port_type = ass->get_Type()->get_type_refd_last();
+        const Identifier& id = ass->get_id();
+        bool found = false;
+        for (size_t j = 0; j < b2->get_nof_asss(); j++) {
+          Assignment * ass2 = b2->get_ass_byIndex(j);
+          const Identifier& id2 = ass2->get_id();
+          if (id == id2 && ass2->get_asstype() == Assignment::A_PORT) {
+            Type *port_type2 = ass2->get_Type()->get_type_refd_last();
+            if (port_type != port_type2) {
+              return false;
+            } else {
+              found = true;
+              break;
+            }
+          }
+        }
+        if (!found) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
   }
 
   bool Type::is_compatible(Type *p_type, TypeCompatInfo *p_info, Location* p_loc,
@@ -4501,12 +5009,12 @@ namespace Common {
     }
   }
   
-  void Type::set_coding_function(bool encode, Assignment* function_def)
+  void Type::set_legacy_coding_function(bool encode, Assignment* function_def)
   {
-    if (function_def == NULL) {
-      FATAL_ERROR("Type::set_coding_function");
+    if (!legacy_codec_handling || function_def == NULL) {
+      FATAL_ERROR("Type::set_legacy_coding_function");
     }
-    coding_t& coding = encode ? default_encoding : default_decoding;
+    legacy_coding_t& coding = encode ? default_encoding : default_decoding;
     if (coding.type == CODING_UNSET) {
       // no coding method has been set yet -> OK
       coding.type = CODING_BY_FUNCTION;
@@ -4521,7 +5029,10 @@ namespace Common {
   
   void Type::set_asn_coding(bool encode, Type::MessageEncodingType_t new_coding)
   {
-    coding_t& coding = encode ? default_encoding : default_decoding;
+    if (!legacy_codec_handling) {
+      FATAL_ERROR("Type::set_asn_coding");
+    }
+    legacy_coding_t& coding = encode ? default_encoding : default_decoding;
     if (coding.type == CODING_UNSET) {
       // no coding method has been set yet -> OK
       coding.type = CODING_BUILT_IN;
@@ -4536,7 +5047,43 @@ namespace Common {
   }
 
   void Type::chk_coding(bool encode, Module* usage_mod, bool delayed /* = false */) {
-    coding_t& coding = encode ? default_encoding : default_decoding;
+    if (!legacy_codec_handling) {
+      // new codec handling: check the coding table
+      Type* t = get_type_w_coding_table();
+      if (t == NULL) {
+        error("No coding rule specified for type '%s'", get_typename().c_str());
+      }
+      else {
+        for (size_t i = 0; i < t->coding_table.size(); ++i) {
+          if (!t->coding_table[i]->built_in) {
+            // all user-defined encodings must have exactly one encoder/decoder
+            // function set
+            if (!delayed) {
+              // there might still be unchecked external functions, so the check
+              // must be delayed until everything else has been checked
+              Modules::delay_type_encode_check(this, usage_mod, encode);
+              return;
+            }
+            coder_function_t* coding_func = get_coding_function(i, encode);
+            if (coding_func == NULL) {
+              if (!t->is_asn1()) {
+                warning("No `%s' %scoder function defined for type `%s'",
+                  t->coding_table[i]->custom_coding.name, encode ? "en" : "de",
+                  get_typename().c_str());
+              }
+            }
+            else if (coding_func->conflict) {
+              warning("Multiple `%s' %scoder functions defined for type `%s'",
+                t->coding_table[i]->custom_coding.name, encode ? "en" : "de",
+                get_typename().c_str());
+            }
+          }
+        }
+      }
+      return;
+    }
+    // legacy codec handling
+    legacy_coding_t& coding = encode ? default_encoding : default_decoding;
     switch (coding.type) {
     case CODING_BY_FUNCTION:
       {
@@ -4662,7 +5209,8 @@ namespace Common {
                                                 == SingleWithAttrib::AT_ENCODE) {
           found = true;
           coding.type = CODING_BUILT_IN;
-          coding.built_in_coding = get_enc_type(*real_attribs[i-1]);
+          coding.built_in_coding = get_enc_type(
+            real_attribs[i-1]->get_attribSpec().get_spec());
         }
       }
       if (coding.type == CODING_UNSET) {
@@ -4691,12 +5239,18 @@ namespace Common {
   }
 
   bool Type::is_coding_by_function(bool encode) const {
+    if (!legacy_codec_handling) {
+      FATAL_ERROR("Type::get_coding");
+    }
     return (encode ? default_encoding : default_decoding).type == CODING_BY_FUNCTION;
   }
   
   string Type::get_coding(bool encode) const
   {
-    const coding_t& coding = encode ? default_encoding : default_decoding;
+    if (!legacy_codec_handling) {
+      FATAL_ERROR("Type::get_coding");
+    }
+    const legacy_coding_t& coding = encode ? default_encoding : default_decoding;
     if (coding.type != CODING_BUILT_IN) {
       FATAL_ERROR("Type::get_built_in_coding");
     }
@@ -4731,9 +5285,12 @@ namespace Common {
     }
   }
   
-  Assignment* Type::get_coding_function(bool encode) const
+  Assignment* Type::get_legacy_coding_function(bool encode) const
   {
-    const coding_t& coding = encode ? default_encoding : default_decoding;
+    if (!legacy_codec_handling) {
+      FATAL_ERROR("Type::get_coding_function");
+    }
+    const legacy_coding_t& coding = encode ? default_encoding : default_decoding;
     if (coding.type != CODING_BY_FUNCTION) {
       FATAL_ERROR("Type::get_coding_function");
     }
@@ -4744,8 +5301,7 @@ namespace Common {
   const string ex_emm_ell("XML"), ex_ee_arr("XER");
   }
 
-  Type::MessageEncodingType_t Type::get_enc_type(const SingleWithAttrib& atr) {
-    const string& enc = atr.get_attribSpec().get_spec();
+  Type::MessageEncodingType_t Type::get_enc_type(const string& enc) {
     if (enc == "RAW")
       return CT_RAW;
     else if (enc == "TEXT")
@@ -4754,14 +5310,13 @@ namespace Common {
       return CT_JSON;
     else if (enc == "BER:2002" || enc == "CER:2002" || enc == "DER:2002")
       return CT_BER;
-    else if (enc == ex_emm_ell)
-      return CT_XER;
-    else if (enc == ex_ee_arr) {
-      atr.warning("The correct name of the encoding is ''XML''");
+    else if (enc == ex_emm_ell || enc == ex_ee_arr) {
       return CT_XER;
     }
     else if (enc == "PER")
       return CT_PER;
+    else if (enc == "OER")
+      return CT_OER;
     else
       return CT_CUSTOM;
   }
@@ -5679,11 +6234,13 @@ namespace Common {
           // search the attribute's qualifiers for one that refers to the
           // target type
           Ttcn::Qualifiers* quals = swa->get_attribQualifiers();
-          for (size_t j = 0; j < quals->get_nof_qualifiers(); ++j) {
-            Ttcn::Qualifier* qual = const_cast<Ttcn::Qualifier*>(
-              quals->get_qualifier(j));
-            if (get_field_type(qual, EXPECTED_CONSTANT) == target_type) {
-              return true;
+          if (quals != NULL) {
+            for (size_t j = 0; j < quals->get_nof_qualifiers(); ++j) {
+              Ttcn::Qualifier* qual = const_cast<Ttcn::Qualifier*>(
+                quals->get_qualifier(j));
+              if (get_field_type(qual, EXPECTED_CONSTANT) == target_type) {
+                return true;
+              }
             }
           }
         }
@@ -5742,6 +6299,36 @@ namespace Common {
 
   bool Type::has_encoding(MessageEncodingType_t encoding_type, const string* custom_encoding /* = NULL */)
   {
+    if (encoding_type == CT_UNDEF ||
+        (encoding_type == CT_CUSTOM && custom_encoding == NULL)) {
+      FATAL_ERROR("Type::has_encoding");
+    }
+    if (!legacy_codec_handling && encoding_type != CT_BER && encoding_type != CT_PER && encoding_type != CT_OER) {
+      // new codec handling (except for BER and PER, which work the same way as before)
+      // check the coding table
+      Type* t = get_type_w_coding_table();
+      if (t != NULL) {
+        bool built_in = encoding_type != CT_CUSTOM;
+        const char* encoding_name = encoding_type != CT_CUSTOM ?
+          get_encoding_name(encoding_type) : custom_encoding->c_str();
+        for (size_t i = 0; i < t->coding_table.size(); ++i) {
+          if (built_in == t->coding_table[i]->built_in &&
+              ((built_in && t->coding_table[i]->built_in_coding == encoding_type) ||
+               (!built_in && strcmp(t->coding_table[i]->custom_coding.name, encoding_name) == 0))) {
+            return true;
+          }
+        }
+      }
+      Type* last = get_type_refd_last();
+      if (encoding_type == CT_CUSTOM ||
+          last->is_structured_type() || last->get_typetype_ttcn3() == T_ENUM_T) {
+        // these types need an 'encode' attribute for built-in codecs, and all
+        // types need an 'encode' attribute for user-defined codecs
+        return false;
+      }
+      return last->can_have_coding(encoding_type);
+    }
+    // legacy codec handling, plus BER and PER encoding in both cases
     static memoizer memory;
     static memoizer json_mem;
     Type *t = this;
@@ -6030,7 +6617,7 @@ namespace Common {
           }
         }
         if (t->jsonattrib) {
-          t->get_type_refd_last()->set_gen_json_coder_functions();
+          t->get_type_refd_last()->set_gen_coder_functions(CT_JSON);
           return json_mem.remember(t, ANSWER_YES);
         }
         // an 'encode' attribute is not enough, structured types must still be
@@ -6176,13 +6763,35 @@ namespace Common {
             return json_mem.remember(t, ANSWER_NO);
           } // switch
           if (type_w_enc_attr != NULL) {
-            t->set_gen_json_coder_functions();
+            t->set_gen_coder_functions(CT_JSON);
             return json_mem.remember(type_w_enc_attr, ANSWER_YES);
           }
           return json_mem.remember(t, MISSING_ATTRIBUTE);
         } // else
       } // while
     } // case
+    case CT_OER: {
+      for ( ; ; ) {
+        if (t->is_asn1()) return true;
+        //if (t->oerattrib) return true;
+        if (t->is_ref()) t = t->get_type_refd();
+        else {
+          switch (t->typetype) {
+          case T_ERROR:
+          case T_BOOL:
+          case T_INT:
+          case T_REAL:
+          case T_BSTR:
+          case T_OSTR:
+          case T_OID:
+            // these basic TTCN-3 types have ASN.1 equivalents
+            return true;
+          default:
+            return false;
+          }
+        }
+      }
+    }
     case CT_CUSTOM:
       // the encoding name parameter has to be the same as the encoding name
       // specified for the type
@@ -6219,7 +6828,8 @@ namespace Common {
       else if (rawattrib && enable_raw()) return false;
       else if (textattrib && enable_text()) return false;
       else if (enable_xer()) return false;
-      else if (jsonattrib && enable_json()) return false;
+      else if ((jsonattrib || (!is_asn1() &&
+        hasEncodeAttr(get_encoding_name(CT_JSON)))) && enable_json()) return false;
       else return true;
     default:
       return false;
@@ -6635,8 +7245,9 @@ namespace Common {
        * descriptor.
        */
       if (t->is_tagged() || t->rawattrib || t->textattrib || t->jsonattrib ||
-          (!is_asn1() && t->hasEncodeAttr(get_encoding_name(CT_JSON))) ||
-          (t->xerattrib && !t->xerattrib->empty() ))
+          (!t->is_asn1() && t->hasEncodeAttr(get_encoding_name(CT_JSON))) ||
+          (t->xerattrib && !t->xerattrib->empty() ) ||
+          (t->oerattrib && !t->oerattrib->empty() && t->is_asn1()))
       {
         return t->get_genname_own(p_scope);
       }
@@ -6653,6 +7264,69 @@ namespace Common {
       else break;
     }
     return t->get_genname_typename(p_scope);
+  }
+  
+  string Type::get_genname_coder(Scope* p_scope)
+  {
+    if (legacy_codec_handling) {
+      FATAL_ERROR("Type::get_genname_coder");
+    }
+    Type* t = this;
+    Type* t_ct = get_type_w_coding_table();
+    if (t_ct == NULL) {
+      return string();
+    }
+    for ( ; ; ) {
+      // if the type has an 'encode' or 'variant' attribute, then it needs its
+      // own coder functions
+      if (t->coding_table.size() != 0 ||
+          t->is_tagged() || t->rawattrib || t->textattrib || t->jsonattrib ||
+          (t->xerattrib && !t->xerattrib->empty())) {
+        return t->get_genname_own(p_scope);
+      }
+      // if it has its own custom encoder or decoder functions set, then it needs
+      // its own coder functions
+      for (size_t i = 0; i < t_ct->coding_table.size(); ++i) {
+        if (!t_ct->coding_table[i]->built_in &&
+            (t_ct->coding_table[i]->custom_coding.encoders->has_key(t) ||
+             t_ct->coding_table[i]->custom_coding.decoders->has_key(t))) {
+          return t->get_genname_own(p_scope);
+        }
+      }
+      if (t->is_ref()) {
+        t = t->get_type_refd();
+      }
+      else {
+        return string();
+      }
+    }
+  }
+  
+  string Type::get_genname_default_coding(Scope* p_scope)
+  {
+    if (legacy_codec_handling) {
+      FATAL_ERROR("Type::get_genname_default_coding");
+    }
+    Type* t = this;
+    for ( ; ; ) {
+      // types defined in TTCN-3 or ASN.1 code and their field and element types
+      // have their own default coding variables
+      switch (t->ownertype) {
+      case OT_TYPE_ASS:
+      case OT_TYPE_DEF:
+      case OT_ARRAY:
+      case OT_COMP_FIELD:
+      case OT_RECORD_OF:
+        return t->get_genname_own(p_scope);
+      default:
+        if (t->is_ref()) {
+          t = t->get_type_refd();
+        }
+        else {
+          return string();
+        }
+      }
+    }
   }
 
   string Type::get_genname_typename(Scope *p_scope)
@@ -6758,6 +7432,17 @@ namespace Common {
     Type *t = this;
     while (true) {
       if (t->has_encoding(CT_JSON)) return t->get_genname_own(my_scope);
+      else if (t->is_ref()) t = t->get_type_refd();
+      else break;
+    }
+    return t->get_genname_typename(my_scope);
+  }
+  
+  string Type::get_genname_oerdescriptor()
+  {
+    Type *t = this;
+    while (true) {
+      if (t->has_encoding(CT_OER)) return t->get_genname_own(my_scope);
       else if (t->is_ref()) t = t->get_type_refd();
       else break;
     }
@@ -7099,6 +7784,50 @@ namespace Common {
 
     if (xerattrib) {
       xerattrib->print(get_fullname().c_str());
+    }
+    if (!parse_only) {
+      if (coding_table.size() == 0) {
+        DEBUG(level, "Coding table is empty");
+      }
+      else {
+        DEBUG(level, "Coding table:");
+        for (size_t i = 0; i < coding_table.size(); ++i) {
+          if (coding_table[i]->built_in) {
+            DEBUG(level + 1, "%s (built-in)",
+              get_encoding_name(coding_table[i]->built_in_coding));
+          }
+          else {
+            DEBUG(level + 1, "%s (user-defined)",
+              coding_table[i]->custom_coding.name);
+            DEBUG(level + 1, "Encoders:");
+            map<Type*, coder_function_t>* encoders = coding_table[i]->custom_coding.encoders;
+            for (size_t j = 0; j < encoders->size(); ++j) {
+              DEBUG(level + 2, "Type: %s, function: %s",
+                encoders->get_nth_key(j)->get_fullname().c_str(),
+                encoders->get_nth_elem(j)->conflict ? "<multiple>" :
+                  encoders->get_nth_elem(j)->func_def->get_fullname().c_str());
+            }
+            DEBUG(level + 1, "Decoders:");
+            map<Type*, coder_function_t>* decoders = coding_table[i]->custom_coding.decoders;
+            for (size_t j = 0; j < decoders->size(); ++j) {
+              DEBUG(level + 2, "Type: %s, function: %s",
+                decoders->get_nth_key(j)->get_fullname().c_str(),
+                decoders->get_nth_elem(j)->conflict ? "<multiple>" :
+                  decoders->get_nth_elem(j)->func_def->get_fullname().c_str());
+            }
+          }
+        }
+      }
+      if (coders_to_generate.size() != 0) {
+        string str;
+        for (size_t i = 0; i < coders_to_generate.size(); ++i) {
+          if (i != 0) {
+            str += ", ";
+          }
+          str += get_encoding_name(*coders_to_generate[i]);
+        }
+        DEBUG(level, "Coder functions to generate: %s", str.c_str());
+      }
     }
   }
 

@@ -13,6 +13,7 @@
  *   Kovacs, Ferenc
  *   Raduly, Csaba
  *   Szabados, Kristof
+ *   Szabo, Bence Janos
  *   Zalanyi, Balazs Andor
  *   Pandi, Krisztian
  *
@@ -3129,9 +3130,9 @@ end:
     case NAMED_TEMPLATE_LIST:
       for (size_t i = 0;i < u.named_templates->get_nof_nts(); i++) {
         NamedTemplate *nt = u.named_templates->get_nt_byIndex(i);
-        Template* tmpl = nt->get_template();
         const string& name = nt->get_name().get_name();
         if (!checked_map.has_key(name)) {
+          Template* tmpl = nt->get_template();
           bool nrc = tmpl->chk_restriction(definition_name, TR_OMIT, usage_loc);
           needs_runtime_check = needs_runtime_check || nrc;
           checked_map.add(name, 0);
@@ -3913,225 +3914,17 @@ end:
         //   ^^^^^^^--- these ------------------------^^^^^
         //   are known at compile time, but the length of the "all from"
         //   is only known at run time.
-        // Collect the indices where there is an "all from".
-        dynamic_array<size_t> variables;
-        size_t fixed_part = 0;
-        if (has_permutation) {
-          for (size_t i = 0; i < nof_ts; i++) {
-            Template *t = u.templates->get_t_byIndex(i);
-            if (t->templatetype == PERMUTATION_MATCH) {
-              size_t num_p = t->u.templates->get_nof_ts();
-              // t->u.templates is 2: "hello" and all from ...
-              for (size_t j = 0; j < num_p; ++j) {
-                Template *subt = t->u.templates->get_t_byIndex(j);
-                if (subt->templatetype == ALL_FROM) {
-                  variables.add(j);
-                }
-                else fixed_part++;
-              }
-            }
-            else fixed_part++;
-          }
-
-          char* str_preamble = 0;
-          char* str_set_size = mputprintf(0, "%s.set_size(%lu", name,
-            (unsigned long)fixed_part);
-
-          // variable part
-          for (size_t i = 0; i < nof_ts; i++) {
-            Template *t = u.templates->get_t_byIndex(i);
-            for (size_t k = 0, v = variables.size(); k < v; ++k) {
-              if (t->templatetype != PERMUTATION_MATCH) continue; // ?? really nothing to do ??
-              Template *subt = t->u.templates->get_t_byIndex(variables[k]);
-              if (subt->templatetype == ALL_FROM) {
-                Value *refv = subt->u.all_from->u.specific_value;
-                // don't call get_Value(), it rips out the value from the template
-
-                if (refv->get_valuetype()!=Value::V_REFD) FATAL_ERROR("%s", __FUNCTION__);
-                Common::Reference  *ref = refv->get_reference();
-                FieldOrArrayRefs   *subrefs = ref->get_subrefs();
-                Common::Assignment *ass = ref->get_refd_assignment();
-
-                str_set_size = mputstrn(str_set_size, " + ", 3);
-
-                Ref_pard* ref_pard = dynamic_cast<Ref_pard*>(ref);
-                if (ref_pard) {
-                  // in case of parametrised references:
-                  //  - temporary parameters need to be declared (stored in str_preamble)
-                  //  - the same temporary needs to be used at each call (generate_code_cached call)
-                  expression_struct expr;
-                  Code::init_expr(&expr);
-
-                  ref_pard->generate_code_cached(&expr);
-                  str_set_size = mputprintf(str_set_size, "%s", expr.expr);
-                  if (expr.preamble)
-                    str_preamble = mputstr(str_preamble, expr.preamble);
-
-                  Code::free_expr(&expr);
-                }
-                else {
-                  str_set_size = mputstr (str_set_size, ass->get_id().get_name().c_str());
-                  if (subrefs) {
-                    expression_struct expr;
-                    Code::init_expr(&expr);
-
-                    subrefs->generate_code(&expr, ass);
-                    str_set_size = mputprintf(str_set_size, "%s", expr.expr);
-
-                    Code::free_expr(&expr);
-                  }
-                }
-
-                switch(ass->get_asstype()) {
-                case Common::Assignment::A_CONST:
-                case Common::Assignment::A_EXT_CONST:
-                case Common::Assignment::A_MODULEPAR:
-                case Common::Assignment::A_VAR:
-                case Common::Assignment::A_PAR_VAL_IN:
-                case Common::Assignment::A_PAR_VAL_OUT:
-                case Common::Assignment::A_PAR_VAL_INOUT:
-                case Common::Assignment::A_FUNCTION_RVAL:
-                case Common::Assignment::A_EXT_FUNCTION_RVAL:
-                  if (ass->get_Type()->field_is_optional(subrefs)) {
-                    str_set_size = mputstrn(str_set_size, "()", 2);
-                  }
-                  break;
-                default:
-                  break;
-                }
-
-                str_set_size = mputstr(str_set_size, ".n_elem()");
-              }
-            }
-          }
-
-          str = mputstr(str, str_preamble);
-          str = mputstr(str, str_set_size);
-
-          Free(str_preamble);
-          Free(str_set_size);
-
-          str = mputstrn(str, ");\n", 3); // finally done set_size
           
-          size_t index = 0;
-          string skipper, hopper;
-          for (size_t i = 0; i < nof_ts; i++) {
+        size_t fixed_part = 0;
+        char* str_set_size = NULL;
+        char* str_preamble = NULL;
+        char* str_body = NULL;
+        string counter = get_temporary_id();
+        
+        if (has_permutation || has_allfrom()) {
+          str_body = mputprintf(str_body, "int %s = %lld;\n", counter.c_str(), index_offset);
+          for (size_t i = 0; i < nof_ts; ++i) {
             Template *t = u.templates->get_t_byIndex(i);
-            switch (t->templatetype) {
-            case ALL_FROM: {
-              break; }
-            case PERMUTATION_MATCH: {
-              size_t nof_perm_ts = t->u.templates->get_nof_ts();
-              for (size_t j = 0; j < nof_perm_ts; j++) {
-                Int ix(index_offset + index + j);
-                Template *permut_elem = t->u.templates->get_t_byIndex(j);
-                if (permut_elem->templatetype == ALL_FROM) {
-                  expression_struct expr;
-                  Code::init_expr(&expr);
-                  switch (permut_elem->u.all_from->templatetype) {
-                  case SPECIFIC_VALUE: {
-                    Value *spec = permut_elem->u.all_from->u.specific_value;
-                    switch (spec->get_valuetype()) {
-                    case Common::Value::V_REFD: {
-                      Common::Reference  *ref = spec->get_reference();
-                      
-                      Ref_pard* ref_pard = dynamic_cast<Ref_pard*>(ref);
-                      if (ref_pard)
-                        ref_pard->generate_code_cached(&expr);
-                      else
-                        ref->generate_code(&expr);
-
-                      Common::Assignment* ass = ref->get_refd_assignment();
-                      switch(ass->get_asstype()) {
-                      case Common::Assignment::A_CONST:
-                      case Common::Assignment::A_EXT_CONST:
-                      case Common::Assignment::A_MODULEPAR:
-                      case Common::Assignment::A_VAR:
-                      case Common::Assignment::A_PAR_VAL_IN:
-                      case Common::Assignment::A_PAR_VAL_OUT:
-                      case Common::Assignment::A_PAR_VAL_INOUT:
-                      case Common::Assignment::A_FUNCTION_RVAL:
-                      case Common::Assignment::A_EXT_FUNCTION_RVAL:
-                        if (ass->get_Type()->field_is_optional(ref->get_subrefs())) {
-                          expr.expr = mputstrn(expr.expr, "()", 2);
-                        }
-                        break;
-                      default:
-                        break;
-                      }
-                      
-                      break; }
-                    default:
-                      FATAL_ERROR("vtype %d", spec->get_valuetype());
-                      break;
-                    }
-                    break; }
-
-
-                  default:
-                    FATAL_ERROR("ttype %d", permut_elem->u.all_from->templatetype);
-                    break;
-                  }
-                  str = mputprintf(str,
-                    "for (int i_i = 0, i_lim = %s.n_elem(); i_i < i_lim; ++i_i) {\n",
-                    expr.expr);
-
-                  str = permut_elem->generate_code_init_seof_element(str, name,
-                    (Int2string(ix) + skipper + " + i_i").c_str(),
-                    oftype_name_str);
-
-                  str = mputstrn(str, "}\n", 2);
-                  skipper += "-1+";
-                  skipper += expr.expr;
-                  skipper += ".n_elem() /* 3005 */ ";
-                  Code::free_expr(&expr);
-                }
-                else {
-                  str = permut_elem->generate_code_init_seof_element(str, name,
-                    (Int2string(ix) + skipper).c_str(), oftype_name_str);
-                }
-              }
-              // do not consider index_offset in case of permutation indicators
-              str = mputprintf(str, "%s.add_permutation(%lu%s, %lu%s);\n", name,
-                (unsigned long)index,                     hopper.c_str(),
-                (unsigned long)(index + nof_perm_ts - 1), skipper.c_str());
-              hopper = skipper;
-              t->set_code_generated();
-              index += nof_perm_ts;
-              break; }
-
-            default:
-              str = t->generate_code_init_seof_element(str, name,
-                (Int2string(index_offset + index) + skipper).c_str(), oftype_name_str);
-              // no break
-            case TEMPLATE_NOTUSED:
-              index++;
-              break;
-            }
-          }
-
-          break;
-
-        }
-
-
-        if (!has_permutation && has_allfrom()) {
-          for (size_t i = 0; i < nof_ts; i++) {
-            Template *t = u.templates->get_t_byIndex(i);
-            if (t->templatetype == ALL_FROM) {
-              variables.add(i);
-            }
-            else {
-              fixed_part++;
-            }
-          }
-          char* str_preamble = 0;
-          char* str_set_size = mputprintf(0, "%s.set_size(%lu", name,
-            (unsigned long)fixed_part);
-
-          // variable part
-          for (size_t i = 0, v = variables.size(); i < v; ++i) {
-            Template *t = u.templates->get_t_byIndex(variables[i]);
             if (t->templatetype == ALL_FROM) {
               Value *refv = t->u.all_from->u.specific_value;
               // don't call get_Value(), it rips out the value from the template
@@ -4153,8 +3946,7 @@ end:
                 if (expr.preamble)
                   str_preamble = mputstr(str_preamble, expr.preamble);
                 Code::free_expr(&expr);
-              }
-              else {
+              } else {
                 str_set_size = mputstr (str_set_size, ass->get_id().get_name().c_str());
                 if (subrefs) {
                   expression_struct expr;
@@ -4184,21 +3976,6 @@ end:
               }
 
               str_set_size = mputstr(str_set_size, ".n_elem()");
-            }
-          }
-          str = mputstr(str, str_preamble);
-          str = mputstr(str, str_set_size);
-          Free(str_preamble);
-          Free(str_set_size);
-          str = mputstrn(str, ");\n", 3); // finally done set_size
-
-          size_t index = 0;
-          string skipper;
-          for (size_t i = 0; i < nof_ts; i++) {
-            Template *t = u.templates->get_t_byIndex(i);
-            Int ix(index_offset + i);
-            switch (t->templatetype) {
-            case ALL_FROM: {
               expression_struct expr;
               Code::init_expr(&expr);
               switch (t->u.all_from->templatetype) {
@@ -4206,14 +3983,14 @@ end:
                   Value *spec = t->u.all_from->u.specific_value;
                   switch (spec->get_valuetype()) {
                   case Common::Value::V_REFD: {
-                    Common::Reference  *ref = spec->get_reference();
-                    Ref_pard* ref_pard = dynamic_cast<Ref_pard*>(ref);
+                    ref = spec->get_reference();
+                    ref_pard = dynamic_cast<Ref_pard*>(ref);
                     if (ref_pard)
                       ref_pard->generate_code_cached(&expr);
                     else
                       ref->generate_code(&expr);
 
-                    Common::Assignment* ass = ref->get_refd_assignment();
+                    ass = ref->get_refd_assignment();
                     switch(ass->get_asstype()) {
                     case Common::Assignment::A_CONST:
                     case Common::Assignment::A_EXT_CONST:
@@ -4242,38 +4019,171 @@ end:
                   FATAL_ERROR("ttype %d", t->u.all_from->templatetype);
                   break; }
               }
-              str = mputprintf(str,
+              str_body = mputprintf(str_body,
                 "for (int i_i = 0, i_lim = %s.n_elem(); i_i < i_lim; ++i_i) {\n",
                 expr.expr);
-              str = t->generate_code_init_seof_element(str, name,
-                (Int2string(ix) + skipper + " + i_i").c_str(),
+              str_body = t->generate_code_init_seof_element(str_body, name,
+                (counter + " + i_i").c_str(),
                 oftype_name_str);
-              str = mputstrn(str, "}\n", 2);
-              skipper += "-1+";
-              skipper += expr.expr;
-              skipper += ".n_elem() ";
+              str_body = mputstrn(str_body, "}\n", 2);
+              str_body = mputprintf(str_body, "%s += %s.n_elem();\n", counter.c_str(), expr.expr);
               Code::free_expr(&expr);
               t->set_code_generated();
-              ++index;
-              break; }
-            default: {
-               str = t->generate_code_init_seof_element(str, name,
-                 (Int2string(index_offset + index) + skipper).c_str(), oftype_name_str);
-               // no break
-            case TEMPLATE_NOTUSED:
-               ++index;
-               break; }
+            } else if (t->templatetype == PERMUTATION_MATCH) {
+              string permutation_start = get_temporary_id();
+              str_body = mputprintf(str_body, "int %s = %s;\n",
+                permutation_start.c_str(), counter.c_str());
+              size_t nof_perm_ts = t->u.templates->get_nof_ts();
+              for (size_t j = 0; j < nof_perm_ts; j++) {
+                Template *subt = t->u.templates->get_t_byIndex(j);
+                if (subt->templatetype == ALL_FROM) {
+                  Value *refv = subt->u.all_from->u.specific_value;
+                  // don't call get_Value(), it rips out the value from the template
+                  if (refv->get_valuetype()!=Value::V_REFD) FATAL_ERROR("%s", __FUNCTION__);
+                  Common::Reference  *ref = refv->get_reference();
+                  FieldOrArrayRefs   *subrefs = ref->get_subrefs();
+                  Common::Assignment *ass = ref->get_refd_assignment();
+                  str_set_size = mputstrn(str_set_size, " + ", 3);
+                  Ref_pard* ref_pard = dynamic_cast<Ref_pard*>(ref);
+                  if (ref_pard) {
+                    // in case of parametrised references:
+                    //  - temporary parameters need to be declared (stored in str_preamble)
+                    //  - the same temporary needs to be used at each call (generate_code_cached call)
+                    expression_struct expr;
+                    Code::init_expr(&expr);
+
+                    ref_pard->generate_code_cached(&expr);
+                    str_set_size = mputprintf(str_set_size, "%s", expr.expr);
+                    if (expr.preamble)
+                      str_preamble = mputstr(str_preamble, expr.preamble);
+                    Code::free_expr(&expr);
+                  }
+                  else {
+                    str_set_size = mputstr (str_set_size, ass->get_id().get_name().c_str());
+                    if (subrefs) {
+                      expression_struct expr;
+                      Code::init_expr(&expr);
+                      subrefs->generate_code(&expr, ass);
+                      str_set_size = mputprintf(str_set_size, "%s", expr.expr);
+                      Code::free_expr(&expr);
+                    }
+                  }
+
+                  switch(ass->get_asstype()) {
+                  case Common::Assignment::A_CONST:
+                  case Common::Assignment::A_EXT_CONST:
+                  case Common::Assignment::A_MODULEPAR:
+                  case Common::Assignment::A_VAR:
+                  case Common::Assignment::A_PAR_VAL_IN:
+                  case Common::Assignment::A_PAR_VAL_OUT:
+                  case Common::Assignment::A_PAR_VAL_INOUT:
+                  case Common::Assignment::A_FUNCTION_RVAL:
+                  case Common::Assignment::A_EXT_FUNCTION_RVAL:
+                    if (ass->get_Type()->field_is_optional(subrefs)) {
+                      str_set_size = mputstrn(str_set_size, "()", 2);
+                    }
+                    break;
+                  default:
+                    break;
+                  }
+                  
+                  str_set_size = mputstr(str_set_size, ".n_elem()");
+                } else {
+                  fixed_part++;
+                  str_body = subt->generate_code_init_seof_element(str_body, name,
+                    counter.c_str(), oftype_name_str);
+                }
+                
+                if (subt->templatetype == ALL_FROM) {
+                  expression_struct expr;
+                  Code::init_expr(&expr);
+                  switch (subt->u.all_from->templatetype) {
+                  case SPECIFIC_VALUE: {
+                    Value *spec = subt->u.all_from->u.specific_value;
+                    switch (spec->get_valuetype()) {
+                    case Common::Value::V_REFD: {
+                      Common::Reference  *ref = spec->get_reference();
+                      Ref_pard* ref_pard = dynamic_cast<Ref_pard*>(ref);
+                      if (ref_pard)
+                        ref_pard->generate_code_cached(&expr);
+                      else
+                        ref->generate_code(&expr);
+
+                      Common::Assignment* ass = ref->get_refd_assignment();
+                      switch(ass->get_asstype()) {
+                      case Common::Assignment::A_CONST:
+                      case Common::Assignment::A_EXT_CONST:
+                      case Common::Assignment::A_MODULEPAR:
+                      case Common::Assignment::A_VAR:
+                      case Common::Assignment::A_PAR_VAL_IN:
+                      case Common::Assignment::A_PAR_VAL_OUT:
+                      case Common::Assignment::A_PAR_VAL_INOUT:
+                      case Common::Assignment::A_FUNCTION_RVAL:
+                      case Common::Assignment::A_EXT_FUNCTION_RVAL:
+                        if (ass->get_Type()->field_is_optional(ref->get_subrefs())) {
+                          expr.expr = mputstrn(expr.expr, "()", 2);
+                        }
+                        break;
+                      default:
+                        break;
+                      }
+
+                      break; }
+                    default:
+                      FATAL_ERROR("vtype %d", spec->get_valuetype());
+                      break;
+                    }
+                    break; }
+                  default:
+                    FATAL_ERROR("ttype %d", subt->u.all_from->templatetype);
+                    break;
+                  }
+                  str_body = mputprintf(str_body,
+                    "for (int i_i = 0, i_lim = %s.n_elem(); i_i < i_lim; ++i_i) {\n",
+                    expr.expr);
+
+                  str_body = subt->generate_code_init_seof_element(str_body, name,
+                    (counter + " + i_i").c_str(),
+                    oftype_name_str);
+
+                  str_body = mputstrn(str_body, "}\n", 2);
+                  str_body = mputprintf(str_body, "%s += %s.n_elem();\n", counter.c_str(), expr.expr);
+                  Code::free_expr(&expr);
+                }
+                else {
+                  str_body = subt->generate_code_init_seof_element(str_body, name,
+                    counter.c_str(), oftype_name_str);
+                  str_body = mputprintf(str_body, "%s++;\n", counter.c_str());
+                }
+                  
+              }
+              // do not consider index_offset in case of permutation indicators
+              str_body = mputprintf(str_body, "%s.add_permutation(%s-%lld, %s-%lld-1);\n", name,
+                permutation_start.c_str(), index_offset, counter.c_str(), index_offset);
+              t->set_code_generated();
+            } else {
+              fixed_part++;
+              str_body = t->generate_code_init_seof_element(str_body, name,
+                      counter.c_str(), oftype_name_str);
+              str_body = mputprintf(str_body, "%s++;\n", counter.c_str());
             }
           }
-          break;
+          str = mputstr(str, str_preamble);
+          str = mputprintf(str, "%s.set_size(%lu", name, fixed_part);
+          if (str_set_size != NULL) {
+            str = mputstr(str, str_set_size);
+          }
+          str = mputstr(str, ");\n");
+          str = mputstr(str, str_body);
+          Free(str_preamble);
+          Free(str_set_size);
+          Free(str_body);
+          return str;
         }
-
-        // else carry on
       }
 compile_time:
       // setting the size first
-      if (!has_allfrom())
-        str = mputprintf(str, "%s.set_size(%lu);\n", name, (unsigned long) get_nof_listitems());
+      str = mputprintf(str, "%s.set_size(%lu);\n", name, (unsigned long) get_nof_listitems());
       // determining the index offset based on the governor
 
       size_t index = 0;
@@ -4880,13 +4790,14 @@ compile_time:
     // generate a new class for this decmatch template
     string class_tmp_id = my_scope->get_scope_mod_gen()->get_temporary_id();
     Type* target_type = u.dec_match.target->get_expr_governor(
-      Type::EXPECTED_TEMPLATE)->get_type_refd_last();
+      Type::EXPECTED_TEMPLATE);
+    Type* target_type_last = target_type->get_type_refd_last();
     // use the name of the type at the end of the reference chain for logging
     string type_name;
-    const char* type_name_ptr = target_type->get_typename_builtin(
-      target_type->get_typetype_ttcn3());
+    const char* type_name_ptr = target_type_last->get_typename_builtin(
+      target_type_last->get_typetype_ttcn3());
     if (type_name_ptr == NULL) {
-      type_name = target_type->get_type_refd_last()->get_dispname();
+      type_name = target_type_last->get_dispname();
     }
     else {
       type_name = type_name_ptr;
@@ -4910,35 +4821,52 @@ compile_time:
       target_type->get_genname_value(my_scope).c_str(), class_tmp_id.c_str(),
       target_type->get_genname_template(my_scope).c_str(), class_tmp_id.c_str(),
       target_type->get_genname_value(my_scope).c_str());
-    bool dec_by_func = target_type->is_coding_by_function(false);
-    if (dec_by_func) {
+    
+    bool legacy_dec_by_func = legacy_codec_handling &&
+      target_type_last->is_coding_by_function(false);
+    if (legacy_codec_handling) {
+      if (legacy_dec_by_func) {
+        str = mputprintf(str,
+          // convert the TTCN_Buffer into a bitstring
+          "OCTETSTRING os;\n"
+          "buff.get_string(os);\n"
+          "BITSTRING bs(oct2bit(os));\n"
+          // decode the value (with the user function)
+          "if (%s(bs, *dec_val) != 0) {\n"
+          "TTCN_warning(\"Decoded content matching failed, because the data could "
+          "not be decoded by the provided function.\");\n"
+          "ret_val = FALSE;\n"
+          "}\n"
+          // make sure the bitstring is empty after decoding, display a warning otherwise
+          "else if (bs.lengthof() != 0) {\n",
+          target_type_last->get_legacy_coding_function(false)->get_genname_from_scope(my_scope).c_str());
+      }
+      else {
+        str = mputprintf(str,
+          // decode the value (with a built-in decoder)
+          "dec_val->decode(%s_descr_, buff, TTCN_EncDec::CT_%s);\n"
+          // make sure no errors occurred (these already displayed warnings during
+          // decoding)
+          "if (TTCN_EncDec::get_last_error_type() != TTCN_EncDec::ET_NONE) "
+          "ret_val = FALSE;\n"
+          // make sure the buffer is empty after decoding, display a warning otherwise
+          "else if (buff.get_read_len() != 0) {\n",
+          target_type->get_genname_typedescriptor(my_scope).c_str(),
+          target_type_last->get_coding(false).c_str());
+      }
+    }
+    else { // new codec handling
       str = mputprintf(str,
-        // convert the TTCN_Buffer into a bitstring
         "OCTETSTRING os;\n"
         "buff.get_string(os);\n"
-        "BITSTRING bs(oct2bit(os));\n"
-        // decode the value (with the user function)
-        "if (%s(bs, *dec_val) != 0) {\n"
+        "if (%s_decoder(os, *dec_val, %s_default_coding) != 0) {\n"
         "TTCN_warning(\"Decoded content matching failed, because the data could "
-        "not be decoded by the provided function.\");\n"
+        "not be decoded.\");\n"
         "ret_val = FALSE;\n"
         "}\n"
-        // make sure the bitstring is empty after decoding, display a warning otherwise
-        "else if (bs.lengthof() != 0) {\n",
-        target_type->get_coding_function(false)->get_genname_from_scope(my_scope).c_str());
-    }
-    else {
-      str = mputprintf(str,
-        // decode the value (with a built-in decoder)
-        "dec_val->decode(%s_descr_, buff, TTCN_EncDec::CT_%s);\n"
-        // make sure no errors occurred (these already displayed warnings during
-        // decoding)
-        "if (TTCN_EncDec::get_last_error_type() != TTCN_EncDec::ET_NONE) "
-        "ret_val = FALSE;\n"
-        // make sure the buffer is empty after decoding, display a warning otherwise
-        "else if (buff.get_read_len() != 0) {\n",
-        target_type->get_genname_typedescriptor(my_scope).c_str(),
-        target_type->get_coding(false).c_str());
+        "else if (os.lengthof() != 0) {\n",
+        target_type->get_genname_coder(my_scope).c_str(),
+        target_type->get_genname_default_coding(my_scope).c_str());
     }
     str = mputprintf(str,
       "TTCN_warning(\"Decoded content matching failed, because the buffer was not "
@@ -4968,8 +4896,9 @@ compile_time:
       "const TTCN_Typedescriptor_t* get_type_descr() const { return &%s_descr_; }\n"
       "};\n"
       "%s.set_type(DECODE_MATCH);\n"
-      "{\n", dec_by_func ? "bits" : "octets",
-      dec_by_func ? "bs.lengthof()" : "(int)buff.get_read_len()",
+      "{\n", legacy_dec_by_func ? "bits" : "octets",
+      !legacy_codec_handling ? "os.lengthof()" :
+      (legacy_dec_by_func ? "bs.lengthof()" : "(int)buff.get_read_len()"),
       omit_in_value_list ? ", TRUE" : "", type_name.c_str(),
       target_type->get_genname_typedescriptor(my_scope).c_str(), name);
     
@@ -5094,7 +5023,10 @@ compile_time:
       // the parameterized template's default values must also be generated
       // (this only generates their value assignments, their declarations will
       // be generated when the template's definition is reached)
-      if (ass->get_my_scope()->get_scope_mod_gen() == usage_mod) {
+      if (ass->get_my_scope()->get_scope_mod_gen() == usage_mod &&
+          my_scope->get_statementblock_scope() == NULL) {
+        // only if the template reference is global and is in the same module
+        // as the referenced parameterized template
         str = formal_parlist->generate_code_defval(str);
       }
     } else {

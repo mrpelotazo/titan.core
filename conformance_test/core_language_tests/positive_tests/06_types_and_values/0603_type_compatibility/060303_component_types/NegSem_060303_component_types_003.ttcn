@@ -1,0 +1,53 @@
+/******************************************************************************
+ * Copyright (c) ETSI 2017.
+ *
+ * This file is subject to copyrights owned by ETSI. Non-exclusive permission
+ * is hereby granted, free of charge, to copy, reproduce and amend this file
+ * under the following conditions: It is provided "as is", without warranty of any
+ * kind, expressed or implied.
+ * 
+ * ETSI shall never be liable for any claim, damages, or other liability arising
+ * from its use or inability of use.This permission does not apply to any documentation
+ * associated with this file for which ETSI keeps all rights reserved. The present
+ * copyright notice shall be included in all copies of whole or part of this
+ * file and shall not imply any sub-license right.
+ *
+ * Modified by: Adrien Kirjak
+ *
+ ** @version  0.0.1
+ ** @purpose  1:6.3.3, Ensure that the IUT correctly handles component compatibility of different runs on clauses
+ ** @verdict  pass reject
+ ***************************************************/
+
+// The following requirements are tested:
+// Runs on compatibility: a function or altstep referring to component type "A" in its runs on clause may be
+//called or started on a component instance of type 'B' if all the definitions of "A" have identical definitions in
+//"B". 
+
+module NegSem_060303_component_types_003 { 
+
+	type port P message {
+		inout integer;
+	} with {extension "internal"}
+
+	type component GeneralComp {
+		port P p;
+	}
+    
+    type component GeneralCompEx extends GeneralComp {
+        port P p2;
+    }
+    
+    function f_test() runs on GeneralCompEx {
+		setverdict(fail);
+    }
+
+	testcase TC_NegSem_060303_component_types_003() runs on GeneralComp {
+		f_test(); // is not allowed, because GeneralComp is not compatible with the "runs on" of the function
+		setverdict(pass);
+	}
+	
+	control{
+	    execute(TC_NegSem_060303_component_types_003());
+	}
+}

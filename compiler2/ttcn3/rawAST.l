@@ -12,6 +12,7 @@
  *   Forstner, Matyas
  *   Raduly, Csaba
  *   Szabados, Kristof
+ *   Szabo, Bence Janos
  *   Szabo, Janos Zoltan – initial implementation
  *   Szalai, Gabor
  *   Zalanyi, Balazs Andor
@@ -299,6 +300,7 @@ HEXORDER    { BEGIN(rawcodec); RETURN(XHexOrderKeyword); }
 TOPLEVEL    { BEGIN(rawcodec); RETURN(XToplevelKeyword); }
 IntX        { RETURN(XIntXKeyword); }
 bit         { RETURN(XBitKeyword); }
+bits        { RETURN(XBitKeyword); }
 unsigned    { RETURN(XUnsignedKeyword); }
 "UTF-8"     { RETURN(XUTF8Keyword); }
 "UTF-16"    { RETURN(XUTF16Keyword); }
@@ -320,6 +322,7 @@ word16      { yylval.enumval = 16; RETURN(XOctets); }
 dword32     { yylval.enumval = 32; RETURN(XOctets); }
 elements    { yylval.enumval = -1; RETURN(XOctets); }
 variable    { yylval.intval = 0; RETURN(XNumber);}
+null_terminated    { yylval.intval = -1; RETURN(XNumber);}
 IEEE754[ ]double    { yylval.intval = 64; RETURN(XNumber);}
 IEEE754[ ]float    { yylval.intval = 32; RETURN(XNumber);}
 left        { yylval.enumval = XDEFLEFT; RETURN(XLeft); }
@@ -461,6 +464,7 @@ extend        RETURN(XKWextend);
 metainfo      RETURN(XKWmetainfo);
 for           RETURN(XKWfor);
 unbound       RETURN(XKWunbound);
+number        RETURN(XKWnumber);
 [(]           { BEGIN(jsonvalue); RETURN(XJsonValueStart); }
 {IDENTIFIER}  { yylval.str = mcopystr(yytext); RETURN(XAliasToken); }
 [^: \t]       { rawAST_error("invalid JSON token"); }
@@ -684,7 +688,8 @@ int parse_rawAST(RawAST *par, TextAST *textpar, XerAttributes *xerpar,
     BEGIN(INITIAL);
     int retn=rawAST_parse();
     yylex_destroy();
-    if(!raw_found) raw_found=raw_f || (!text_f && !xer_f && !ber_f && !json_f);
+    if(!raw_found) raw_found=raw_f || (legacy_codec_handling &&
+      !text_f && !xer_f && !ber_f && !json_f);
     // if none found, pretend some RAW attribute was found
     if(!text_found) text_found=text_f;
     if(!xer_found) xer_found=xer_f;

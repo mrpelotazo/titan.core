@@ -99,7 +99,8 @@ boolean generate_skeleton = FALSE, force_overwrite = FALSE,
   force_gen_seof = FALSE, omit_in_value_list = FALSE,
   warnings_for_bad_variants = FALSE, debugger_active = FALSE,
   legacy_unbound_union_fields = FALSE, split_to_slices = FALSE,
-  legacy_untagged_union;
+  legacy_untagged_union, disable_user_info, legacy_codec_handling = FALSE;
+  // use legacy codec handling until the implementation of the new one is finished
 
 // Default code splitting mode is set to 'no splitting'.
 CodeGenHelper::split_type code_splitting_mode = CodeGenHelper::SPLIT_NONE;
@@ -230,6 +231,12 @@ boolean enable_xer()
 boolean enable_json()
 {
   return !json_disabled;
+}
+
+boolean enable_oer()
+{
+  // TODO: temp while no new compiler flag
+  return TRUE;
 }
 
 boolean disable_attribute_validation()
@@ -388,7 +395,7 @@ static boolean is_valid_asn1_filename(const char* file_name)
 static void usage()
 {
   fprintf(stderr, "\n"
-    "usage: %s [-abcdEfgijlLMnNOpqrRsStuwxXyY] [-J file] [-K file] [-z file] [-V verb_level]\n"
+    "usage: %s [-abcdDeEfgijlLMnNOpqrRsStuwxXyY] [-J file] [-K file] [-z file] [-V verb_level]\n"
     "	[-o dir] [-U none|type|'number'] [-P modulename.top_level_pdu_name] [-Q number] ...\n"
     "	[-T] module.ttcn [-A] module.asn ...\n"
     "	or  %s -v\n"
@@ -400,6 +407,8 @@ static void usage()
     "	-B:		allow selected union field to be unbound (legacy behavior)\n"
     "	-c:		write out checksums in case of error\n"
     "	-d:		treat default fields as omit\n"
+    "	-D:		disable user and time information generation in the generated files\n"
+    "	-e:		enforce legacy handling of 'encode' and 'variant' attributes\n"
     "	-E:		display only warnings for unrecognized encoding variants\n"
     "	-f:		force overwriting of output files\n"
     "	-g:		emulate GCC error/warning message format\n"
@@ -489,7 +498,8 @@ int main(int argc, char *argv[])
     s0flag = false, Cflag = false, yflag = false, Uflag = false, Qflag = false,
     Sflag = false, Kflag = false, jflag = false, zflag = false, Fflag = false,
     Mflag = false, Eflag = false, nflag = false, Bflag = false, errflag = false,
-    print_usage = false, ttcn2json = false, Nflag = false; 
+    print_usage = false, ttcn2json = false, Nflag = false, Dflag = false,
+    eflag = false; 
 
   CodeGenHelper cgh;
 
@@ -507,6 +517,8 @@ int main(int argc, char *argv[])
     ttcn2json = true;
     display_up_to_date = TRUE;
     implicit_json_encoding = TRUE;
+    // ttcn2json uses the legacy handling of JSON encode attributes and variants
+    legacy_codec_handling = TRUE;
     for (int i = 2; i < argc; ++i) {
       // A dash (-) is used to separate the schema file name from the input files
       if (0 == strcmp(argv[i], "-")) {
@@ -583,7 +595,7 @@ int main(int argc, char *argv[])
 
   if (!ttcn2json) {
     for ( ; ; ) {
-      int c = getopt(argc, argv, "aA:bBcC:dEfFgijJ:K:lLMnNo:pP:qQ:rRsStT:uU:vV:wxXyYz:0-");
+      int c = getopt(argc, argv, "aA:bBcC:dDeEfFgijJ:K:lLMnNo:pP:qQ:rRsStT:uU:vV:wxXyYz:0-");
       if (c == -1) break;
       switch (c) {
       case 'a':
@@ -640,6 +652,10 @@ int main(int argc, char *argv[])
       case 'd':
         SET_FLAG(d);
         default_as_optional = TRUE;
+        break;
+      case 'D':
+        SET_FLAG(D);
+        disable_user_info = TRUE;
         break;
       case 'f':
         SET_FLAG(f);
@@ -769,6 +785,10 @@ int main(int argc, char *argv[])
         SET_FLAG(B);
         legacy_unbound_union_fields = TRUE;
         break;
+      case 'e':
+        SET_FLAG(e);
+        legacy_codec_handling = TRUE;
+        break;
 
       case 'Q': {
         long max_errs;
@@ -814,7 +834,7 @@ int main(int argc, char *argv[])
         bflag || fflag || iflag || lflag || oflag || pflag || qflag ||
         rflag || sflag || tflag || uflag || wflag || xflag || Xflag || Rflag ||
         Uflag || yflag || Kflag || jflag || zflag || Fflag || Mflag || Eflag ||
-        nflag || Bflag) {
+        nflag || Bflag || Dflag || eflag) {
         errflag = true;
         print_usage = true;
       }

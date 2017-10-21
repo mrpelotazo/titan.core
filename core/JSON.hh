@@ -8,12 +8,18 @@
  * Contributors:
  *   Balasko, Jeno
  *   Baranyi, Botond
+ *   Szabo, Bence Janos
  *
  ******************************************************************************/
 #ifndef JSON_HH_
 #define	JSON_HH_
 
 #include "Types.h"
+
+class TTCN_Buffer;
+class JSON_Tokenizer;
+class CHARSTRING;
+class INTEGER;
 
 /** Descriptor for JSON encoding/decoding during runtime */
 struct TTCN_JSONdescriptor_t 
@@ -55,6 +61,11 @@ struct TTCN_JSONdescriptor_t
     * with the meta information is found.
     * Example: [ value1, value2, { "metainfo []" : "unbound" }, value3 ] */
   boolean metainfo_unbound;
+  
+  /** If set, the enumerated value's numeric form will be encoded as a JSON
+    * number, instead of its name form as a JSON string (affects both encoding
+    * and decoding). */
+  boolean as_number;
 };
 
 /** This macro makes sure that coding errors will only be displayed if the silent
@@ -130,6 +141,15 @@ enum json_metainfo_t {
 #define JSON_DEC_METAINFO_NAME_ERROR "Meta info provided for non-existent field '%.*s'"
 #define JSON_DEC_METAINFO_VALUE_ERROR "Invalid meta info for field '%s'"
 #define JSON_DEC_METAINFO_NOT_APPLICABLE "Meta info not applicable to field '%s'"
+
+
+// Functions for conversion between json and cbor and vice versa
+void json2cbor_coding(TTCN_Buffer& buff, JSON_Tokenizer& tok, size_t& num_of_items);
+void cbor2json_coding(TTCN_Buffer& buff, JSON_Tokenizer& tok, bool in_object);
+
+// Functions for conversion between json and bson and vice versa
+void json2bson_coding(TTCN_Buffer& buff, JSON_Tokenizer& tok, bool in_object, bool in_array, INTEGER& length, CHARSTRING& f_name, bool& is_special);
+void bson2json_coding(TTCN_Buffer& buff, JSON_Tokenizer& tok, bool in_object, bool in_array);
 
 #endif	/* JSON_HH_ */
 

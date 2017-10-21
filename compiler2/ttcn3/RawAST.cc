@@ -19,14 +19,14 @@
 #include "../main.hh"
 
 RawAST::RawAST(){
-    init_rawast(false);
+    init_rawast(0);
 }
 
-RawAST::RawAST(bool int_type){
-    init_rawast(int_type);
+RawAST::RawAST(int default_length){
+    init_rawast(default_length);
 }
 
-RawAST::RawAST(RawAST *other,bool int_type){
+RawAST::RawAST(RawAST *other, int default_length){
     if(other){
     fieldlength=other->fieldlength;
     comp=other->comp;
@@ -49,6 +49,7 @@ RawAST::RawAST(RawAST *other,bool int_type){
     ext_bit_groups=NULL;
     lengthto_num=0;
     lengthto=NULL;
+    lengthto_offset = 0;
     pointerto=NULL;
     ptrbase=NULL;
     ptroffset=other->ptroffset;
@@ -67,11 +68,11 @@ RawAST::RawAST(RawAST *other,bool int_type){
     intx = other->intx;
     stringformat = other->stringformat;
     }
-    else init_rawast(int_type);
+    else init_rawast(default_length);
 }
 
-void RawAST::init_rawast(bool int_type){
-    fieldlength=int_type?8:0;
+void RawAST::init_rawast(int default_length){
+    fieldlength=default_length;
     comp=XDEFDEFAULT;
     byteorder=XDEFDEFAULT;
     align=XDEFDEFAULT;
@@ -90,6 +91,7 @@ void RawAST::init_rawast(bool int_type){
     fieldorder=XDEFDEFAULT;
     lengthto_num=0;
     lengthto=NULL;
+    lengthto_offset = 0;
     pointerto=NULL;
     ptrbase=NULL;
     ptroffset=0;
@@ -218,6 +220,7 @@ void copy_rawAST_to_struct(RawAST *from, raw_attrib_struct *to){
     if (from->lengthto_num > 0)
       to->lengthto = static_cast<int*>( Malloc(from->lengthto_num * sizeof(int)) );
     else to->lengthto = NULL;
+    to->lengthto_offset = from->lengthto_offset;
     to->pointerto=-1;
     to->ptroffset=from->ptroffset;
     to->unit=from->unit;

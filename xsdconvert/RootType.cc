@@ -25,6 +25,7 @@ RootType::RootType(XMLParser * a_parser, TTCN3Module * a_module, const Construct
 , variant_ref()
 , comment()
 , construct(a_construct)
+, new_construct(a_construct)
 , origin(from_unknown)
 , visible(true)
 , nameDepList()
@@ -292,6 +293,11 @@ void TypeType::checkBuintInTypeReference() {
         break;
       }
     }
+  }
+  
+  // Third chance. NoTargetNamespace module without a prefix.
+  if (t_module->getTargetNamespace() == "NoTargetNamespace" && refPrefix.empty()) {
+    found = true;
   }
   if (!found) {
     printError(t_module->getSchemaname(), t_parser->getActualLineNumber(), Mstring("Cannot find the namespace of type: ") + originalValueWoPrefix);

@@ -7,6 +7,7 @@
  *
  * Contributors:
  *   Balasko, Jeno
+ *   Baranyi, Botond
  *   Delic, Adam
  *   Raduly, Csaba
  *   Szabados, Kristof
@@ -229,15 +230,20 @@ namespace Ttcn {
     AttributeSpec& operator=(const AttributeSpec& p);
   private:
     string spec; ///< The attribute specification (free text)
+    string encoding; ///< Encoding specification for variant attributes (free text)
+    // TODO: check that the variant indeed belongs to the specified encoding
     /// Copy constructor, for clone() only
     AttributeSpec(const AttributeSpec& p)
-      : Node(p), Location(p), spec(p.spec) { }
+      : Node(p), Location(p), spec(p.spec), encoding(p.encoding) { }
   public:
     AttributeSpec(const string& p_spec)
-      : Node(), Location(), spec(p_spec) { }
+      : Node(), Location(), spec(p_spec), encoding() { }
+    AttributeSpec(const string& p_spec, const string& p_encoding)
+      : Node(), Location(), spec(p_spec), encoding(p_encoding) { }
     virtual AttributeSpec* clone() const;
     virtual void set_fullname(const string& p_fullname);
     const string& get_spec() const { return spec; }
+    const string& get_encoding() const { return encoding; }
     virtual void dump(unsigned level) const;
   };
 
@@ -261,21 +267,21 @@ namespace Ttcn {
     };
   private:
     attribtype_t attribKeyword;
-    /// True if the \c override keyword was used
-    bool hasOverride;
+    /// Attribute modifier ('override', '@local' or none)
+    attribute_modifier_t modifier;
     /// The stuff in parenthesis before the attribute text. Owned.
     Qualifiers *attribQualifiers;
     /// The attribute text (FreeText). Owned.
     AttributeSpec* attribSpec;
 
   public:
-    SingleWithAttrib(attribtype_t p_attribKeyword, bool p_hasOverride,
+    SingleWithAttrib(attribtype_t p_attribKeyword, attribute_modifier_t p_modifier,
           Qualifiers *p_attribQualifiers, AttributeSpec *p_attribSpec);
     ~SingleWithAttrib();
     virtual SingleWithAttrib* clone() const;
     virtual void set_fullname(const string& p_fullname);
     attribtype_t get_attribKeyword() const{ return attribKeyword; }
-    bool has_override() const { return hasOverride; }
+    attribute_modifier_t get_modifier() const { return modifier; }
     AttributeSpec const& get_attribSpec() const { return *attribSpec; }
     Qualifiers *get_attribQualifiers() const { return attribQualifiers; }
     virtual void dump(unsigned level) const;
@@ -327,6 +333,7 @@ namespace Ttcn {
   private:
     bool had_global_variants;
     bool attributes_checked;
+    bool global_attrib_checked;
     bool cached;
     bool s_o_encode;
     WithAttribPath* parent;
@@ -337,8 +344,8 @@ namespace Ttcn {
       bool& stepped_over_encode);
   public:
     WithAttribPath() : Node(), had_global_variants(false),
-      attributes_checked(false), cached(false), s_o_encode(false),
-      parent(0), m_w_attrib(0) { }
+      attributes_checked(false), global_attrib_checked(false), cached(false),
+      s_o_encode(false), parent(0), m_w_attrib(0) { }
     ~WithAttribPath();
     virtual WithAttribPath* clone() const;
     virtual void set_fullname(const string& p_fullname);
