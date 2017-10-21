@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.6)
 # TTCN3 not generated sources
 #---------------------------------------------------------------------------------------
 set(TTCN3_STATIC_SOURCES
-    ArrayDimensions.cc AST_ttcn3.cc Attributes.cc ILT.cc PatternString.cc
+    ArrayDimensions.cc AST_ttcn3.cc Attributes.cc ILT.cc OerAST.cc PatternString.cc
     RawAST.cc Statement.cc TtcnTemplate.cc Templatestuff.cc TextAST.cc
     Ttcnstuff.cc compiler.c port.c signature.c BerAST.cc JsonAST.cc Ttcn2Json.cc profiler.c
 )
