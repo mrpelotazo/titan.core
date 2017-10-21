@@ -37,7 +37,7 @@ set(CORE_STATIC_SOURCES_NO_MAIN
     Boolean.cc Charstring.cc Communication.cc Component.cc Default.cc Encdec.cc
     Error.cc Float.cc Hexstring.cc RInt.cc Integer.cc Logger.cc LoggerPlugin.cc
     LoggerPluginManager.cc LegacyLogger.cc LoggingBits.cc
-    Module_list.cc Objid.cc Octetstring.cc Port.cc RAW.cc
+    Module_list.cc Objid.cc Octetstring.cc OER.cc Port.cc RAW.cc
     Runtime.cc Snapshot.cc Struct_of.cc Template.cc TEXT.cc
     Textbuf.cc Timer.cc Param_Types.cc Universal_charstring.cc
     Verdicttype.cc XER.cc XmlReader.cc TitanLoggerControlImpl.cc TCov.cc JSON.cc
