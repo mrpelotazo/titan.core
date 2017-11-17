@@ -14,13 +14,18 @@ include(CMakePackageConfigHelpers)
 #---------------------------------------------------------------------------------------
 # Find required dependencies
 #---------------------------------------------------------------------------------------
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 find_package(OpenSSL REQUIRED)
 find_package(LibXml2 REQUIRED)
 find_package(Threads REQUIRED)
 set(CURSES_NEED_NCURSES TRUE)
 find_package(Curses REQUIRED)
-find_package(Editline REQUIRED)
+find_library(LIBEDIT edit)
+
+if(LIBEDIT)
+    message(STATUS "Found libedit: ${LIBEDIT}")
+else()
+    message(FATAL_ERROR "libedit could not be found")
+endif()
 
 #---------------------------------------------------------------------------------------
 # Compiler settings

@@ -129,7 +129,7 @@ target_compile_definitions(ttcn3 INTERFACE
 )
 
 target_link_libraries(ttcn3-dynamic PUBLIC
-    edit-dynamic
+    ${LIBEDIT}
 )
 
 target_include_directories(ttcn3 INTERFACE
@@ -167,7 +167,7 @@ add_library(ttcn3-parallel STATIC $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_
 add_library(ttcn3-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
 
 target_link_libraries(ttcn3-parallel-dynamic PUBLIC
-    edit-dynamic
+    ${LIBEDIT}
 )
 
 target_compile_definitions(ttcn3-parallel INTERFACE
@@ -213,7 +213,7 @@ target_compile_definitions(ttcn3-rt2 INTERFACE
 )
 
 target_link_libraries(ttcn3-rt2-dynamic PUBLIC
-    edit-dynamic
+    ${LIBEDIT}
 )
 
 target_include_directories(ttcn3-rt2 INTERFACE
@@ -255,7 +255,7 @@ target_compile_definitions(ttcn3-rt2-parallel INTERFACE
 )
 
 target_link_libraries(ttcn3-rt2-parallel-dynamic PUBLIC
-    edit-dynamic
+    ${LIBEDIT}
 )
 
 target_include_directories(ttcn3-rt2-parallel INTERFACE
