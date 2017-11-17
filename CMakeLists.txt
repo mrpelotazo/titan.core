@@ -119,11 +119,11 @@ if(UNIX)
         endif()
     endif()
 
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian/postinst.in
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpack/postinst.in
         ${CPACK_PACKAGE_DIRECTORY}/postinst
     )
 
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/debian/postrm.in
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpack/postrm.in
         ${CPACK_PACKAGE_DIRECTORY}/postrm
     )
 
