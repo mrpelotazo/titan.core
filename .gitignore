@@ -13,3 +13,4 @@ META-INF
 build.properties
 build
 *.swp
+docker/packages
