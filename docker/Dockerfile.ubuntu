@@ -1,0 +1,26 @@
+# Dockerfile
+FROM ubuntu:xenial
+
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    libssl-dev \
+    libxml2-dev \
+    libncurses5 \
+    libncurses5-dev \
+    libedit2 \
+    libedit-dev \
+    bison \
+    flex \
+    lsb-release \
+    cmake
+WORKDIR /work
+RUN git clone --branch v3.9.4 https://github.com/Kitware/CMake.git
+WORKDIR /work/CMake/build
+RUN cmake -DCPACK_GENERATOR="DEB" .. && make package
+RUN apt-get remove --purge cmake cmake-data -y
+RUN dpkg -i cmake-3.9.4-Linux-x86_64.deb
+COPY . /work/titan.core
+WORKDIR /work/titan.core/build
+RUN cmake .. && make package

@@ -1,0 +1,21 @@
+# Dockerfile
+FROM debian:stretch
+
+ENV DEBIAN_FRONTEND noninteractive
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    libssl-dev \
+    libxml2-dev \
+    libncurses5 \
+    libncurses5-dev \
+    libedit2 \
+    libedit-dev \
+    bison \
+    flex \
+    lsb-release \
+    cmake
+WORKDIR /work
+COPY . /work/titan.core
+WORKDIR /work/titan.core/build
+RUN cmake .. && make package

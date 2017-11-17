@@ -1,0 +1,28 @@
+# Dockerfile
+FROM opensuse:42.3
+
+RUN zypper refresh && zypper --non-interactive install \
+    gcc \
+    gcc-c++\
+    git \
+    libopenssl-devel \
+    libxml2-devel \
+    libncurses5 \
+    ncurses-devel \
+    libedit0 \
+    libedit-devel \
+    bison \
+    flex \
+    lsb-release \
+    rpm-build \
+    cmake
+WORKDIR /work
+RUN git clone --branch v3.9.4 https://github.com/Kitware/CMake.git
+WORKDIR CMake/build
+RUN cmake -DCPACK_GENERATOR="RPM" .. && make package
+RUN zypper --non-interactive remove cmake
+RUN rpm -i cmake-3.9.4-Linux-x86_64.rpm
+COPY . /work/titan.core
+WORKDIR /work/titan.core/build
+RUN cmake .. && make package
+CMD ["/bin/bash"]

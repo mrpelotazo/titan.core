@@ -1,0 +1,28 @@
+# Dockerfile
+FROM centos:7.4.1708
+
+RUN yum --assumeyes update && yum --assumeyes install \
+    gcc \
+    gcc-c++\
+    libxml2 \
+    libxml2-devel \
+    git \
+    openssl \
+    openssl-devel \
+    ncurses-devel \
+    bison \
+    flex \
+    redhat-lsb \
+    rpm-build \
+	libedit \
+	libedit-devel \
+    cmake
+WORKDIR /work
+RUN git clone --branch v3.9.4 https://github.com/Kitware/CMake.git
+WORKDIR CMake/build
+RUN cmake -DCPACK_GENERATOR="RPM" .. && make package
+RUN yum --assumeyes remove cmake
+RUN rpm -i cmake-3.9.4-Linux-x86_64.rpm
+COPY . /work/titan.core
+WORKDIR /work/titan.core/build
+RUN cmake .. && make package
