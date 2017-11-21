@@ -6528,14 +6528,14 @@ namespace Ttcn {
     }
   }
     
-  bool Def_Function::chk_startable()
+  bool Def_Function::chk_startable(Location* caller_location)
   {
     if (!checked) chk();
+    fp_list->chk_startability("Function", get_fullname().c_str(), caller_location);
     if (is_startable) return true;
     if (!runs_on_ref) error("Function `%s' cannot be started on a parallel "
       "test component because it does not have `runs on' clause",
       get_fullname().c_str());
-    fp_list->chk_startability("Function", get_fullname().c_str());
     if (return_type && return_type->is_component_internal()) {
       map<Type*,void> type_chain;
       char* err_str = mprintf("the return type or embedded in the return type "
@@ -9478,20 +9478,23 @@ namespace Ttcn {
     }
   }
 
-  void FormalParList::chk_startability(const char *p_what, const char *p_name)
+  void FormalParList::chk_startability(const char *p_what, const char *p_name,
+                                       Location* caller_location)
   {
     if(!checked) FATAL_ERROR("FormalParList::chk_startability()");
-    if (is_startable) return;
+    bool has_out_or_inout = false;
     for (size_t i = 0; i < pars_v.size(); i++) {
       FormalPar *par = pars_v[i];
       switch (par->get_asstype()) {
-      case Common::Assignment::A_PAR_VAL_IN:
-      case Common::Assignment::A_PAR_TEMPL_IN:
       case Common::Assignment::A_PAR_VAL_INOUT:
       case Common::Assignment::A_PAR_TEMPL_INOUT:
       case Common::Assignment::A_PAR_VAL_OUT:
       case Common::Assignment::A_PAR_TEMPL_OUT:
-        if (par->get_Type()->is_component_internal()) {
+        has_out_or_inout = true;
+        // no break
+      case Common::Assignment::A_PAR_VAL_IN:
+      case Common::Assignment::A_PAR_TEMPL_IN:
+        if (!is_startable && par->get_Type()->is_component_internal()) {
           map<Type*,void> type_chain;
           char* err_str = mprintf("a parameter or embedded in a parameter of "
             "a function used in a start operation. "
@@ -9502,9 +9505,16 @@ namespace Ttcn {
         }
         break;
       default:
-        par->error("%s `%s' cannot be started on a parallel test component "
-          "because it has %s", p_what, p_name, par->get_description().c_str());
+        if (!is_startable) {
+          par->error("%s `%s' cannot be started on a parallel test component "
+            "because it has %s", p_what, p_name, par->get_description().c_str());
+        }
       }
+    }
+    if (has_out_or_inout) {
+      caller_location->warning("The `out' and `inout' parameters of functions "
+        "started on parallel test components will remain unchanged at the end "
+        "of the operation.");
     }
   }
 
@@ -10287,7 +10297,7 @@ namespace Ttcn {
         const char *tmp_id_str = tmp_id.c_str();
         expression_struct ref_expr;
         Code::init_expr(&ref_expr);
-        ref->generate_code_const_ref(&ref_expr);
+        ref->generate_code(&ref_expr);
         ref_expr.preamble = mputprintf(ref_expr.preamble, "%s& %s = %s;\n",
           is_template_par ? actual_par_type->get_genname_template(my_scope).c_str() :
           actual_par_type->get_genname_value(my_scope).c_str(), tmp_id_str, ref_expr.expr);

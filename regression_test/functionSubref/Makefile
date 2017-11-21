@@ -19,7 +19,7 @@ include $(TOPDIR)/Makefile.regression
 
 TTCN3_LIB = ttcn3$(RT2_SUFFIX)$(DYNAMIC_SUFFIX)
 
-TTCN3_MODULES = TfunctionSubref.ttcn TpardTemplateSubref.ttcn
+TTCN3_MODULES = TfunctionSubref.ttcn TpardTemplateSubref.ttcn TvalueofSubref.ttcn
 
 GENERATED_SOURCES = $(TTCN3_MODULES:.ttcn=.cc)
 GENERATED_HEADERS = $(GENERATED_SOURCES:.cc=.hh)

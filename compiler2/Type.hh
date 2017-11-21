@@ -343,6 +343,7 @@ namespace Common {
     bool raw_parsed;
     bool raw_checked;
     bool xer_checked;
+    bool variants_checked;
     bool raw_length_calculated;
     bool has_opentypes;
     bool opentype_outermost;
@@ -873,7 +874,7 @@ namespace Common {
      * with the name of its definition.
      */
     void chk_constructor_name(const Identifier& p_id);
-    bool chk_startability();
+    bool chk_startability(Location* caller_location);
     /** Checks if it can be a return type */
     void chk_as_return_type(bool as_value, const char* what);
   private:

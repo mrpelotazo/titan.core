@@ -211,7 +211,7 @@ void Type::chk()
    * components.
    */
   if (!parent_type) chk_table_constraints();
-
+  
   if (legacy_codec_handling) {
     chk_coding_attribs();
   }
@@ -227,6 +227,9 @@ void Type::chk()
 
 void Type::chk_coding_attribs()
 {
+  if (!legacy_codec_handling && !variants_checked) {
+    return;
+  }
   if (typetype == T_SEQ_T || typetype == T_SET_T || typetype == T_CHOICE_T) {
     // If this record/set/union type has no attributes but one of its fields does,
     // create an empty attribute structure.
@@ -262,28 +265,39 @@ void Type::chk_coding_attribs()
   chk_xer();
   
   if (!legacy_codec_handling) {
-    switch (typetype) {
-    case T_SEQ_T:
-    case T_SEQ_A:
-    case T_SET_T:
-    case T_SET_A:
-    case T_CHOICE_T:
-    case T_CHOICE_A:
-    case T_ANYTYPE:
-    case T_OPENTYPE:
-      for (size_t i = 0; i < get_nof_comps(); ++i) {
-        get_comp_byIndex(i)->get_type()->chk_coding_attribs();
+    if (RecursionTracker::is_happening(this)) {
+      return;
+    }
+    
+    RecursionTracker tracker(this);
+    
+    if (is_ref()) {
+      get_type_refd()->chk_coding_attribs();
+    }
+    else {
+      switch (typetype) {
+      case T_SEQ_T:
+      case T_SEQ_A:
+      case T_SET_T:
+      case T_SET_A:
+      case T_CHOICE_T:
+      case T_CHOICE_A:
+      case T_ANYTYPE:
+      case T_OPENTYPE:
+        for (size_t i = 0; i < get_nof_comps(); ++i) {
+          get_comp_byIndex(i)->get_type()->chk_coding_attribs();
+        }
+        break;
+
+      case T_ARRAY:
+      case T_SEQOF:
+      case T_SETOF:
+        get_ofType()->chk_coding_attribs();
+        break;
+
+      default:
+        break;
       }
-      break;
-
-    case T_ARRAY:
-    case T_SEQOF:
-    case T_SETOF:
-      get_ofType()->chk_coding_attribs();
-      break;
-
-    default:
-      break;
     }
   }
 }
@@ -873,6 +887,7 @@ void Type::chk_variants()
   if (legacy_codec_handling) {
     FATAL_ERROR("Type::chk_encodings");
   }
+  variants_checked = true;
   if (is_asn1() || ownertype != OT_TYPE_DEF) {
     return;
   }
@@ -2578,14 +2593,17 @@ void Type::chk_xer() { // XERSTUFF semantic check
     ||ownertype==OT_COMP_FIELD
     ||ownertype==OT_RECORD_OF) {
     if (is_ref()) {
-      // Merge XER attributes from the referenced type.
-      // This implements X.693amd1 clause 15.1.2
-      XerAttributes * newx = new XerAttributes;
       Type *t1 = get_type_refd();
       // chk_refd() (called by chk() for T_REFD) does not check
       // the referenced type; do it now. This makes it fully recursive.
       t1->chk();
-
+      if (!legacy_codec_handling && !t1->xer_checked) {
+        xer_checked = false;
+        return;
+      }
+      // Merge XER attributes from the referenced type.
+      // This implements X.693amd1 clause 15.1.2
+      XerAttributes * newx = new XerAttributes;
       size_t old_text = 0;
       if (t1->xerattrib && !t1->xerattrib->empty()) {
         old_text = t1->xerattrib->num_text_;
@@ -2995,66 +3013,111 @@ void Type::chk_xer() { // XERSTUFF semantic check
 }
 
 void Type::chk_oer() {
-  //if (!is_asn1()) return;
+  if (!enable_oer()) return;
   if (oerattrib == NULL) {
     oerattrib = new OerAST();
   }
-  switch (typetype) {
-    case T_BOOL:
-      break;
+  Type* t = get_type_refd_last();
+  switch (t->typetype) {
     case T_INT_A: {
-      if (is_constrained()) {
-        if (get_sub_type()->is_integer_subtype_notempty()) {
-          Location loc;
-          int_limit_t upper = get_sub_type()->get_int_limit(true, &loc);
-          int_limit_t lower = get_sub_type()->get_int_limit(false, &loc);
-          bool lower_inf = lower.get_type() != int_limit_t::NUMBER;
-          bool upper_inf = upper.get_type() != int_limit_t::NUMBER;
-          if (lower_inf || upper_inf) {
-            oerattrib->signed_ = lower_inf;
-            oerattrib->bytes = -1;
-          } else {
-            int_val_t low = lower.get_value();
-            int_val_t up  = upper.get_value();
-            if (low < 0) {
-              oerattrib->signed_ = true;
-              if (low >= -128 && up <= 127) {
-                oerattrib->bytes = 1;
-              } else if (low >= -32768 && up <= 32767) {
-                oerattrib->bytes = 2;
-              } else if (low >= -2147483648LL && up <= 2147483647) {
-                oerattrib->bytes = 4;
-              } else if ((low+1) >= -9223372036854775807LL && up <= 9223372036854775807LL) {
-                oerattrib->bytes = 8;
-              } else {
-                oerattrib->bytes = -1;
-              }
+      if (t->is_constrained() && t->get_sub_type()->is_subtype_notempty()) {
+        Location loc;
+        int_limit_t upper = t->get_sub_type()->get_int_limit(true, &loc);
+        int_limit_t lower = t->get_sub_type()->get_int_limit(false, &loc);
+        bool lower_inf = lower.get_type() != int_limit_t::NUMBER;
+        bool upper_inf = upper.get_type() != int_limit_t::NUMBER;
+        if (lower_inf || upper_inf) {
+          oerattrib->signed_ = lower_inf;
+          oerattrib->bytes = -1;
+        } else {
+          int_val_t low = lower.get_value();
+          int_val_t up  = upper.get_value();
+          if (low < 0) {
+            oerattrib->signed_ = true;
+            if (low >= -128 && up <= 127) {
+              oerattrib->bytes = 1;
+            } else if (low >= -32768 && up <= 32767) {
+              oerattrib->bytes = 2;
+            } else if (low >= -2147483648LL && up <= 2147483647) {
+              oerattrib->bytes = 4;
+            } else if ((low+1) >= -9223372036854775807LL && up <= 9223372036854775807LL) {
+              oerattrib->bytes = 8;
             } else {
-              static int_val_t uns_8_byte("18446744073709551615", NULL);
-              oerattrib->signed_ = false;
-              if (up <= 255) {
-                oerattrib->bytes = 1;
-              } else if (up <= 65535) {
-                oerattrib->bytes = 2;
-              } else if (up <= 4294967295LL) {
-                oerattrib->bytes = 4;
-              } else if (up <= uns_8_byte) {
-                oerattrib->bytes = 8;
-              } else {
-                oerattrib->bytes = -1;
-              }
+              oerattrib->bytes = -1;
+            }
+          } else {
+            static int_val_t uns_8_byte("18446744073709551615", NULL);
+            oerattrib->signed_ = false;
+            if (up <= 255) {
+              oerattrib->bytes = 1;
+            } else if (up <= 65535) {
+              oerattrib->bytes = 2;
+            } else if (up <= 4294967295LL) {
+              oerattrib->bytes = 4;
+            } else if (up <= uns_8_byte) {
+              oerattrib->bytes = 8;
+            } else {
+              oerattrib->bytes = -1;
             }
           }
-        } else {
-          oerattrib->signed_ = true;
-          oerattrib->bytes = -1;
         }
       } else {
         oerattrib->signed_ = true;
         oerattrib->bytes = -1;
       }
       break; }
+    case T_BSTR_A:
+    case T_OSTR:
+    case T_IA5STRING:
+    case T_VISIBLESTRING:
+    case T_NUMERICSTRING:
+    case T_PRINTABLESTRING:
+    case T_BMPSTRING:
+    case T_UNIVERSALSTRING:
+    case T_TELETEXSTRING:
+    case T_VIDEOTEXSTRING:
+    case T_GRAPHICSTRING:
+    case T_GENERALSTRING: {
+      if (t->is_constrained() && t->get_sub_type()->is_subtype_notempty()) {
+        Location loc;
+        int_limit_t upper = t->get_sub_type()->get_int_limit(true, &loc);
+        int_limit_t lower = t->get_sub_type()->get_int_limit(false, &loc);
+        bool lower_inf = lower.get_type() != int_limit_t::NUMBER;
+        bool upper_inf = upper.get_type() != int_limit_t::NUMBER;
+        if (!lower_inf && !upper_inf) {
+          int_val_t low = lower.get_value();
+          int_val_t up  = upper.get_value();
+          if (low == up) {
+            oerattrib->length = up.get_val();
+            if (typetype == T_BMPSTRING) {
+              oerattrib->length *= 2;
+            } else if (typetype == T_UNIVERSALSTRING) {
+              oerattrib->length *= 4;
+            }
+          }
+        }
+      }
+      break; }
+    case T_SEQ_A: {
+      // extendable is always false. Probably a bug with is_extendable()
+      if (t->get_sub_type()) {
+        oerattrib->extendable = t->get_sub_type()->is_extendable();
+      }
+      break; }
+    case T_SEQOF:
+    case T_BOOL:
+    case T_ENUM_A:
+    case T_UTF8STRING:
+    case T_REAL:
+    case T_NULL:
+    case T_OID:
+    case T_ROID:
+    case T_EMBEDDED_PDV:
+    case T_EXTERNAL:
+      break;
     default:
+      delete oerattrib;
+      oerattrib = NULL;
       break;
   }
 }
@@ -3687,16 +3750,16 @@ void Type::chk_constructor_name(const Identifier& p_id)
   }
 }
 
-bool Type::chk_startability()
+bool Type::chk_startability(Location* caller_location)
 {
   if(typetype != T_FUNCTION) FATAL_ERROR("Type::chk_startable()");
   if(!checked) chk_Fat();
+  u.fatref.fp_list->chk_startability("Functions of type",
+    get_typename().c_str(), caller_location);
   if(u.fatref.is_startable) return true;
   if (!u.fatref.runs_on.ref) error("Functions of type `%s' cannot be started "
     "on a parallel test component because the type does not have `runs on' "
     "clause", get_typename().c_str());
-  u.fatref.fp_list->chk_startability("Functions of type",
-    get_typename().c_str());
   if (u.fatref.return_type && u.fatref.return_type->is_component_internal()) {
     map<Type*,void> type_chain;
     char* err_str = mprintf("the return type or embedded in the return type "
@@ -4329,6 +4392,12 @@ void Type::chk_this_value_namedbits(Value *value)
         ->get_val());
     if(bstring->size() < bitnum + 1) bstring->resize(bitnum + 1, '0');
     (*bstring)[bitnum] = '1';
+  }
+  if (sub_type != NULL) {
+    size_t min_length = sub_type->get_min_length();
+    if (bstring->size() < min_length) {
+      bstring->resize(min_length, '0');
+    }
   }
   value->set_valuetype(Value::V_BSTR, bstring);
 }

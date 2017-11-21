@@ -590,6 +590,7 @@ namespace Common {
     raw_parsed  = false;
     raw_checked = false;
     xer_checked = false;
+    variants_checked = false;
     raw_length_calculated = false;
     has_opentypes = false;
     opentype_outermost = false;
@@ -3608,8 +3609,29 @@ namespace Common {
         switch (typetype) {
           case T_BOOL:
           case T_INT_A:
-            // TODO: add more types as they are implemented in
-            // the enc/decoding
+          case T_ENUM_A:
+          case T_BSTR_A:
+          case T_OSTR:
+          case T_REAL:
+          case T_NULL:
+          case T_IA5STRING:
+          case T_VISIBLESTRING:
+          case T_NUMERICSTRING:
+          case T_PRINTABLESTRING:
+          case T_BMPSTRING:
+          case T_UNIVERSALSTRING: 
+          case T_UTF8STRING:
+          case T_TELETEXSTRING:
+          case T_VIDEOTEXSTRING:
+          case T_GRAPHICSTRING:
+          case T_GENERALSTRING:
+          case T_OID:
+          case T_ROID:
+          case T_SEQ_A:
+          case T_EMBEDDED_PDV:
+          case T_SEQOF:
+          case T_EXTERNAL:
+          case T_OBJECTDESCRIPTOR:
             return true;
           default:
             return false;
@@ -6772,7 +6794,10 @@ namespace Common {
     } // case
     case CT_OER: {
       for ( ; ; ) {
-        if (t->is_asn1()) return true;
+        if (t->is_asn1()) { 
+          t->set_gen_coder_functions(CT_OER);
+          return true;
+        }
         //if (t->oerattrib) return true;
         if (t->is_ref()) t = t->get_type_refd();
         else {
@@ -6785,6 +6810,7 @@ namespace Common {
           case T_OSTR:
           case T_OID:
             // these basic TTCN-3 types have ASN.1 equivalents
+            t->set_gen_coder_functions(CT_OER);
             return true;
           default:
             return false;
