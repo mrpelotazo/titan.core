@@ -59,9 +59,8 @@ install(TARGETS compiler ttcn3_makefilegen tcov2lcov
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(FILES titanver
+install(PROGRAMS titanver
     DESTINATION ${CMAKE_INSTALL_BINDIR}
-    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ WORLD_READ
 )
 
 install(CODE "execute_process( \
