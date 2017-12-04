@@ -63,7 +63,7 @@ add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi
     COMMAND mkdir ${RT1_DIR}
     COMMAND mkdir ${RT2_DIR}
     COMMAND ${PROJECT_BINARY_DIR}/xsdconvert/xsd2ttcn ${CMAKE_CURRENT_SOURCE_DIR}/${SCHEMA}
-    COMMAND sed -i -e 's/XSD.String/charstring/g' -e 's/XSD.AnySimpleType/charstring/g' -e 's/XSD.Integer/integer/g' -e 's/XSD.Float/float/g' -e 's/XSD.Double/float/g' -e 's/XSD.Boolean/boolean/g' -e 's/import\ from\ XSD\ all\;//g' ${GENERATED_MODULE}
+    COMMAND ${SED} -i -e 's/XSD.String/charstring/g' -e 's/XSD.AnySimpleType/charstring/g' -e 's/XSD.Integer/integer/g' -e 's/XSD.Float/float/g' -e 's/XSD.Double/float/g' -e 's/XSD.Boolean/boolean/g' -e 's/import\ from\ XSD\ all\;//g' ${GENERATED_MODULE}
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -o ${RT1_DIR} ${GENERATED_MODULE}
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -R -o ${RT2_DIR} ${GENERATED_MODULE}
 )

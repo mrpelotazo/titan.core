@@ -30,6 +30,13 @@ endif()
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 find_package(Perl REQUIRED)
+find_program(SED sed)
+
+if(SED)
+    message(STATUS "Found sed: ${SED}")
+else()
+    message(FATAL_ERROR "sed could not be found")
+endif()
 #---------------------------------------------------------------------------------------
 # Compiler settings
 #---------------------------------------------------------------------------------------
