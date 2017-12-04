@@ -85,11 +85,19 @@ add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLogge
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -R -o ${RT2_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/TitanLoggerControl.ttcn
 )
 
-add_custom_command(OUTPUT config_process.lex.cc config_process.tab.cc
-    COMMAND flex -B -s -Cr -Cfe -Pconfig_process_ --header-file=config_process.lex.hh -o config_process.lex.cc ${CMAKE_CURRENT_SOURCE_DIR}/config_process.l
-    COMMAND bison -d -o config_process.tab.cc -p config_process_ ${CMAKE_CURRENT_SOURCE_DIR}/config_process.y
-    VERBATIM
+#---------------------------------------------------------------------------------------
+# Bison / Flex targets
+#---------------------------------------------------------------------------------------
+BISON_TARGET(config_process ${CMAKE_CURRENT_SOURCE_DIR}/config_process.y ${CMAKE_CURRENT_BINARY_DIR}/config_process.tab.cc
+    COMPILE_FLAGS "-p config_process_"
 )
+
+FLEX_TARGET(config_process.lex ${CMAKE_CURRENT_SOURCE_DIR}/config_process.l ${CMAKE_CURRENT_BINARY_DIR}/config_process.lex.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe -Pconfig_process_"
+    DEFINES_FILE "${CMAKE_CURRENT_BINARY_DIR}/config_process.lex.hh"
+)
+
+ADD_FLEX_BISON_DEPENDENCY(config_process.lex config_process)
 
 #---------------------------------------------------------------------------------------
 # Target gccversion
@@ -109,7 +117,8 @@ add_library(ttcn3_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     ${RT1_DIR}/TitanLoggerApiSimple.hh
     ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
     ${RT1_DIR}/TitanLoggerControl.hh cversion.h
-    config_process.tab.cc config_process.lex.cc
+    ${FLEX_config_process.lex_OUTPUTS}
+    ${BISON_config_process_OUTPUT_SOURCE}
 )
 
 set_target_properties(ttcn3_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
@@ -149,7 +158,8 @@ add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     ${RT1_DIR}/TitanLoggerApiSimple.hh
     ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
     ${RT1_DIR}/TitanLoggerControl.hh cversion.h
-    config_process.tab.cc config_process.lex.cc
+    ${FLEX_config_process.lex_OUTPUTS}
+    ${BISON_config_process_OUTPUT_SOURCE}
 )
 
 target_include_directories(ttcn3-parallel_obj PUBLIC
@@ -191,7 +201,8 @@ add_library(ttcn3-rt2_obj OBJECT ${CORE2_STATIC_SOURCES}
     ${RT2_DIR}/TitanLoggerApiSimple.hh
     ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
     ${RT2_DIR}/TitanLoggerControl.hh cversion.h
-    config_process.tab.cc config_process.lex.cc
+    ${FLEX_config_process.lex_OUTPUTS}
+    ${BISON_config_process_OUTPUT_SOURCE}
 )
 
 set_target_properties(ttcn3-rt2_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
@@ -233,7 +244,8 @@ add_library(ttcn3-rt2-parallel_obj OBJECT ${CORE2_STATIC_SOURCES}
     ${RT2_DIR}/TitanLoggerApiSimple.hh
     ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
     ${RT2_DIR}/TitanLoggerControl.hh cversion.h
-    config_process.tab.cc config_process.lex.cc
+    ${FLEX_config_process.lex_OUTPUTS}
+    ${BISON_config_process_OUTPUT_SOURCE}
 )
 
 set_target_properties(ttcn3-rt2-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)

@@ -16,74 +16,69 @@ set(TTCN3_STATIC_SOURCES
 )
 
 #---------------------------------------------------------------------------------------
-# TTCN3 generated sources
+# Bison / Flex targets
 #---------------------------------------------------------------------------------------
-set(TTCN3_GENERATED_SOURCES
-    lex.ttcn3.cc compiler.tab.cc lex.rawAST.cc rawAST.tab.cc
-    charstring_la.cc pstring_la.cc comptype_attrib_la.cc coding_attrib_la.cc
-    coding_attrib_p.cc ttcn3_preparser.lex.c
+BISON_TARGET(coding_attrib_p ${CMAKE_CURRENT_SOURCE_DIR}/coding_attrib_p.y ${CMAKE_CURRENT_BINARY_DIR}/coding_attrib_p.cc)
+
+FLEX_TARGET(charstring_la ${CMAKE_CURRENT_SOURCE_DIR}/charstring_la.l ${CMAKE_CURRENT_BINARY_DIR}/charstring_la.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe"
 )
+
+FLEX_TARGET(coding_attrib_la ${CMAKE_CURRENT_SOURCE_DIR}/coding_attrib_la.l ${CMAKE_CURRENT_BINARY_DIR}/coding_attrib_la.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe"
+)
+
+FLEX_TARGET(comptype_attrib_la ${CMAKE_CURRENT_SOURCE_DIR}/comptype_attrib_la.l ${CMAKE_CURRENT_BINARY_DIR}/comptype_attrib_la.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe"
+)
+
+FLEX_TARGET(pstring_la ${CMAKE_CURRENT_SOURCE_DIR}/pstring_la.l ${CMAKE_CURRENT_BINARY_DIR}/pstring_la.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe"
+)
+
+BISON_TARGET(compiler.tab ${CMAKE_CURRENT_SOURCE_DIR}/compiler.y ${CMAKE_CURRENT_BINARY_DIR}/compiler.tab.cc
+    COMPILE_FLAGS "-p ttcn3_"
+)
+
+BISON_TARGET(rawAST.tab ${CMAKE_CURRENT_SOURCE_DIR}/rawAST.y ${CMAKE_CURRENT_BINARY_DIR}/rawAST.tab.cc
+    COMPILE_FLAGS "-p rawAST_"
+)
+
+FLEX_TARGET(lex.ttcn3 ${CMAKE_CURRENT_SOURCE_DIR}/compiler.l ${CMAKE_CURRENT_BINARY_DIR}/lex.ttcn3.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe -Pttcn3_"
+)
+
+FLEX_TARGET(lex.rawAST ${CMAKE_CURRENT_SOURCE_DIR}/rawAST.l ${CMAKE_CURRENT_BINARY_DIR}/lex.rawAST.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe -PrawAST_"
+)
+
+FLEX_TARGET(ttcn3_preparser.lex ${CMAKE_CURRENT_SOURCE_DIR}/ttcn3_preparser.l ${CMAKE_CURRENT_BINARY_DIR}/ttcn3_preparser.lex.c
+    COMPILE_FLAGS "-B -s -Cr -Cfe -Pttcn3_preparser_"
+)
+
+ADD_FLEX_BISON_DEPENDENCY(coding_attrib_la coding_attrib_p)
+ADD_FLEX_BISON_DEPENDENCY(lex.ttcn3 compiler.tab)
+ADD_FLEX_BISON_DEPENDENCY(lex.rawAST rawAST.tab)
 
 #---------------------------------------------------------------------------------------
 # Target ttcn3_compiler
 #---------------------------------------------------------------------------------------
-add_library(ttcn3_compiler ${TTCN3_STATIC_SOURCES} ${TTCN3_GENERATED_SOURCES})
-add_dependencies(ttcn3_compiler generate-common-files)
+add_library(ttcn3_compiler
+    ${TTCN3_STATIC_SOURCES}
+    ${FLEX_charstring_la_OUTPUTS}
+    ${FLEX_coding_attrib_la_OUTPUTS}
+    ${FLEX_comptype_attrib_la_OUTPUTS}
+    ${FLEX_pstring_la_OUTPUTS}
+    ${FLEX_lex.ttcn3_OUTPUTS}
+    ${FLEX_lex.rawAST_OUTPUTS}
+    ${FLEX_ttcn3_preparser.lex_OUTPUTS}
+    ${BISON_coding_attrib_p_OUTPUT_SOURCE}
+    ${BISON_compiler.tab_OUTPUT_SOURCE}
+    ${BISON_rawAST.tab_OUTPUT_SOURCE}
+)
+
 target_include_directories(ttcn3_compiler PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_BINARY_DIR}
-)
-
-#---------------------------------------------------------------------------------------
-# File generation commands
-#---------------------------------------------------------------------------------------
-add_custom_command(OUTPUT coding_attrib_p.cc coding_attrib_p.hh
-    COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/coding_attrib_p.y
-    VERBATIM
-)
-
-add_custom_command(OUTPUT charstring_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o charstring_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/charstring_la.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT coding_attrib_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o coding_attrib_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/coding_attrib_la.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT comptype_attrib_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o comptype_attrib_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/comptype_attrib_la.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT pstring_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o pstring_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/pstring_la.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT compiler.tab.cc compiler.tab.hh
-    COMMAND bison -d -p ttcn3_ -o compiler.tab.cc ${CMAKE_CURRENT_SOURCE_DIR}/compiler.y
-    VERBATIM
-)
-
-add_custom_command(OUTPUT rawAST.tab.cc rawAST.tab.hh
-    COMMAND bison -d -p rawAST_ -o rawAST.tab.cc ${CMAKE_CURRENT_SOURCE_DIR}/rawAST.y
-    VERBATIM
-)
-
-add_custom_command(OUTPUT lex.ttcn3.cc
-    COMMAND flex -B -s -Cr -Cfe -Pttcn3_ -o lex.ttcn3.cc ${CMAKE_CURRENT_SOURCE_DIR}/compiler.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT lex.rawAST.cc
-    COMMAND flex -B -s -Cr -Cfe -PrawAST_ -o lex.rawAST.cc ${CMAKE_CURRENT_SOURCE_DIR}/rawAST.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT ttcn3_preparser.lex.c
-    COMMAND flex -B -s -Cr -Cfe -Pttcn3_preparser_ -o ttcn3_preparser.lex.c  ${CMAKE_CURRENT_SOURCE_DIR}/ttcn3_preparser.l
-    VERBATIM
 )

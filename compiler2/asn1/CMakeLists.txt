@@ -15,37 +15,32 @@ set(ASN1_STATIC_SOURCES
 )
 
 #---------------------------------------------------------------------------------------
-# ASN1 generated sources
+# Bison / Flex targets
 #---------------------------------------------------------------------------------------
-set(ASN1_GENERATED_SOURCES
-    asn1la.yy.cc asn1p.tab.cc asn1_preparser.lex.c
+BISON_TARGET(asn1p ${CMAKE_CURRENT_SOURCE_DIR}/asn1p.y ${CMAKE_CURRENT_BINARY_DIR}/asn1p.tab.cc)
+
+FLEX_TARGET(asn1la ${CMAKE_CURRENT_SOURCE_DIR}/asn1la.l ${CMAKE_CURRENT_BINARY_DIR}/asn1la.yy.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe"
 )
+
+FLEX_TARGET(asn1_preparser ${CMAKE_CURRENT_SOURCE_DIR}/asn1_preparser.l ${CMAKE_CURRENT_BINARY_DIR}/asn1_preparser.lex.c
+    COMPILE_FLAGS "-B -s -Cr -Cfe -Pasn1_preparser_"
+)
+
+ADD_FLEX_BISON_DEPENDENCY(asn1la asn1p)
+ADD_FLEX_BISON_DEPENDENCY(asn1_preparser asn1p)
 
 #---------------------------------------------------------------------------------------
 # Target asn1_compiler
 #---------------------------------------------------------------------------------------
-add_library(asn1_compiler ${ASN1_STATIC_SOURCES} ${ASN1_GENERATED_SOURCES})
+add_library(asn1_compiler
+    ${ASN1_STATIC_SOURCES}
+    ${BISON_asn1p_OUTPUT_SOURCE}
+    ${FLEX_asn1la_OUTPUTS}
+    ${FLEX_asn1_preparser_OUTPUTS}
+)
 
 target_include_directories(asn1_compiler PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
 )
-
-#---------------------------------------------------------------------------------------
-# File generation commands
-#---------------------------------------------------------------------------------------
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/asn1p.tab.cc ${CMAKE_CURRENT_BINARY_DIR}/asn1p.tab.hh
-    COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/asn1p.y
-    VERBATIM
-)
-
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/asn1la.yy.cc
-    COMMAND flex -B -s -Cr -Cfe -o asn1la.yy.cc ${CMAKE_CURRENT_SOURCE_DIR}/asn1la.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/asn1_preparser.lex.c
-    COMMAND flex -B -s -Cr -Cfe -Pasn1_preparser_ -o asn1_preparser.lex.c ${CMAKE_CURRENT_SOURCE_DIR}/asn1_preparser.l
-    VERBATIM
-)
-

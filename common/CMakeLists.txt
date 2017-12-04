@@ -15,13 +15,6 @@ set(COMMON_STATIC_SOURCES
     NetworkHandler.cc path.c
 )
 
-#---------------------------------------------------------------------------------------
-# Common generated sources
-#---------------------------------------------------------------------------------------
-set(COMMON_GENERATED_SOURCES
-    pattern_la.cc pattern_p.cc pattern_uni.cc config_preproc_la.cc config_preproc_p.tab.cc
-)
-
 #add_executable(hostid ${COMMON_STATIC_SURCES} ${COMMON_GENERATED_SOURCES})
 #add_dependencies(hostid generate-common-files)
 #target_include_directories(hostid PUBLIC
@@ -29,11 +22,42 @@ set(COMMON_GENERATED_SOURCES
 #)
 
 #---------------------------------------------------------------------------------------
+# Bison / Flex targets
+#---------------------------------------------------------------------------------------
+
+BISON_TARGET(pattern_p ${CMAKE_CURRENT_SOURCE_DIR}/pattern_p.y ${CMAKE_CURRENT_BINARY_DIR}/pattern_p.cc)
+
+BISON_TARGET(pattern_uni ${CMAKE_CURRENT_SOURCE_DIR}/pattern_uni.y ${CMAKE_CURRENT_BINARY_DIR}/pattern_uni.cc)
+
+BISON_TARGET(config_preproc_p ${CMAKE_CURRENT_SOURCE_DIR}/config_preproc_p.y ${CMAKE_CURRENT_BINARY_DIR}/config_preproc_p.tab.cc
+    COMPILE_FLAGS "-p config_process_"
+)
+
+FLEX_TARGET(pattern_la ${CMAKE_CURRENT_SOURCE_DIR}/pattern_la.l ${CMAKE_CURRENT_BINARY_DIR}/pattern_la.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe"
+)
+
+FLEX_TARGET(config_preproc_la ${CMAKE_CURRENT_SOURCE_DIR}/config_preproc_la.l ${CMAKE_CURRENT_BINARY_DIR}/config_preproc_la.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe"
+)
+
+ADD_FLEX_BISON_DEPENDENCY(pattern_la pattern_p)
+ADD_FLEX_BISON_DEPENDENCY(config_preproc_la config_preproc_p)
+
+#---------------------------------------------------------------------------------------
 # Library common
 #---------------------------------------------------------------------------------------
-add_library(common_obj OBJECT ${COMMON_STATIC_SOURCES} ${COMMON_GENERATED_SOURCES})
+add_library(common_obj OBJECT
+    ${COMMON_STATIC_SOURCES}
+    ${FLEX_pattern_la_OUTPUTS}
+    ${FLEX_config_preproc_la_OUTPUTS}
+    ${BISON_pattern_p_OUTPUT_SOURCE}
+    ${BISON_pattern_uni_OUTPUT_SOURCE}
+    ${BISON_config_preproc_p_OUTPUT_SOURCE}
+)
+
 set_target_properties(common_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-add_dependencies(common_obj generate-common-files)
+
 target_include_directories(common_obj PUBLIC
     ${PROJECT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -50,39 +74,7 @@ target_include_directories(common PUBLIC
 )
 
 #---------------------------------------------------------------------------------------
-# File generation commands
-#---------------------------------------------------------------------------------------
-add_custom_command(OUTPUT pattern_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o pattern_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/pattern_la.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT pattern_p.cc pattern_p.hh
-    COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/pattern_p.y
-    VERBATIM
-)
-
-add_custom_command(OUTPUT pattern_uni.cc pattern_uni.hh
-    COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/pattern_uni.y
-    VERBATIM
-)
-
-add_custom_command(OUTPUT config_preproc_la.cc
-    COMMAND flex -B -s -Cr -Cfe -o config_preproc_la.cc ${CMAKE_CURRENT_SOURCE_DIR}/config_preproc_la.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT config_preproc_p.tab.cc config_preproc_p.tab.hh
-    COMMAND bison -d -o config_preproc_p.tab.cc -p config_process_ ${CMAKE_CURRENT_SOURCE_DIR}/config_preproc_p.y
-    VERBATIM
-)
-
-add_custom_target(generate-common-files
-    DEPENDS config_preproc_p.tab.cc config_preproc_p.tab.hh config_preproc_la.cc pattern_uni.cc pattern_uni.hh pattern_p.cc pattern_p.hh pattern_la.cc
-)
-
-#---------------------------------------------------------------------------------------
-# File generation commands
+# Install target
 #---------------------------------------------------------------------------------------
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}

@@ -14,29 +14,30 @@ set(CLI_STATIC_SOURCES
 )
 
 #---------------------------------------------------------------------------------------
-# Cli generated sources
+# Bison / Flex targets
 #---------------------------------------------------------------------------------------
-set(CLI_GENERATED_SOURCES
-    config_read.lex.cc config_read.tab.cc
+BISON_TARGET(config_read ${CMAKE_CURRENT_SOURCE_DIR}/config_read.y ${CMAKE_CURRENT_BINARY_DIR}/config_read.tab.cc
+    COMPILE_FLAGS "-p config_read_"
 )
+
+FLEX_TARGET(config_read.lex ${CMAKE_CURRENT_SOURCE_DIR}/config_read.l ${CMAKE_CURRENT_BINARY_DIR}/config_read.lex.cc
+    COMPILE_FLAGS "-B -s -Cr -Cfe -Pconfig_read_"
+)
+
+ADD_FLEX_BISON_DEPENDENCY(config_read.lex config_read)
 
 #---------------------------------------------------------------------------------------
 # Target cli
 #---------------------------------------------------------------------------------------
-add_library(cli ${CLI_STATIC_SOURCES} ${CLI_GENERATED_SOURCES})
-target_include_directories(cli PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(cli
+	${CLI_STATIC_SOURCES}
+    ${FLEX_config_read.lex_OUTPUTS}
+    ${BISON_config_read_OUTPUT_SOURCE}
+)
+
+target_include_directories(cli PUBLIC
+	${CMAKE_CURRENT_SOURCE_DIR}
+	${CMAKE_CURRENT_BINARY_DIR}
+)
 target_compile_definitions(cli PUBLIC -D_REENTRANT)
 target_link_libraries(cli PUBLIC common)
-
-#---------------------------------------------------------------------------------------
-# File generation commands
-#---------------------------------------------------------------------------------------
-add_custom_command(OUTPUT config_read.lex.cc
-    COMMAND flex -B -s -Cr -Cfe -Pconfig_read_ -o config_read.lex.cc ${CMAKE_CURRENT_SOURCE_DIR}/config_read.l
-    VERBATIM
-)
-
-add_custom_command(OUTPUT config_read.tab.cc config_read.tab.hh
-    COMMAND bison -d -o config_read.tab.cc -p config_read_ ${CMAKE_CURRENT_SOURCE_DIR}/config_read.y
-    VERBATIM
-)

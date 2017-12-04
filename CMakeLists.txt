@@ -27,6 +27,8 @@ else()
     message(FATAL_ERROR "libedit could not be found")
 endif()
 
+find_package(BISON REQUIRED)
+find_package(FLEX REQUIRED)
 #---------------------------------------------------------------------------------------
 # Compiler settings
 #---------------------------------------------------------------------------------------
