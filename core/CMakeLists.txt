@@ -69,8 +69,8 @@ add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi
 )
 
 add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT2_DIR}/TitanLoggerApiSimple.hh
-    COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/simplify.pl ${RT1_DIR}/TitanLoggerApi.hh > ${RT1_DIR}/TitanLoggerApiSimple.hh
-    COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/simplify.pl ${RT2_DIR}/TitanLoggerApi.hh > ${RT2_DIR}/TitanLoggerApiSimple.hh
+    COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simplify.pl ${RT1_DIR}/TitanLoggerApi.hh > ${RT1_DIR}/TitanLoggerApiSimple.hh
+    COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simplify.pl ${RT2_DIR}/TitanLoggerApi.hh > ${RT2_DIR}/TitanLoggerApiSimple.hh
 )
 
 add_custom_command(OUTPUT ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
