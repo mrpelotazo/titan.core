@@ -4686,12 +4686,14 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
     if (opt_elements != 0 || sdef->oerExtendable) {
       src = mputstr(src,
         "  char c = 0;\n");
-      if (sdef->oerExtendable && sdef->oerNrOrRootcomps != sdef->nElements) {
+      if (sdef->oerExtendable) {
         pos--;
-        src = mputprintf(src,
-          "  if (has_extension) {\n"
-          "    c += %i;\n"
-          "  }\n", 1 << 7);
+        if (sdef->oerNrOrRootcomps != sdef->nElements) {
+          src = mputprintf(src,
+            "  if (has_extension) {\n"
+            "    c += %i;\n"
+            "  }\n", 1 << 7);
+        }
       }
     }
     
@@ -6539,8 +6541,13 @@ static void defEmptyRecordClass(const struct_def *sdef,
     
     // JSON decode, RT1
     src = mputprintf(src,
-      "int %s::JSON_decode(const TTCN_Typedescriptor_t&, JSON_Tokenizer& p_tok, boolean p_silent)\n"
+      "int %s::JSON_decode(const TTCN_Typedescriptor_t& p_td, JSON_Tokenizer& p_tok, boolean p_silent)\n"
       "{\n"
+      "  if (NULL != p_td.json->default_value && 0 == p_tok.get_buffer_length()) {\n"
+      // use the default value
+      "    bound_flag = TRUE;\n"
+      "    return strlen(p_td.json->default_value);\n"
+      "  }\n"
       "  json_token_t token = JSON_TOKEN_NONE;\n"
       "  size_t dec_len = p_tok.get_next_token(&token, NULL, NULL);\n"
       "  if (JSON_TOKEN_ERROR == token) {\n"
@@ -6834,7 +6841,7 @@ static void defEmptyRecordTemplate(const char *name, const char *dispname,
     src = mputprintf(src, "boolean %s_template::match(const %s& other_value, "
       "boolean) const\n"
 	"{\n"
-    "if (!other_value.is_bound()) return FALSE;"
+    "if (!other_value.is_bound()) return FALSE;\n"
 	"return match(NULL_VALUE);\n"
 	"}\n\n", name, name);
 

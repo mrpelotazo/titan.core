@@ -521,6 +521,14 @@ namespace Ttcn {
   {
     return new Reference(*this);
   }
+  
+  void Reference::set_my_scope(Scope *p_scope)
+  {
+    Ref_base::set_my_scope(p_scope);
+    if (parlist != NULL) {
+      parlist->set_my_scope(p_scope);
+    }
+  }
 
   string Reference::get_dispname()
   {
@@ -793,6 +801,9 @@ namespace Ttcn {
         ass->get_RunsOnType(), false);
     }
     string ass_id2 = ass_id;
+    if (t.preamble != NULL) {
+      expr->preamble = mputstr(expr->preamble, t.preamble);
+    }
     if (t.expr != NULL) {
       ass_id2 = ass_id2 + "(" + t.expr + ")";
       ass_id_str = ass_id2.c_str();
@@ -4300,6 +4311,7 @@ namespace Ttcn {
   void Def_Template::chk()
   {
     if (checked) return;
+    checked = true;
     Error_Context cntxt(this, "In template definition `%s'",
       id->get_dispname().c_str());
     const string& t_genname = get_genname();
@@ -4339,7 +4351,6 @@ namespace Ttcn {
     }
 
     type->chk_this_template_ref(body);
-    checked = true;
     Type *t = type->get_type_refd_last();
     if (t->get_typetype() == Type::T_PORT) {
       error("Template cannot be defined for port type `%s'",
@@ -8169,25 +8180,40 @@ namespace Ttcn {
           mputprintf(target->header.function_prototypes,
             "extern verdicttype testcase_%s_defparams(boolean has_timer, double timer_value);\n",
             genname_str);
+        expression_struct expr;
+        Code::init_expr(&expr);
         target->source.function_bodies = mputprintf(target->source.function_bodies,
-          "verdicttype testcase_%s_defparams(boolean has_timer, double timer_value) {\n"
-          "  return testcase_%s(",
-          genname_str, genname_str);
+          "verdicttype testcase_%s_defparams(boolean has_timer, double timer_value) {\n",
+          genname_str);
+        expr.expr = mprintf("  return testcase_%s(", genname_str);
 
         for (size_t i = 0; i < fp_list->get_nof_fps(); ++i) {
           FormalPar *fp = fp_list->get_fp_byIndex(i);
           ActualPar *ap = fp->get_defval();
           switch (ap->get_selection()) {
           case ActualPar::AP_VALUE:
-            target->source.function_bodies = mputstr(target->source.function_bodies,
+            expr.expr = mputstr(expr.expr,
               ap->get_Value()->get_genname_own(my_scope).c_str());
             break;
           case ActualPar::AP_TEMPLATE:
-            target->source.function_bodies = mputstr(target->source.function_bodies,
-              ap->get_TemplateInstance()->get_Template()->get_genname_own(my_scope).c_str());
+            if (use_runtime_2) {
+              string tmp_id = my_scope->get_scope_mod_gen()->get_temporary_id();
+              expr.preamble = mputprintf(expr.preamble, "%s %s;\n",
+                fp->get_Type()->get_genname_template(my_scope).c_str(), tmp_id.c_str());
+              // use the actual parameter's scope, not the formal parameter's, when
+              // generating the template's initialization code
+              ap->get_TemplateInstance()->set_my_scope(my_scope);
+              expr.preamble = FormalPar::generate_code_defval_template(expr.preamble,
+                ap->get_TemplateInstance(), tmp_id, ap->get_gen_restriction_check());
+              expr.expr = mputstr(expr.expr, tmp_id.c_str());
+            }
+            else {
+              expr.expr = mputstr(expr.expr,
+                ap->get_TemplateInstance()->get_Template()->get_genname_own(my_scope).c_str());
+            }
             break;
           case ActualPar::AP_REF:
-            target->source.function_bodies = mputstr(target->source.function_bodies,
+            expr.expr = mputstr(expr.expr,
               ap->get_Ref()->get_refd_assignment()->get_genname_from_scope(my_scope).c_str());
             break;
           case ActualPar::AP_DEFAULT:
@@ -8200,13 +8226,15 @@ namespace Ttcn {
           }
 
           // always append a comma, because has_timer and timer_value follows
-          target->source.function_bodies = mputstrn(target->source.function_bodies,
-            ", ", 2);
+          expr.expr = mputstrn(expr.expr, ", ", 2);
         }
-
-        target->source.function_bodies = mputstr(target->source.function_bodies,
-          "has_timer, timer_value);\n"
-          "}\n\n");
+        
+        // the expression_struct merging algorithm adds would add an extra block,
+        // so just append the preamble and expr fields manually
+        target->source.function_bodies = mputprintf(target->source.function_bodies,
+          "%s%shas_timer, timer_value);\n"
+          "}\n\n", expr.preamble == NULL ? "" : expr.preamble, expr.expr);
+        Code::free_expr(&expr);
         // Add the non-parameterized wrapper *after* the parameterized one,
         // with the same name. Linear search will always find the first
         // (user-visible, parameterized) testcase.
@@ -9020,6 +9048,33 @@ namespace Ttcn {
     }
   }
   
+  char* FormalPar::generate_code_defval_template(char* str, TemplateInstance* ti,
+                                                 const string& name,
+                                                 template_restriction_t temp_res)
+  {
+    Template *temp = ti->get_Template();
+    Ref_base *dref = ti->get_DerivedRef();
+    if (dref != NULL) {
+      expression_struct expr;
+      Code::init_expr(&expr);
+      expr.expr = mputprintf(expr.expr, "%s = ", name.c_str());
+      dref->generate_code(&expr);
+      str = Code::merge_free_expr(str, &expr);
+    }
+    if (use_runtime_2 && TypeConv::needs_conv_refd(temp)) {
+      str = TypeConv::gen_conv_code_refd(str, name.c_str(), temp);
+    } else {
+      // force the re-generation of the template's initialization code
+      // (this is needed in case it contains non-deterministic function calls)
+      temp->reset_code_generated();
+      str = temp->generate_code_init(str, name.c_str());
+    }
+    if (temp_res != TR_NONE) {
+      str = Template::generate_restriction_check_code(str, name.c_str(), temp_res);
+    }
+    return str;
+  }
+  
   char* FormalPar::generate_code_defval(char* str)
   {
     if (!defval.ap || defval_generated) return str;
@@ -9034,25 +9089,11 @@ namespace Ttcn {
       }
       break; }
     case ActualPar::AP_TEMPLATE: {
-      TemplateInstance *ti = defval.ap->get_TemplateInstance();
-      Template *temp = ti->get_Template();
-      Ref_base *dref = ti->get_DerivedRef();
-      if (dref) {
-        expression_struct expr;
-        Code::init_expr(&expr);
-        expr.expr = mputprintf(expr.expr, "%s = ",
-                               temp->get_lhs_name().c_str());
-        dref->generate_code(&expr);
-        str = Code::merge_free_expr(str, &expr);
-      }
-      if (use_runtime_2 && TypeConv::needs_conv_refd(temp)) {
-        str = TypeConv::gen_conv_code_refd(str, temp->get_lhs_name().c_str(), temp);
-      } else {
-        str = temp->generate_code_init(str, temp->get_lhs_name().c_str());
-      }
-      if (defval.ap->get_gen_restriction_check() != TR_NONE) {
-        str = Template::generate_restriction_check_code(str,
-          temp->get_lhs_name().c_str(), defval.ap->get_gen_restriction_check());
+      if (!use_runtime_2) {
+        TemplateInstance *ti = defval.ap->get_TemplateInstance();
+        str = generate_code_defval_template(str,
+          ti, ti->get_Template()->get_lhs_name(),
+          defval.ap->get_gen_restriction_check());
       }
       break; }
     case ActualPar::AP_REF:
@@ -9076,6 +9117,9 @@ namespace Ttcn {
       Code::free_cdef(&cdef);
       break; }
     case ActualPar::AP_TEMPLATE: {
+      if (use_runtime_2) {
+        break;
+      }
       TemplateInstance *ti = defval.ap->get_TemplateInstance();
       Template *temp = ti->get_Template();
       const_def cdef;
@@ -10118,7 +10162,7 @@ namespace Ttcn {
       }
       return ref->has_single_expr();
     case AP_DEFAULT:
-      return true;
+      return !use_runtime_2 || act->selection != AP_TEMPLATE;
     default:
       FATAL_ERROR("ActualPar::has_single_expr()");
       return false;
@@ -10367,7 +10411,22 @@ namespace Ttcn {
         if (param_eval != NORMAL_EVAL) {
           LazyFuzzyParamData::generate_code_ap_default_ti(expr, act->temp, my_scope,
             param_eval == LAZY_EVAL);
-        } else {
+        }
+        else if (use_runtime_2) {
+          // for now single expressions are not handled separately, since this
+          // may change the order of function calls in the default templates
+          string tmp_id = my_scope->get_scope_mod_gen()->get_temporary_id();
+          expr->preamble = mputprintf(expr->preamble, "%s %s;\n",
+            formal_par->get_Type()->get_genname_template(my_scope).c_str(),
+            tmp_id.c_str());
+          // use the actual parameter's scope, not the formal parameter's, when
+          // generating the template's initialization code
+          act->temp->set_my_scope(my_scope);
+          expr->preamble = FormalPar::generate_code_defval_template(expr->preamble,
+            act->temp, tmp_id, act->get_gen_restriction_check());
+          expr->expr = mputstr(expr->expr, tmp_id.c_str());
+        }
+        else {
           expr->expr = mputstr(expr->expr, act->temp->get_Template()->get_genname_own(my_scope).c_str());
         }
         break;
@@ -10408,6 +10467,9 @@ namespace Ttcn {
       }
       break;
     case AP_TEMPLATE: {
+      if (use_runtime_2) {
+        break;
+      }
       str = temp->rearrange_init_code(str, usage_mod);
       Template *t = temp->get_Template();
       if (t->get_my_scope()->get_scope_mod_gen() == usage_mod) {

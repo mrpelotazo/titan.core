@@ -51,6 +51,7 @@
 #include "ttcn3/Ttcnstuff.hh"
 #include "ttcn3/TtcnTemplate.hh"
 #include "ttcn3/Templatestuff.hh"
+#include "ttcn3/RawAST.hh"
 
 #include "../common/static_check.h"
 #include "PredefFunc.hh"
@@ -2848,8 +2849,12 @@ namespace Common {
 
       if (NULL != jsonattrib->alias) {
         Type* parent = get_parent_type();
-        if (NULL == parent || (T_SEQ_T != parent->typetype && 
-            T_SET_T != parent->typetype && T_CHOICE_T != parent->typetype)) {
+        if (!legacy_codec_handling &&
+            (NULL == parent || (T_SEQ_T != parent->typetype && 
+            T_SET_T != parent->typetype && T_CHOICE_T != parent->typetype))) {
+          // only report this error when using the new codec handling, otherwise
+          // ignore the attribute (since it can also be set by the XML 'name as ...'
+          // attribute)
           error("Invalid attribute, 'name as ...' requires field of a "
             "record, set or union.");
         }
@@ -3140,6 +3145,21 @@ namespace Common {
           strcmp(dval, "inconc") != 0 && strcmp(dval, "fail") != 0 &&
           strcmp(dval, "error") != 0) {
         err = true;
+      }
+      break;
+    case T_SEQ_T:
+    case T_SET_T:
+      if (last->get_nof_comps() != 0) {
+        error("JSON default values are not available for record/set types with "
+          "1 or more fields");
+        break;
+      }
+      // else fall through
+    case T_SEQOF:
+    case T_SETOF:
+      if (dval_len != 2 || dval[0] != '{' || dval[1] != '}') {
+        error("Invalid JSON default value for type `%s'. Only the empty array "
+          "is allowed.", last->get_typename().c_str());
       }
       break;
     default:
