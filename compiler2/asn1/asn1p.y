@@ -108,7 +108,6 @@ void yynote(const char *s)
  *********************************************************************/
 
 %name-prefix="asn1_yy"
-%output="asn1p.tab.cc"
 %defines
 %verbose
 %glr-parser

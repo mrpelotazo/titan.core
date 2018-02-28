@@ -58,7 +58,6 @@ static void yyerror(const char *str);
  *********************************************************************/
 
 %name-prefix="coding_attrib_"
-%output="coding_attrib_p.cc"
 %expect 0
 
 /*********************************************************************

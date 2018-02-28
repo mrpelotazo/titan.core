@@ -125,7 +125,6 @@ static void yyprint(FILE *file, int type, const YYSTYPE& value);
  *********************************************************************/
 
 %name-prefix="pattern_yy"
-%output="pattern_p.cc"
 %defines
 %verbose
 %expect 0
