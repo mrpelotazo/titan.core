@@ -116,7 +116,7 @@ add_library(ttcn3_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
     ${RT1_DIR}/TitanLoggerApiSimple.hh
     ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
-    ${RT1_DIR}/TitanLoggerControl.hh cversion.h
+    ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
 )
@@ -157,7 +157,7 @@ add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
     ${RT1_DIR}/TitanLoggerApiSimple.hh
     ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
-    ${RT1_DIR}/TitanLoggerControl.hh cversion.h
+    ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
 )
@@ -200,7 +200,7 @@ add_library(ttcn3-rt2_obj OBJECT ${CORE2_STATIC_SOURCES}
     ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
     ${RT2_DIR}/TitanLoggerApiSimple.hh
     ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
-    ${RT2_DIR}/TitanLoggerControl.hh cversion.h
+    ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
 )
@@ -243,7 +243,7 @@ add_library(ttcn3-rt2-parallel_obj OBJECT ${CORE2_STATIC_SOURCES}
     ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
     ${RT2_DIR}/TitanLoggerApiSimple.hh
     ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
-    ${RT2_DIR}/TitanLoggerControl.hh cversion.h
+    ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
 )
