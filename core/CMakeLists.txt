@@ -137,11 +137,23 @@ target_compile_definitions(ttcn3 INTERFACE
     -DLINUX
 )
 
+target_compile_definitions(ttcn3-dynamic INTERFACE
+    -DLINUX
+)
+
 target_link_libraries(ttcn3-dynamic PUBLIC
     ${LIBEDIT}
 )
 
 target_include_directories(ttcn3 INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT1_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+target_include_directories(ttcn3-dynamic INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -184,7 +196,19 @@ target_compile_definitions(ttcn3-parallel INTERFACE
     -DLINUX
 )
 
+target_compile_definitions(ttcn3-parallel-dynamic INTERFACE
+    -DLINUX
+)
+
 target_include_directories(ttcn3-parallel INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT1_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+target_include_directories(ttcn3-parallel-dynamic INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -223,11 +247,23 @@ target_compile_definitions(ttcn3-rt2 INTERFACE
     -DLINUX
 )
 
+target_compile_definitions(ttcn3-rt2-dynamic INTERFACE
+    -DLINUX
+)
+
 target_link_libraries(ttcn3-rt2-dynamic PUBLIC
     ${LIBEDIT}
 )
 
 target_include_directories(ttcn3-rt2 INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT2_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+target_include_directories(ttcn3-rt2-dynamic INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -266,11 +302,23 @@ target_compile_definitions(ttcn3-rt2-parallel INTERFACE
     -DLINUX
 )
 
+target_compile_definitions(ttcn3-rt2-parallel-dynamic INTERFACE
+    -DLINUX
+)
+
 target_link_libraries(ttcn3-rt2-parallel-dynamic PUBLIC
     ${LIBEDIT}
 )
 
 target_include_directories(ttcn3-rt2-parallel INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${RT2_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+target_include_directories(ttcn3-rt2-parallel-dynamic INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/common>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
