@@ -109,10 +109,35 @@ add_custom_command(OUTPUT cversion.h
 )
 
 #---------------------------------------------------------------------------------------
+# Target logger-plugin
+#---------------------------------------------------------------------------------------
+add_library(logger-plugin_obj OBJECT
+    LoggerPlugin_static.cc
+)
+
+target_include_directories(logger-plugin_obj PRIVATE
+    ${PROJECT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+add_library(logger-plugin-dynamic_obj OBJECT
+    LoggerPlugin_dynamic.cc
+)
+
+set_target_properties(logger-plugin-dynamic_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
+target_include_directories(logger-plugin-dynamic_obj PRIVATE
+    ${PROJECT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+#---------------------------------------------------------------------------------------
 # Target ttcn3
 #---------------------------------------------------------------------------------------
 add_library(ttcn3_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
-    Single_main.cc LoggerPlugin_static.cc
+    Single_main.cc
     ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
     ${RT1_DIR}/TitanLoggerApiSimple.hh
     ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
@@ -130,8 +155,17 @@ target_include_directories(ttcn3_obj PUBLIC
     ${LIBXML2_INCLUDE_DIR}
 )
 
-add_library(ttcn3 STATIC $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
-add_library(ttcn3-dynamic SHARED $<TARGET_OBJECTS:ttcn3_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3 STATIC
+    $<TARGET_OBJECTS:ttcn3_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin_obj>
+)
+
+add_library(ttcn3-dynamic SHARED
+    $<TARGET_OBJECTS:ttcn3_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin-dynamic_obj>
+)
 
 target_compile_definitions(ttcn3 INTERFACE
     -DLINUX
@@ -165,7 +199,7 @@ target_include_directories(ttcn3-dynamic INTERFACE
 # Target ttcn3-parallel
 #---------------------------------------------------------------------------------------
 add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
-    Parallel_main.cc LoggerPlugin_static.cc
+    Parallel_main.cc
     ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
     ${RT1_DIR}/TitanLoggerApiSimple.hh
     ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
@@ -185,8 +219,17 @@ target_include_directories(ttcn3-parallel_obj PUBLIC
 
 set_target_properties(ttcn3-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
-add_library(ttcn3-parallel STATIC $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
-add_library(ttcn3-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-parallel_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-parallel STATIC
+    $<TARGET_OBJECTS:ttcn3-parallel_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin_obj>
+)
+
+add_library(ttcn3-parallel-dynamic SHARED
+    $<TARGET_OBJECTS:ttcn3-parallel_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin-dynamic_obj>
+)
 
 target_link_libraries(ttcn3-parallel-dynamic PUBLIC
     ${LIBEDIT}
@@ -220,7 +263,7 @@ target_include_directories(ttcn3-parallel-dynamic INTERFACE
 # Target ttcn3-rt2
 #---------------------------------------------------------------------------------------
 add_library(ttcn3-rt2_obj OBJECT ${CORE2_STATIC_SOURCES}
-    Single_main.cc LoggerPlugin_static.cc
+    Single_main.cc
     ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
     ${RT2_DIR}/TitanLoggerApiSimple.hh
     ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
@@ -240,8 +283,17 @@ target_include_directories(ttcn3-rt2_obj PUBLIC
     ${RT2_DIR}
 )
 
-add_library(ttcn3-rt2 STATIC $<TARGET_OBJECTS:ttcn3-rt2_obj> $<TARGET_OBJECTS:common_obj>)
-add_library(ttcn3-rt2-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-rt2 STATIC
+    $<TARGET_OBJECTS:ttcn3-rt2_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin_obj>
+)
+
+add_library(ttcn3-rt2-dynamic SHARED
+    $<TARGET_OBJECTS:ttcn3-rt2_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin-dynamic_obj>
+)
 
 target_compile_definitions(ttcn3-rt2 INTERFACE
     -DLINUX
@@ -295,8 +347,17 @@ target_include_directories(ttcn3-rt2-parallel_obj PUBLIC
     ${RT2_DIR}
 )
 
-add_library(ttcn3-rt2-parallel STATIC $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj> $<TARGET_OBJECTS:common_obj>)
-add_library(ttcn3-rt2-parallel-dynamic SHARED $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj> $<TARGET_OBJECTS:common_obj>)
+add_library(ttcn3-rt2-parallel STATIC
+    $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin_obj>
+)
+
+add_library(ttcn3-rt2-parallel-dynamic SHARED
+    $<TARGET_OBJECTS:ttcn3-rt2-parallel_obj>
+    $<TARGET_OBJECTS:common_obj>
+    $<TARGET_OBJECTS:logger-plugin-dynamic_obj>
+)
 
 target_compile_definitions(ttcn3-rt2-parallel INTERFACE
     -DLINUX
