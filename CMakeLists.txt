@@ -44,6 +44,14 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_C_STANDARD 11)
 add_definitions(-DLINUX -DNDEBUG)
 
+if(UNIX)
+    execute_process(COMMAND uname -m OUTPUT_VARIABLE MACHINE_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    if(MACHINE_ARCH STREQUAL "armv7l")
+        add_compile_options(-fsigned-char)
+	endif()
+endif()
+
 #---------------------------------------------------------------------------------------
 # CMake package variables
 #---------------------------------------------------------------------------------------
@@ -116,7 +124,6 @@ if(UNIX)
     message(STATUS "Packages will be generated under ${CPACK_PACKAGE_DIRECTORY}")
 
     # try get linux distributuion and arch
-    execute_process(COMMAND uname -m OUTPUT_VARIABLE MACHINE_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
     find_program(LSB_RELEASE lsb_release)
 
     if(LSB_RELEASE)
@@ -137,7 +144,7 @@ if(UNIX)
         ${CPACK_PACKAGE_DIRECTORY}/postrm
     )
 
-    if(LINUX_DISTRO STREQUAL "debian" OR LINUX_DISTRO STREQUAL "ubuntu" OR LINUX_DISTRO STREQUAL "linuxmint")
+	if(LINUX_DISTRO STREQUAL "debian" OR LINUX_DISTRO STREQUAL "ubuntu" OR LINUX_DISTRO STREQUAL "linuxmint" OR LINUX_DISTRO STREQUAL "raspbian")
         execute_process(COMMAND dpkg-architecture -qDEB_HOST_ARCH OUTPUT_VARIABLE DEBIAN_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
         list(APPEND CPACK_GENERATOR DEB)
         set(CPACK_DEB_COMPONENT_INSTALL ON)
