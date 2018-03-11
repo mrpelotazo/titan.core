@@ -4922,6 +4922,14 @@ error:
         config_op.portref2->warning("Port type `%s' was marked as `internal'",
                 pt2->get_typename().c_str());
       }
+      if ((ptb1 != NULL && !ptb1->is_legacy() &&
+           ptb1->get_type() == PortTypeBody::PT_USER) ||
+          (ptb2 != NULL && !ptb2->is_legacy() &&
+           ptb2->get_type() == PortTypeBody::PT_USER)) {
+        note("This mapping is not done in translation mode, because the %s "
+          "endpoint is unknown",
+          ptb1 != NULL ? "second" : "first");
+      }
       return;
     }
     if (cref1_is_tc || cref2_is_system) {
@@ -4969,6 +4977,10 @@ error:
         Error_Context cntxt2(config_op.compref2, "In second endpoint");
         config_op.portref2->warning("Port type `%s' was marked as `internal'",
                 pt2->get_typename().c_str());
+      }
+      if ((!ptb1->is_legacy() && ptb1->get_type() == PortTypeBody::PT_USER) ||
+          (!ptb2->is_legacy() && ptb2->get_type() == PortTypeBody::PT_USER)) {
+        note("This mapping is not done in translation mode");
       }
     }
   }
@@ -5791,6 +5803,7 @@ error:
             case 1:
             case 2:
             case 3:
+            case 4:
               break;
             default:
               error = true;
@@ -5799,7 +5812,7 @@ error:
           error = true;
         }
         if (error) {
-          setstate_op.val->error("The value of the first parameter must be 0, 1, 2 or 3.");
+          setstate_op.val->error("The value of the first parameter must be 0, 1, 2, 3 or 4.");
         }
       }
     }
