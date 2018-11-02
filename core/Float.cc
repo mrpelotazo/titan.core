@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   >
@@ -481,7 +481,11 @@ FLOAT::BER_encode_TLV(const TTCN_Typedescriptor_t& p_td,
       double mantissa, exponent;
       exponent=floor(log10(fabs(float_value)))+1.0-DBL_DIG;
       mantissa=floor(float_value*pow(10.0,-exponent)+0.5);
-      if(mantissa)while(!fmod(mantissa,10.0))mantissa/=10.0,exponent+=1.0;
+      if(mantissa != 0.0) {
+        while(fmod(mantissa,10.0) == 0.0) {
+          mantissa/=10.0,exponent+=1.0;
+        }
+      }
       /** \todo review
           gcc 2.95:
           in mprintf below:
@@ -761,7 +765,7 @@ int FLOAT::RAW_encode(const TTCN_Typedescriptor_t& p_td, RAW_enc_tree& myleaf) c
 
 int FLOAT::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff,
   int limit, raw_order_t top_bit_ord, boolean no_err, int /*sel_field*/,
-  boolean /*first_call*/)
+  boolean /*first_call*/, const RAW_Force_Omit* /*force_omit*/)
 {
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);
   limit -= prepaddlength;
@@ -1188,7 +1192,11 @@ int FLOAT::OER_encode(const TTCN_Typedescriptor_t&, TTCN_Buffer& p_buf) const {
     double mantissa, exponent;
     exponent=floor(log10(fabs(float_value)))+1.0-DBL_DIG;
     mantissa=floor(float_value*pow(10.0,-exponent)+0.5);
-    if(mantissa)while(!fmod(mantissa,10.0))mantissa/=10.0,exponent+=1.0;
+    if(mantissa != 0.0) {
+      while(fmod(mantissa,10.0) == 0.0) {
+        mantissa/=10.0,exponent+=1.0;
+      }
+    }
     char * uc =
       mprintf("\x03%.f.E%s%.0f", mantissa, exponent==0.0?"+":"", exponent);
     size_t len = mstrlen(uc);

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -239,7 +239,7 @@ static CharCoding::CharCodingType is_utf8 ( const OCTETSTRING& ostr )
       while (0 < noofUTF8 ) {
         ++i;
   //std::cout << "mask & strptr[" << i << "] " << std::hex << (int)strptr[i]  << std::endl;
-        if (!(strptr[i] & MSB) || (strptr[i] & MSBmin1) || i >= ostr.lengthof()) { // if not like this: 10xx xxxx
+        if (i >= ostr.lengthof() || !(strptr[i] & MSB) || (strptr[i] & MSBmin1)) { // if not like this: 10xx xxxx
           return CharCoding::UNKNOWN;
         }
         --noofUTF8;
@@ -269,9 +269,14 @@ CHARSTRING int2char(const INTEGER& value)
   const int_val_t& ivt = value.get_val();
   if (ivt < 0 || ivt > 127) {
     char *value_str = ivt.as_string();
-    TTCN_error("The argument of function int2char() is %s, "
-      "which is outside the allowed range 0 .. 127.", value_str);
-    Free(value_str);
+    try {
+      TTCN_error("The argument of function int2char() is %s, "
+        "which is outside the allowed range 0 .. 127.", value_str);
+    }
+    catch (const TC_Error&) {
+      Free(value_str);
+      throw;
+    }
   }
   return CHARSTRING((char)((int)value));
 }
@@ -294,9 +299,14 @@ UNIVERSAL_CHARSTRING int2unichar(const INTEGER& value)
   const int_val_t& ivt = value.get_val();
   if (ivt < 0 || ivt > 2147483647) {
     char *value_str = ivt.as_string();
-    TTCN_error("The argument of function int2unichar() is %s, "
-      "which outside the allowed range 0 .. 2147483647.", value_str);
-    Free(value_str);
+    try {
+      TTCN_error("The argument of function int2unichar() is %s, "
+        "which outside the allowed range 0 .. 2147483647.", value_str);
+    }
+    catch (const TC_Error&) {
+      Free(value_str);
+      throw;
+    }
   }
   return int2unichar((int)value);
 }
@@ -310,9 +320,14 @@ BITSTRING int2bit(const INTEGER& value, int length)
   int_val_t tmp_value(value.get_val());
   if (tmp_value < 0) {
     char *value_str = tmp_value.as_string();
-    TTCN_error("The first argument (value) of function "
-      "int2bit() is a negative integer value: %s.", value_str);
-    Free(value_str);
+    try {
+      TTCN_error("The first argument (value) of function "
+        "int2bit() is a negative integer value: %s.", value_str);
+    }
+    catch (const TC_Error&) {
+      Free(value_str);
+      throw;
+    }
   }
   if (length < 0) TTCN_error("The second argument (length) of function "
     "int2bit() is a negative integer value: %d.", length);
@@ -333,10 +348,15 @@ BITSTRING int2bit(const INTEGER& value, int length)
       i++;
     }
     char *value_str = value.get_val().as_string(); // not tmp_value!
-    TTCN_error("The first argument of function int2bit(), which is %s, "
-      "does not fit in %d bit%s, needs at least %d.", value_str, length,
-      length > 1 ? "s" :"", length + i);
-    Free(value_str);
+    try {
+      TTCN_error("The first argument of function int2bit(), which is %s, "
+        "does not fit in %d bit%s, needs at least %d.", value_str, length,
+        length > 1 ? "s" :"", length + i);
+    }
+    catch (const TC_Error&) {
+      Free(value_str);
+      throw;
+    }
   }
   return ret_val;
 }
@@ -371,9 +391,14 @@ HEXSTRING int2hex(const INTEGER& value, int length)
   int_val_t tmp_value(value.get_val());
   if (value < 0) {
     char *value_str = tmp_value.as_string();
-    TTCN_error("The first argument (value) of function int2hex() is a "
-      "negative integer value: %s.", value_str);
-    Free(value_str);
+    try {
+      TTCN_error("The first argument (value) of function int2hex() is a "
+        "negative integer value: %s.", value_str);
+    }
+    catch (const TC_Error&) {
+      Free(value_str);
+      throw;
+    }
   }
   if (length < 0) TTCN_error("The second argument (length) of function "
     "int2hex() is a negative integer value: %d.", length);
@@ -388,10 +413,15 @@ HEXSTRING int2hex(const INTEGER& value, int length)
   }
   if (tmp_value != 0) {
     char *value_str = value.get_val().as_string(); // not tmp_value!
-    TTCN_error("The first argument of function int2hex(), which is %s, "
-      "does not fit in %d hexadecimal digit%s.", value_str, length,
-      length > 1 ? "s" :"");
-    Free(value_str);  // ???
+    try {
+      TTCN_error("The first argument of function int2hex(), which is %s, "
+        "does not fit in %d hexadecimal digit%s.", value_str, length,
+        length > 1 ? "s" :"");
+    }
+    catch (const TC_Error&) {
+      Free(value_str); 
+      throw;
+    }
   }
   return ret_val;
 }
@@ -574,7 +604,8 @@ int char2int(char value)
 
 int char2int(const char *value)
 {
-  if (value == NULL) value = "";
+  if (value == NULL) TTCN_error("The length of the argument in function "
+    "char2int() must be exactly 1 instead of 0.");
   int value_length = strlen(value);
   if (value_length != 1) TTCN_error("The length of the argument in function "
     "char2int() must be exactly 1 instead of %d.", value_length);
@@ -2955,20 +2986,33 @@ OCTETSTRING unichar2oct(const UNIVERSAL_CHARSTRING& invalue)
 CHARSTRING get_stringencoding(const OCTETSTRING& encoded_value)
 {
   if (!encoded_value.lengthof()) return CHARSTRING("<unknown>");
-  unsigned int i, j, length = encoded_value.lengthof();
+  unsigned int i, length = encoded_value.lengthof();
   const unsigned char* strptr = (const unsigned char*)encoded_value;
-  for (i = 0, j = 0; UTF8_BOM[i++] == strptr[j++] && i < sizeof (UTF8_BOM););
-  if (i == sizeof (UTF8_BOM) && sizeof(UTF8_BOM) <= length) return "UTF-8";
-  //UTF-32 shall be tested before UTF-16 !!!
-  for (i = 0, j = 0; UTF32BE_BOM[i++] == strptr[j++] && i < sizeof (UTF32BE_BOM););
-  if (i == sizeof (UTF32BE_BOM) && sizeof (UTF32BE_BOM) <= length ) return "UTF-32BE";
-  for (i = 0, j = 0; UTF32LE_BOM[i++] == strptr[j++] && i < sizeof (UTF32LE_BOM););
-  if (i == sizeof (UTF32LE_BOM) && sizeof (UTF32LE_BOM) <= length) return "UTF-32LE";
-  //UTF-32 shall be tested before UTF-16 !!!
-  for (i = 0, j = 0; UTF16BE_BOM[i++] == strptr[j++] && i < sizeof (UTF16BE_BOM););
-  if (i == sizeof (UTF16BE_BOM) && sizeof (UTF16BE_BOM) <= length) return "UTF-16BE";
-  for (i = 0, j = 0; UTF16LE_BOM[i++] == strptr[j++] && i < sizeof (UTF16LE_BOM););
-  if (i == sizeof (UTF16LE_BOM) && sizeof (UTF16LE_BOM) <= length) return "UTF-16LE";
+  if (length >= 1) {
+    switch (strptr[0]) {
+    case 0xef:
+      for (i = 1; i < sizeof (UTF8_BOM) && i < length && UTF8_BOM[i] == strptr[i] ; i++);
+      if (i == sizeof (UTF8_BOM) && sizeof(UTF8_BOM) <= length) return "UTF-8";
+      break;
+    case 0xfe:
+      for (i = 1; i < sizeof (UTF16BE_BOM) && i < length && UTF16BE_BOM[i] == strptr[i];  i++);
+      if (i == sizeof (UTF16BE_BOM) && sizeof (UTF16BE_BOM) <= length) return "UTF-16BE";
+      break;
+    case 0xff:
+      for (i = 1; i < sizeof (UTF32LE_BOM) && i < length && UTF32LE_BOM[i] == strptr[i]; i++);
+      if (i == sizeof (UTF32LE_BOM) && sizeof (UTF32LE_BOM) <= length) return "UTF-32LE";
+      for (i = 1; i < sizeof (UTF16LE_BOM) && i < length && UTF16LE_BOM[i] == strptr[i]; i++);
+      if (i == sizeof (UTF16LE_BOM) && sizeof (UTF16LE_BOM) <= length) return "UTF-16LE";
+      break;
+    case 0x00:
+      for (i = 1; i < sizeof (UTF32BE_BOM) && i < length && UTF32BE_BOM[i] == strptr[i]; i++);
+      if (i == sizeof (UTF32BE_BOM) && sizeof (UTF32BE_BOM) <= length ) return "UTF-32BE";
+      break;
+    default:
+      break;
+    }
+  }
+  
   if (is_ascii (encoded_value) == CharCoding::ASCII) {
     return "ASCII";
   }  

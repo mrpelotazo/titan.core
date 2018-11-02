@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -91,8 +91,8 @@ static boolean update_file(const char *file_name, FILE *fp, size_t skip_lines)
 	/* compare the rest of the files */
         for ( ; ; ) {
 	    char buf1[BUFSIZE], buf2[BUFSIZE];
-	    int len1 = fread(buf1, 1, BUFSIZE, fp);
-	    int len2 = fread(buf2, 1, BUFSIZE, target);
+	    size_t len1 = fread(buf1, 1, BUFSIZE, fp);
+	    size_t len2 = fread(buf2, 1, BUFSIZE, target);
 	    if ((len1 != len2) || memcmp(buf1, buf2, len1)) {
 		files_differ = TRUE;
 		break;

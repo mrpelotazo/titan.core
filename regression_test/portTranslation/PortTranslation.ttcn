@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Szabo, Bence Janos
@@ -208,8 +208,19 @@ module PortTranslation {
 		extension "prototype(fast)";
 	}
 	
-	function char_to_hex3(in charstring i, out hexstring j) {
+	function f_port_ref_test(PT3 p1, inout PT3 p2)
+	{
+	  if (log2str(p1) != "port p3") {
+	    setverdict(fail, "First port argument is invalid. Expected port p3, got: ", p1);
+	  }
+	  if (log2str(p2) != "port p3") {
+	    setverdict(fail, "First port argument is invalid. Expected port p3, got: ", p1);
+	  }
+	}
+	
+	function char_to_hex3(in charstring i, out hexstring j) port PT3 {
 	  j := oct2hex(char2oct(i));
+	  f_port_ref_test(port.getref(), port.getref());
 	  port.setstate(0); // translated
 	} with {
 		extension "prototype(fast)";
@@ -217,6 +228,26 @@ module PortTranslation {
 	
 	function bool_to_bool_discard(in boolean i, out boolean j) {
 		port.setstate(4); // discarded
+	} with {
+		extension "prototype(fast)";
+	}
+	
+	function int_to_int(in integer i, out integer j) port PT4 {
+		j := i;
+		port.setstate(0);
+	} with {
+		extension "prototype(fast)";
+	}
+
+	function char_to_char2(in charstring i, out charstring j) port PT4 {
+		j := i;
+		if (i == "abc") {
+			setverdict(pass);
+		}
+		else {
+			setverdict(fail, "Sending invalid message: ", i);
+		}
+		port.setstate(0);
 	} with {
 		extension "prototype(fast)";
 	}
@@ -261,6 +292,13 @@ module PortTranslation {
 	} with {
 	  extension "provider"
 	}
+	
+	type port P5 message {
+		in integer
+		out charstring
+	} with {
+		extension "provider"
+	}
 
 	type port PT2 message map to P1, P2 {
 		in charstring from charstring with char_to_char()
@@ -283,23 +321,32 @@ module PortTranslation {
 	  out integer, charstring
 	  out boolean to boolean with bool_to_bool_discard()
 	}
+	
+	type port PT4 message map to P5 {
+		in integer from integer with int_to_int()
+		out charstring to charstring with char_to_char2()
+	}
 
 
 	type component MyComp {
 		port PT2 p;
 		port PT3 p3;
+		port PT4 p4;
 
 		// Extra port types to check if multiple map/unmaps does not make things go bad
 		port PT2 p11;
 		port PT2 p12;
 		port PT2 p13;
 	}
+	
+	type component MyComp2 {}
 
 	type component System {
 		port P1 p1
 		port P2 p2
 		port P3 p3
 		port P4 p4
+		port P5 p5
 
 		// Extra port types to check if multiple map/unmaps does not make things go bad
 		port P1 p11
@@ -788,7 +835,8 @@ module PortTranslation {
 	}
 	
 	// This tests the 'discard' option in the 'setstate' operation when receiving
-	testcase tc_receive_discarded() runs on MyComp system System {
+	// It also tests the operation 'port.getref()'
+	testcase tc_receive_discarded_plus_port_ref() runs on MyComp system System {
 	  map(self:p3, system:p4);
 	  
 	  p3.send(123);
@@ -810,6 +858,7 @@ module PortTranslation {
 		// an integer (-10) and a charstring ("abc") are received on the provider port,
 		// the translation functions discard the integer and convert the charstring into a hexstring,
 		// so only the hexstring is received on the main port
+		// (the charstring-to-hexstring translation function also contains tests for operation 'port.getref()')
 		alt {
 		  [] p3.receive(hexstring: '616263'H) { setverdict(pass); }
 		  [] p3.receive(hexstring: ?) -> value bad { setverdict(fail, "Test #2 failed. Received invalid hexstring: ", bad); }
@@ -817,6 +866,55 @@ module PortTranslation {
 		  [] t.timeout { setverdict(fail, "Test #2 timed out."); }
 		}
 		t.stop;
+	}
+	
+	// Test function for remote mappings (is executed on the same PTC where the mappings take place)
+	function f_behavior_mapping_test(boolean mapping_required) runs on MyComp system System {
+		var boolean is_mapped := p4.checkstate("Mapped");
+		if (is_mapped and mapping_required) {
+			// it's mapped and it should be
+			// the translation function will set the verdict
+			p4.send("abc");
+		}
+		else if (not is_mapped and not mapping_required) {
+			// it's correctly not mapped
+			setverdict(pass);
+		}
+		else {
+			var charstring mapped_state;
+			if (is_mapped) {
+				mapped_state := "mapped";
+			}
+			else {
+				mapped_state := "unmapped";
+			}
+			setverdict(fail, "Invalid port state (port is ", mapped_state, ").");
+		}
+	}
+
+	// Remote mapping function
+	// Maps and unmaps ports (in translation mode) on a different PTC, and runs the test function.
+	function f_behavior_map_and_unmap() runs on MyComp2 system System {
+		var MyComp ct := MyComp.create alive;
+		map(ct:p4, system:p5);
+		ct.start(f_behavior_mapping_test(true));
+		ct.done;
+		
+		unmap(ct:p4, system:p5);
+		ct.start(f_behavior_mapping_test(false));
+		ct.done;
+	}
+
+	// Tests remote mapping and unmapping (initiated from a PTC).
+	testcase tc_remote_mapping_from_ptc() runs on MyComp2 system System {
+		var MyComp2 ct := MyComp2.create;
+		ct.start(f_behavior_map_and_unmap());
+		ct.done;
+	}
+
+	// Tests remote mapping and unmapping (initiated from the MTC).
+	testcase tc_remote_mapping_from_mtc() runs on MyComp2 system System {
+		f_behavior_map_and_unmap();
 	}
 
 	control {
@@ -836,7 +934,10 @@ module PortTranslation {
 		execute(tc_receive_partially_translated());
 		execute(tc_receive_fragmented());
 		
-		execute(tc_receive_discarded());
+		execute(tc_receive_discarded_plus_port_ref());
+		
+		execute(tc_remote_mapping_from_ptc());
+		execute(tc_remote_mapping_from_mtc());
 	}
 
 }

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -201,6 +201,15 @@ external function f_enc_multi_rec(in MultiLevelRec x) return octetstring
   with { extension "prototype(convert) encode(JSON)" }
 
 external function f_enc_multi_list(in MultiLevelList x) return octetstring
+  with { extension "prototype(convert) encode(JSON)" }
+
+external function f_enc_map(in Map x) return octetstring
+  with { extension "prototype(convert) encode(JSON)" }
+
+external function f_enc_json_val(in JsonValue x) return octetstring
+  with { extension "prototype(convert) encode(JSON)" }
+
+external function f_enc_enum_list(in EnumNumberList x) return octetstring
   with { extension "prototype(convert) encode(JSON)" }
 
 // for ASN.1 types
@@ -405,6 +414,15 @@ external function f_dec_multi_rec(in octetstring x) return MultiLevelRec
 external function f_dec_multi_list(in octetstring x) return MultiLevelList
   with { extension "prototype(convert) decode(JSON)" }
 
+external function f_dec_map(in octetstring x) return Map
+  with { extension "prototype(convert) decode(JSON)" }
+
+external function f_dec_json_val(in octetstring x) return JsonValue
+  with { extension "prototype(convert) decode(JSON)" }
+
+external function f_dec_enum_list(in octetstring x) return EnumNumberList
+  with { extension "prototype(convert) decode(JSON)" }
+
 // for ASN.1 types
 external function f_dec_seqofint(in octetstring x) return SeqOfInt
   with { extension "prototype(convert) decode(JSON)" }
@@ -428,6 +446,9 @@ external function f_dec_null(in octetstring x) return HasNull
   with { extension "prototype(convert) decode(JSON)" }
 
 external function f_dec_pduwithid(in octetstring x) return PduWithId
+  with { extension "prototype(convert) decode(JSON)" }
+  
+external function f_dec_pduwithid2(in octetstring x) return PduWithId2
   with { extension "prototype(convert) decode(JSON)" }
   
 //============== Internal Functions ====================

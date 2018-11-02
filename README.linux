@@ -1,9 +1,9 @@
 ******************************************************************************
-* Copyright (c) 2000-2017 Ericsson Telecom AB
+* Copyright (c) 2000-2018 Ericsson Telecom AB
 * All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Eclipse Public License v1.0
+* are made available under the terms of the Eclipse Public License v2.0
 * which accompanies this distribution, and is available at
-* http://www.eclipse.org/legal/epl-v10.html
+* https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 *  Contributors:
 *   Balasko, Jeno
 *   Baranyi, Botond
@@ -171,4 +171,28 @@ These tests might run for half an hour (regr.tests)  to two hours (func.tests)
 8. Optionally, copy Titan into its final directory.
 From here on, you can continue with the Titan installation guide, see /Install/docs, to set/change environment variables etc.
 and then, optionally, the Eclipse installation guide.
+
+
+9. Important Note:  In later Debian and derived (Ubuntu etc.)  distributions Titan is avalable directly from repositories 
+and can be installed with:
+
+apt-get install eclipse-titan
+
+However, environment variables and your Makefile will still have to be configured manually:
+
+export TTCN3_DIR=/usr
+export PATH=$TTCN3_DIR/bin/:${PATH}
+export LD_LIBRARY_PATH=$TTCN3_DIR/lib:${LD_LIBRARY_PATH}
+
+Add to your Makefile the appropriate flags:
+
+# Flags for the C++ preprocessor (and makedepend as well):
+CPPFLAGS = ..... -I/usr/include/titan
+
+and 
+
+# Flags for the linker:
+LDFLAGS = -L/usr/lib/titan 
+
+
 

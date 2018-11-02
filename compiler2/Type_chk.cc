@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -874,7 +874,7 @@ void Type::chk_encodings()
         add_coding(string(get_encoding_name(CT_JSON)), Ttcn::MOD_NONE, true);
         add_coding(string(get_encoding_name(CT_OER)), Ttcn::MOD_NONE, true);
         if (asn1_xer) {
-          // XER encoding for ASN.1 types can be disabled with a command line option
+          // XER encoding for ASN.1 types can be forced with a command line option
           add_coding(string(get_encoding_name(CT_XER)), Ttcn::MOD_NONE, true);
         }
         break;
@@ -3059,7 +3059,7 @@ void Type::chk_oer() {
         bool lower_inf = lower.get_type() != int_limit_t::NUMBER;
         bool upper_inf = upper.get_type() != int_limit_t::NUMBER;
         if (lower_inf || upper_inf) {
-          oerattrib->signed_ = lower_inf;
+          oerattrib->signed_ = lower_inf || lower.get_value() < 0;
           oerattrib->bytes = -1;
         } else {
           int_val_t low = lower.get_value();

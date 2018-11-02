@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   
@@ -3130,16 +3130,16 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
 
   // (argc - optind) is the number of non-option arguments (assumed to be files)
   // given on the command line.
-  int new_argc = local_argc - local_optind + files.size() + base_files.size();
+  size_t new_argc = local_argc - local_optind + files.size() + base_files.size();
   char ** new_argv = (char**)Malloc(sizeof(char*) * new_argc);
 
-  int n = 0;
+  size_t n = 0;
 
   // First, copy the filenames gathered from the TPD
   //
   // We symlink the files into the working directory
   // and pass only the filename to the makefile generator
-  for (int nf = files.size(); n < nf; ++n) {
+  for (size_t nf = files.size(); n < nf; ++n) {
     const char *fn = files.get_nth_elem(n); // relativeURI to the TPD location
     autostring  dir_n (get_dir_from_path (fn));
     autostring  file_n(get_file_from_path(fn));
@@ -3259,7 +3259,7 @@ static tpd_result process_tpd_internal(const char **p_tpd_name, char *tpdName, c
     *p_argc = new_argc;
     *p_optind = 0;
   } else {
-    for (int i = 0; i < new_argc; ++i) {
+    for (size_t i = 0; i < new_argc; ++i) {
       Free(new_argv[i]);
     }
     Free(new_argv);

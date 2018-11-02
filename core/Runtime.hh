@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -23,6 +23,7 @@
 #define RUNTIME_HH
 
 #include <sys/types.h>
+#include <time.h>
 #include "Types.h"
 
 class Text_Buf;
@@ -30,6 +31,7 @@ class COMPONENT;
 class VERDICTTYPE;
 class CHARSTRING;
 class INTEGER;
+class FLOAT;
 class PORT;
 
 extern "C" {
@@ -62,11 +64,14 @@ private:
   static executor_state_enum executor_state;
 
   static qualified_name component_type;
+  static qualified_name system_type;
   static char *component_name;
   static boolean is_alive;
 
   static const char *control_module_name;
   static qualified_name testcase_name;
+  
+  static timeval start_time;
 
   static char *host_name;
 
@@ -135,6 +140,7 @@ public:
   
   static void set_port_state(const INTEGER& state, const CHARSTRING& info, boolean by_system);
   static void set_translation_mode(boolean enabled, PORT* port);
+  static PORT* get_translation_port();
 
 private:
   inline static boolean in_controlpart()
@@ -152,6 +158,8 @@ public:
   static void clean_up();
   static void set_component_type(const char *component_type_module,
     const char *component_type_name);
+  static void set_system_type(const char* system_type_module,
+    const char* system_type_name);
   static void set_component_name(const char *new_component_name);
   inline static void set_alive_flag(boolean par_is_alive)
   { is_alive = par_is_alive; }
@@ -172,6 +180,8 @@ public:
 
   static CHARSTRING get_testcase_id_macro();
   static CHARSTRING get_testcasename();
+  
+  static FLOAT now();
 
   static void load_logger_plugins();
   static void set_logger_parameters();
@@ -194,6 +204,8 @@ public:
     unsigned short MC_port);
   static int mtc_main();
   static int ptc_main();
+  
+  static void initialize_system_port(const char* port_name);
 
   static component create_component(const char *created_component_type_module,
     const char *created_component_type_name,
@@ -305,8 +317,10 @@ public:
   static void process_create_mtc();
   static void process_create_ptc(component component_reference,
     const char *component_type_module, const char *component_type_name,
+    const char *system_type_module, const char *system_type_name,
     const char *par_component_name, boolean par_is_alive,
-    const char *current_testcase_module, const char *current_testcase_name);
+    const char *current_testcase_module, const char *current_testcase_name,
+    timeval testcase_start_time);
 
   static void process_create_ack(component new_component);
   static void process_running(boolean result_value);

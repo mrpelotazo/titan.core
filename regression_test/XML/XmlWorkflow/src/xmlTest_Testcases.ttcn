@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -2613,6 +2613,18 @@ group Elements{
   testcase tc_element_nillable_RemarkNillable_nilTrue_encDec() runs on xmlTest_CT {
     f_encDecTest_RemarkNillable2();
   }//tc_
+  
+  
+  testcase tc_substitution_group_merged() runs on xmlTest_CT {
+    f_shellCommandWithVerdict(xsd2ttcn_command & " -o substitution_group_one.xsd substitution_group_two.xsd",
+      "", c_shell_successWithoutWarningAndError);
+
+    if(getverdict == pass) {
+      f_compareFiles(
+        "XSD_Definitions_e.ttcn",
+        "XSD_Definitions.ttcn", c_numOfDiff);
+    }
+  }
 
 }//Element
 
@@ -2888,6 +2900,7 @@ control {
   execute(tc_element_nillable_RemarkNillable_nilFalse_encDec());
   execute(tc_element_nillable_RemarkNillable_nilTrue_encDec());
 
+  execute(tc_substitution_group_merged());
 }
 
 } with {

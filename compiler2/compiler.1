@@ -1,11 +1,13 @@
-.TH compiler 1 "October 2014" "Ericsson Telecom AB" "TTCN-3 Tools"
+.TH compiler 1 "April 2018" "Ericsson Telecom AB" "TTCN-3 Tools"
 .SH NAME
 compiler \- TTCN-3 and ASN.1 to C++ translator
 .SH SYNOPSIS
 .B compiler
-.RB "[\| " \-abcdEfgijlLMnpqrRsStuwxXyY " \|]"
+.RB "[\| " \-abcdDeEfgijlLMnNpqrRsStuwxXyY " \|]"
 .RB "[\| " \-V
 .IR " verb_level" " \|]"
+.RB "[\| " \-J
+.IR " file" " \|]"
 .RB "[\| " \-K
 .IR " file" " \|]"
 .RB "[\| " \-z
@@ -87,6 +89,12 @@ fields with DEFAULT values as
 .I omit
 in TTCN-3.
 .TP
+.B \-D
+Disable generation of user and time information comments in the output C++ code.
+.TP
+.B \-e
+Enforce legacy handling of encode and variant attributes.
+.TP
 .B \-E
 Instructs the variant attribute parser to display warnings instead of errors
 for unrecognized/erroneous attributes.
@@ -113,6 +121,9 @@ compatibility with the error message format of earlier versions.
 .TP
 .B \-j
 Disables JSON encoder/decoder functions.
+.TP
+.BI \-J " file"
+Read a list of input files from the provided file.
 .TP
 .BI \-K " file"
 Enables selective code coverage.
@@ -169,6 +180,9 @@ template restriction accordingly.
 .TP
 .B \-n
 Activates the debugger and generates extra code for storing debug information.
+.TP
+.B \-N
+Ignore UNTAGGED encoding instruction on top level unions (legacy behaviour).
 .TP
 .BI \-o " dir"
 The output files (including Test Port skeletons) will be placed into
@@ -416,10 +430,10 @@ ITU-T Recommendations X.680-683:
 .SH AUTHOR
 This manpage is written by Janos Zoltan Szabo, Ericsson Telecom AB
 .br
-Copyright (c) 2000-2017 Ericsson Telecom AB
+Copyright (c) 2000-2018 Ericsson Telecom AB
 .br
 All rights reserved. This program and the accompanying materials
-are made available under the terms of the Eclipse Public License v1.0
+are made available under the terms of the Eclipse Public License v2.0
 which accompanies this distribution, and is available at
 .br
-http://www.eclipse.org/legal/epl-v10.html
+https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html

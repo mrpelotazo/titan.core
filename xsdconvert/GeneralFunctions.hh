@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -25,7 +25,8 @@ enum modeType {
     type_reference_name, type_name, field_name, enum_id_name
 };
 
-void XSDName2TTCN3Name(const Mstring& in, QualifiedNames & used_names, modeType type_of_the_name,
+void XSDName2TTCN3Name(const Mstring& in, const Mstring& in_namespace,
+        QualifiedNames & used_names, modeType type_of_the_name,
         Mstring & res, Mstring & variant, bool no_replace = false);
 
 class ReferenceData;

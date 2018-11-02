@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -504,8 +504,8 @@ namespace Ttcn {
   string PatternString::create_charstring_literals(Common::Module *p_mod, string& preamble)
   {
     /* The cast is there for the benefit of OPTIONAL<CHARSTRING>, because
-     * it doesn't have operator+(). Only the first member needs the cast
-     * (the others will be automagically converted to satisfy
+     * it doesn't have operator+(). In most cases only the first member needs
+     * the cast (the others will be automagically converted to satisfy
      * CHARSTRING::operator+(const CHARSTRING&) ) */
     string s;
     if (pattern_type == CSTR_PATTERN)
@@ -612,13 +612,19 @@ namespace Ttcn {
           break; }
         // Not known in compile time
         case ps_elem_t::PSE_REF: {
+          Common::Assignment* assign = pse->ref->get_refd_assignment();
+          if (use_runtime_2 && i > 0 &&
+              assign->get_Type()->field_is_optional(pse->ref->get_subrefs())) {
+            // in RT2 convert all operands of type OPTIONAL<CHARSTRING> to
+            // CHARSTRING, not just the first one
+            s += "(CHARSTRING)";
+          }
           expression_struct expr;
           Code::init_expr(&expr);
           pse->ref->generate_code(&expr);
           if (expr.preamble || expr.postamble)
             FATAL_ERROR("PatternString::create_charstring_literals()");
           s += expr.expr;
-          Common::Assignment* assign = pse->ref->get_refd_assignment();
           char* str = NULL;
           
           // TODO: these checks will generated each time a reference is referenced in a pattern
@@ -733,7 +739,7 @@ namespace Ttcn {
             i = pstr.find('}', i + 1);
             
             // convert the character to UTF-8 format
-            utf8str += ustring_to_uft8(ustring(group, plane, row, cell));
+            utf8str += ustring_to_uft8(ustring((unsigned char)group, (unsigned char)plane, (unsigned char)row, (unsigned char)cell));
             continue;
           }
           else if ('\\' == pstr[i + 1]) {

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -225,7 +225,7 @@ namespace Asn {
             Constraints *t_cons=t_type->get_constraints();
             if(!t_cons) break;
             t_cons->chk_table();
-            TableConstraint *t_tc=dynamic_cast<TableConstraint*>
+            const TableConstraint *t_tc=dynamic_cast<const TableConstraint*>
               (t_cons->get_tableconstraint());
             if(!t_tc) break;
             Type *t_ocft=t_tc->consdtype;

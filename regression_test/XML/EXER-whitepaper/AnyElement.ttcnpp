@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -404,6 +404,89 @@ testcase decode_aes() runs on AE
   CHECK_DECODE(exer_dec_aes, str_aes_e, AEProductSingle, aesp_e);
 }
 
+
+const AEProduct aep_emb := {
+  name  := "nothing",
+  price := 1,
+  info  := "<ns:top xmlns:ns=\"http://www.example.com/A\">" &
+             "<ns1:sub1 xmlns:ns1=\"http://www.example.com/C\">100</ns1:sub1>" &
+             "<ns2:sub2 xmlns:ns2=\"http://www.somewhereelse.com\">200</ns2:sub2>" &
+           "</ns:top>"
+}
+
+const universal charstring str_ae_emb :=
+"<AEProduct>\n" &
+"\t<name>nothing</name>\n" &
+"\t<price>1</price>\n" &
+"\t<ns:top xmlns:ns=\"http://www.example.com/A\">" &
+    "<ns1:sub1 xmlns:ns1=\"http://www.example.com/C\">100</ns1:sub1>" &
+    "<ns2:sub2 xmlns:ns2=\"http://www.somewhereelse.com\">200</ns2:sub2>" &
+  "</ns:top>\n" &
+"</AEProduct>\n\n";
+
+testcase encode_ae_emb() runs on AE
+{
+  CHECK_METHOD(exer_enc_ae, aep_emb, str_ae_emb);
+}
+
+testcase decode_ae_emb() runs on AE
+{
+  CHECK_DECODE(exer_dec_ae, str_ae_emb, AEProduct, aep_emb);
+}
+
+// testing 'anyElement' in a record of record (bug 539956)
+type record Main
+{
+	record of AnyElem anyElem_list
+}
+with {
+  variant "name as uncapitalized";
+  variant (anyElem_list) "untagged";
+};
+
+type record AnyElem
+{
+	universal charstring elem
+}
+with {
+  variant "untagged";
+  variant (elem) "anyElement";
+};
+
+DECLARE_XER_ENCODERS(Main, main);
+DECLARE_EXER_ENCODERS(Main, main);
+
+const Main ae_rorec := {
+  anyElem_list := { { elem := "<something/>" } }
+};
+
+const universal charstring str_ae_rorec_b := 
+"<Main>\n" &
+"\t<anyElem_list>\n" &
+"\t\t<AnyElem>\n" &
+"\t\t\t<elem>&lt;something/&gt;</elem>\n" &
+"\t\t</AnyElem>\n" &
+"\t</anyElem_list>\n" &
+"</Main>\n\n";
+
+const universal charstring str_ae_rorec_e :=
+"<main>\n" &
+"\t<something/>\n" &
+"</main>\n\n";
+
+testcase encode_ae_rorec() runs on AE
+{
+  CHECK_METHOD(bxer_enc_main, ae_rorec, str_ae_rorec_b);
+  CHECK_METHOD(exer_enc_main, ae_rorec, str_ae_rorec_e);
+}
+
+testcase decode_ae_rorec() runs on AE
+{
+  CHECK_DECODE(bxer_dec_main, str_ae_rorec_b, Main, ae_rorec);
+  CHECK_DECODE(exer_dec_main, str_ae_rorec_e, Main, ae_rorec);
+}
+
+
 control
 {
   execute(encode_ae())
@@ -423,6 +506,12 @@ control
 
   execute(encode_aes())
   execute(decode_aes())
+  
+  execute(encode_ae_emb())
+  execute(decode_ae_emb())
+  
+  execute(encode_ae_rorec())
+  execute(decode_ae_rorec())
 }
 
 }

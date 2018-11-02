@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -1132,8 +1132,7 @@ int INTEGER::RAW_encode(const TTCN_Typedescriptor_t& p_td, RAW_enc_tree& myleaf)
     value = 0;
     neg_sgbit = FALSE;
   }
-  if (value != 0 && value == -value) {
-    // value == -INT_MAX-1 a.k.a. INT_MIN a.k.a. 0x8000....
+  if (value == INT_MIN) {
     INTEGER big_value(to_openssl(val.native)); // too big for native
     return big_value.RAW_encode_openssl(p_td, myleaf);
   }
@@ -1177,7 +1176,11 @@ int INTEGER::RAW_encode(const TTCN_Typedescriptor_t& p_td, RAW_enc_tree& myleaf)
   }
   else { // not IntX, use the field length
     length = (p_td.raw->fieldlength + 7) / 8;
-    if (min_bits(value) > p_td.raw->fieldlength) {
+    int min_bits_ = min_bits(value);
+    if (p_td.raw->comp == SG_SG_BIT) {
+      ++min_bits_;
+    }
+    if (min_bits_ > p_td.raw->fieldlength) {
       TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_LEN_ERR,
         "There are insufficient bits to encode '%s' : ", p_td.name);
       value = 0; // substitute with zero
@@ -1401,7 +1404,7 @@ int INTEGER::RAW_encode_openssl(const TTCN_Typedescriptor_t& p_td,
 
 int INTEGER::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff,
   int limit, raw_order_t top_bit_ord, boolean no_err, int /*sel_field*/,
-  boolean /*first_call*/)
+  boolean /*first_call*/, const RAW_Force_Omit* /*force_omit*/)
 {
   bound_flag = FALSE;
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);
@@ -1797,7 +1800,11 @@ int INTEGER::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_buf) c
     size_t len = 1;
     // No length restriction on integer
     if (p_td.oer->bytes == -1) {
-      ulong_val >>= 7;
+      if (p_td.oer->signed_) {
+        ulong_val >>= 7;
+      } else {
+        ulong_val >>= 8;
+      }
       while (ulong_val != 0) {
         len++;
         ulong_val >>= 8;

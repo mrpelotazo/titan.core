@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -310,6 +310,7 @@ namespace Ttcn {
     Value* get_string_encoding() const;
     TemplateInstance* get_decode_target() const;
     Template* get_concat_operand(bool first) const;
+    bool is_optional_value_ref() const;
   private:
     Template* get_template_refd(ReferenceChain *refch);
     Template* get_refd_field_template(const Identifier& field_id,
@@ -361,6 +362,8 @@ namespace Ttcn {
     void chk_specific_value_generic();
     void chk_invoke();
     void chk_concat_double_length_res();
+
+    void chk_immutability();
 
     /** Copy template elements from the "all from" into the template.
      *
@@ -591,6 +594,8 @@ namespace Ttcn {
 
     bool chk_restriction(const char* definition_name,
       template_restriction_t template_restriction, const Location* usage_loc);
+
+    void chk_immutability() const ;
 
     /** Returns whether the template instance can be represented by an in-line
      *  C++ expression. */

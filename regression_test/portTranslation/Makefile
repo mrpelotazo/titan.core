@@ -1,9 +1,9 @@
 ##############################################################################
-# Copyright (c) 2000-2017 Ericsson Telecom AB
+# Copyright (c) 2000-2018 Ericsson Telecom AB
 # All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
+# are made available under the terms of the Eclipse Public License v2.0
 # which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
+# https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 #
 # Contributors:
 #   Szabo, Bence Janos
@@ -64,7 +64,7 @@ GENERATED_SOURCES += $(GENERATED_SOURCES2)
 endif
 # C/C++ Source & header files of Test Ports, external functions and
 # other modules:
-USER_SOURCES = PT2.cc PT3.cc P1.cc P2.cc P3.cc P4.cc VP1.cc NVP1.cc P1Internal.cc P2Internal.cc P3Internal.cc VP1Internal.cc
+USER_SOURCES = PT2.cc PT3.cc PT4.cc P1.cc P2.cc P3.cc P4.cc P5.cc VP1.cc NVP1.cc P1Internal.cc P2Internal.cc P3Internal.cc VP1Internal.cc
 USER_HEADERS = $(USER_SOURCES:.cc=.hh)
 
 # Object files of this project that are needed for the executable test suite:

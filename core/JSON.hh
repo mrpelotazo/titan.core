@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -20,6 +20,12 @@ class TTCN_Buffer;
 class JSON_Tokenizer;
 class CHARSTRING;
 class INTEGER;
+
+/** Enumerated text change structure */
+struct JsonEnumText {
+  int index;
+  const char* text;
+};
 
 /** Descriptor for JSON encoding/decoding during runtime */
 struct TTCN_JSONdescriptor_t 
@@ -66,6 +72,19 @@ struct TTCN_JSONdescriptor_t
     * number, instead of its name form as a JSON string (affects both encoding
     * and decoding). */
   boolean as_number;
+  
+  /** If set, encodes the value into a map of key-value pairs (i.e. a fully 
+    * customizable JSON object). The encoded type has to be a record of/set of
+    * with a record/set element type, which has 2 fields, the first of which is
+    * a non-optional universal charstring.
+    * Example: { "key1" : value1, "key2" : value2 } */
+  boolean as_map;
+  
+  /** Number of enumerated values whose texts are changed. */
+  size_t nof_enum_texts;
+  
+  /** List of enumerated values whose texts are changed. */
+  const JsonEnumText* enum_texts;
 };
 
 /** This macro makes sure that coding errors will only be displayed if the silent

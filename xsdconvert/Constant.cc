@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Szabo, Bence Janos
@@ -69,7 +69,7 @@ void Constant::nameConversion_types(const List<NamespaceType> & ns) {
     // otherwise the new value is always the same as the old.
   } else {
     Mstring res, var;
-    XSDName2TTCN3Name(value_str, TTCN3ModuleInventory::getInstance().getTypenames(), type_reference_name, res, var);
+    XSDName2TTCN3Name(value_str, empty_string, TTCN3ModuleInventory::getInstance().getTypenames(), type_reference_name, res, var);
     setTypeValue(res);
   }
 }

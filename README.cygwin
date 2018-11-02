@@ -1,9 +1,9 @@
 ******************************************************************************
-* Copyright (c) 2000-2017 Ericsson Telecom AB
+* Copyright (c) 2000-2018 Ericsson Telecom AB
 * All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Eclipse Public License v1.0
+* are made available under the terms of the Eclipse Public License v2.0
 * which accompanies this distribution, and is available at
-* http://www.eclipse.org/legal/epl-v10.html
+* https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 *  Contributors:
 *   Balasko, Jeno
 *   Baranyi, Botond
@@ -56,13 +56,14 @@ Cygwin setup
     Devel: gcc-g++
     Devel: make
     Libs: libxml2-devel
-      Net: openssl-devel (automatically installs Net:openssl 
-                        as well, if selected)
-        c) To compile your own Titan Cygwin binary: in addition to the
+    Net: openssl-devel
+  c) To compile your own Titan Cygwin binary: in addition to the
            above, select the following packages:
     Devel: bison
-    Devel: ctags 
-    Devel: cygwin32-expat
+    Devel: ctags
+    Lib: libexpat1
+    Lib: libiconv-devel
+    Lib: libiconv2
     Devel: diffstat
     Devel: flex
     Devel: gcc-core
@@ -97,6 +98,9 @@ Cygwin setup
        "/cygdrive/c/Users/<yourUserId>/Documents/My_Home"
        WARNING: The path of your "unix" home directory shall not contain
                 any space!
+       NOTE: If /etc/passwd does not exist, edit the /etc/nsswitch.conf file. Insert the line
+       db_home:  /cygdrive/c/Users/<yourUserId>/Documents/My_Home
+	   into that file (or edit that line).
 
     (I1)If you are working with Titan plugins for Eclipse or any Windows based program 
         using cygwin commands, insert the Windows equivalent path of cygwin folders "/bin" or/and "/usr/bin" 
@@ -129,7 +133,7 @@ Cygwin setup
     Compile Titan with Cygwin:
     Edit the <your home directory>/.bashrc, as above in (J), add these lines to it: 
       export TTCN3_DIR=${HOME}/git/titan.core/Install
-      export PATH=${TTCN3_DIR}/bin:${PATH}
+      export PATH=.:${TTCN3_DIR}/bin:${PATH}
       export LD_LIBRARY_PATH=${TTCN3_DIR}/lib:${LD_LIBRARY_PATH}
     Create titan.core/Makefile.personal with the following content:    
             TTCN3_DIR := <your home directory>/git/titan.core/Install

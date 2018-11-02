@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -27,6 +27,12 @@ JsonSchemaExtension::~JsonSchemaExtension()
   Free(value);
 }
 
+JsonEnumText::~JsonEnumText()
+{
+  Free(from);
+  Free(to);
+}
+
 void JsonAST::init_JsonAST()
 {
   omit_as_null = false;
@@ -36,6 +42,7 @@ void JsonAST::init_JsonAST()
   metainfo_unbound = false;
   as_number = false;
   tag_list = NULL;
+  as_map = false;
 }
 
 JsonAST::JsonAST(const JsonAST *other_val)
@@ -51,6 +58,11 @@ JsonAST::JsonAST(const JsonAST *other_val)
       schema_extensions.add(new JsonSchemaExtension(*other_val->schema_extensions[i]));
     }
     metainfo_unbound = other_val->metainfo_unbound;
+    as_map = other_val->as_map;
+    for (size_t i = 0; i < other_val->enum_texts.size(); ++i) {
+      enum_texts.add(new JsonEnumText(mcopystr(other_val->enum_texts[i]->from),
+        mcopystr(other_val->enum_texts[i]->to)));
+    }
   }
 }
 
@@ -66,6 +78,17 @@ JsonAST::~JsonAST()
     free_rawAST_tag_list(tag_list);
     delete tag_list;
   }
+  for (size_t i = 0; i < enum_texts.size(); ++i) {
+    delete enum_texts[i];
+  }
+  enum_texts.clear();
+}
+
+boolean JsonAST::empty() const
+{
+  return omit_as_null == false && alias == NULL && as_value == false &&
+    default_value == NULL && metainfo_unbound == false && as_number == false &&
+    tag_list == NULL && as_map == false && enum_texts.size() == 0;
 }
 
 void JsonAST::print_JsonAST() const
@@ -118,5 +141,15 @@ void JsonAST::print_JsonAST() const
         printf("\n\r");
       }
     }
+  }
+  if (as_map) {
+    printf("Encoding elements into a map of key-value pairs.\n\r");
+  }
+  if (0 != enum_texts.size()) {
+    printf("Enum texts:");
+    for (size_t i = 0; i < enum_texts.size(); ++i) {
+      printf(" '%s' -> '%s'", enum_texts[i]->from, enum_texts[i]->to);
+    }
+    printf("\n\r");
   }
 }

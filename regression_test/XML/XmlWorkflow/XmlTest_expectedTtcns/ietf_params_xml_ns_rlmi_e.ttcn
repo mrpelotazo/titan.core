@@ -1,12 +1,12 @@
 /*******************************************************************************
-* Copyright (c) 2000-2017 Ericsson Telecom AB
+* Copyright (c) 2000-2018 Ericsson Telecom AB
 *
 * XSD to TTCN-3 Translator
 *
 * All rights reserved. This program and the accompanying materials
-* are made available under the terms of the Eclipse Public License v1.0
+* are made available under the terms of the Eclipse Public License v2.0
 * which accompanies this distribution, and is available at
-* http://www.eclipse.org/legal/epl-v10.html
+* https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 *
 * Contributors:
 *   Balasko, Jeno
@@ -56,7 +56,7 @@ type record List
 	XSD.AnyURI uri,
 	XSD.UnsignedInt version,
 	record of XSD.String attr optional,
-	record of XSD.Name name_list,
+	record of Name name_list,
 	record of Resource resource_list
 }
 with {
@@ -80,7 +80,7 @@ type record Resource
 {
 	XSD.AnyURI uri,
 	record of XSD.String attr optional,
-	record of XSD.Name name_list,
+	record of Name name_list,
 	record of Instance instance_list
 }
 with {

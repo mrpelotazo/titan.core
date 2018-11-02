@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -30,6 +30,7 @@
  ******************************************************************************/
 #include "../common/dbgnew.hh"
 #include "Value.hh"
+#include "AST.hh"
 #include "Identifier.hh"
 #include "Valuestuff.hh"
 #include "PredefFunc.hh"
@@ -170,6 +171,10 @@ namespace Common {
       case OPTYPE_GETVERDICT:
       case OPTYPE_TESTCASENAME:
       case OPTYPE_PROF_RUNNING:
+      case OPTYPE_NOW:
+        break;
+      case OPTYPE_GET_PORT_REF:
+        u.expr.type = p.u.expr.type; // the type is not owned, don't copy it
         break;
       case OPTYPE_COMP_RUNNING: // v1 [r2] b4
       case OPTYPE_COMP_ALIVE:
@@ -407,6 +412,242 @@ namespace Common {
     } // switch
   }
 
+  void Value::chk_expr_immutability() {
+    switch (valuetype) {
+      case V_REFD: {/**< referenced */
+        Ttcn::Ref_base* ttcn_ref = dynamic_cast<Ttcn::Ref_base*>(u.ref.ref);
+        if (ttcn_ref != NULL) {
+          ttcn_ref->chk_immutability();
+        }
+        break;}
+      case V_EXPR: /**< expressions */
+        switch (u.expr.v_optype) {
+          case OPTYPE_TESTCASENAME: // -
+            break;
+          case OPTYPE_NOW: // -
+            error("Operation 'now' cannot be used in alt guards.");
+            break;
+          case OPTYPE_RND: // -
+          case OPTYPE_RNDWITHVAL: /** \todo -> SEED */ // v1
+            warning("Random number generation 'rnd()' change the actual snapshot.");
+            break;
+          case OPTYPE_UNARYPLUS: // v1
+          case OPTYPE_UNARYMINUS: // v1
+          case OPTYPE_NOT: // v1
+          case OPTYPE_NOT4B: // v1
+          case OPTYPE_BIT2HEX: // v1  6
+          case OPTYPE_BIT2INT: // v1
+          case OPTYPE_BIT2OCT: // v1
+          case OPTYPE_BIT2STR: // v1
+          case OPTYPE_CHAR2INT: // v1  10
+          case OPTYPE_CHAR2OCT: // v1
+          case OPTYPE_FLOAT2INT: // v1
+          case OPTYPE_FLOAT2STR: // v1
+          case OPTYPE_HEX2BIT: // v1
+          case OPTYPE_HEX2INT: // v1
+          case OPTYPE_HEX2OCT: // v1
+          case OPTYPE_HEX2STR: // v1
+          case OPTYPE_INT2CHAR: // v1
+          case OPTYPE_INT2FLOAT: // v1
+          case OPTYPE_INT2STR: // v1   20
+          case OPTYPE_INT2UNICHAR: // v1
+          case OPTYPE_OCT2BIT: // v1
+          case OPTYPE_OCT2CHAR: // v1
+          case OPTYPE_OCT2HEX: // v1
+          case OPTYPE_OCT2INT: // v1
+          case OPTYPE_OCT2STR: // v1
+          case OPTYPE_STR2BIT: // v1
+          case OPTYPE_STR2FLOAT: // v1
+          case OPTYPE_STR2HEX: // v1
+          case OPTYPE_STR2INT: // v1    30
+          case OPTYPE_STR2OCT: // v1
+          case OPTYPE_UNICHAR2INT: // v1
+          case OPTYPE_UNICHAR2CHAR: // v1
+          case OPTYPE_ENUM2INT: // v1
+          case OPTYPE_REMOVE_BOM: //v1
+          case OPTYPE_GET_STRINGENCODING: //v1
+          case OPTYPE_DECODE_BASE64: //v1
+          case OPTYPE_CBOR2JSON: // v1
+          case OPTYPE_JSON2CBOR: // v1
+          case OPTYPE_BSON2JSON: // v1
+          case OPTYPE_JSON2BSON: // v1
+            u.expr.v1->chk_expr_immutability();
+            break;
+          case OPTYPE_UNICHAR2OCT: // v1 [v2]
+          case OPTYPE_OCT2UNICHAR: // v1 [v2]
+          case OPTYPE_ENCODE_BASE64: //v1 [v2]
+            u.expr.v1->chk_expr_immutability();
+            if (u.expr.v2) u.expr.v2->chk_expr_immutability();
+            break;
+          case OPTYPE_ADD: // v1 v2
+          case OPTYPE_SUBTRACT: // v1 v2
+          case OPTYPE_MULTIPLY: // v1 v2
+          case OPTYPE_DIVIDE: // v1 v2      40
+          case OPTYPE_MOD: // v1 v2
+          case OPTYPE_REM: // v1 v2
+          case OPTYPE_CONCAT: // v1 v2
+          case OPTYPE_EQ: // v1 v2 ==
+          case OPTYPE_LT: // v1 v2 <
+          case OPTYPE_GT: // v1 v2 >
+          case OPTYPE_NE: // v1 v2 !=
+          case OPTYPE_GE: // v1 v2 >=
+          case OPTYPE_LE: // v1 v2 <=
+          case OPTYPE_AND: // v1 v2    50
+          case OPTYPE_OR: // v1 v2
+          case OPTYPE_XOR: // v1 v2
+          case OPTYPE_AND4B: // v1 v2
+          case OPTYPE_OR4B: // v1 v2
+          case OPTYPE_XOR4B: // v1 v2
+          case OPTYPE_SHL: // v1 v2
+          case OPTYPE_SHR: // v1 v2
+          case OPTYPE_ROTL: // v1 v2
+          case OPTYPE_ROTR: // v1 v2
+          case OPTYPE_INT2BIT: // v1 v2    60
+          case OPTYPE_INT2HEX: // v1 v2
+          case OPTYPE_INT2OCT: // v1 v2
+            u.expr.v1->chk_expr_immutability();
+            u.expr.v2->chk_expr_immutability();
+            break;
+          case OPTYPE_ENCODE: // ti1 [v2] [v3] 35
+          case OPTYPE_DECODE: // r1 r2 [v3] [v4]
+            // not yet done.
+            break;
+          case OPTYPE_SUBSTR:
+            u.expr.ti1->chk_immutability();
+            u.expr.v2->chk_expr_immutability();
+            u.expr.v3->chk_expr_immutability();
+            break;
+          case OPTYPE_REGEXP: 
+            u.expr.ti1->chk_immutability();
+            u.expr.t2->chk_immutability();
+            u.expr.v3->chk_expr_immutability();
+            break;
+          case OPTYPE_DECOMP: // not implemented (reference guide)
+            u.expr.v1->chk_expr_immutability();
+            u.expr.v2->chk_expr_immutability();
+            u.expr.v3->chk_expr_immutability();
+            break;
+          case OPTYPE_REPLACE: // ti1 v2 v3 ti4
+            u.expr.ti1->chk_immutability();
+            u.expr.v2->chk_expr_immutability();
+            u.expr.v3->chk_expr_immutability();
+            u.expr.ti4->chk_immutability();
+            break;
+          case OPTYPE_ISVALUE: // ti1   68
+          case OPTYPE_ISBOUND: // ti1
+          case OPTYPE_ISPRESENT: // ti1
+          case OPTYPE_LENGTHOF: // ti1
+          case OPTYPE_SIZEOF: // ti1 
+          case OPTYPE_VALUEOF: // ti1
+          case OPTYPE_TTCN2STRING: // ti1
+            u.expr.ti1->chk_immutability();
+            break;
+          case OPTYPE_ISCHOSEN: // r1 i2
+            break;
+          case OPTYPE_ISCHOSEN_V: // v1 i2
+            u.expr.v1->chk_expr_immutability();
+            break;
+          case OPTYPE_ISCHOSEN_T: // t1 i2
+            u.expr.t1->chk_immutability();
+            break;
+          case OPTYPE_MATCH: // v1 t2
+            u.expr.v1->chk_expr_immutability();
+            u.expr.t2->chk_immutability();
+            break;
+          case OPTYPE_UNDEF_RUNNING:
+          case OPTYPE_COMP_NULL:
+          case OPTYPE_COMP_MTC:
+          case OPTYPE_COMP_SYSTEM:
+          case OPTYPE_COMP_SELF:
+          case OPTYPE_COMP_CREATE: // r1 [v2] [v3] b4
+            break;
+          case OPTYPE_COMP_RUNNING: // v1 [r2] b4
+          case OPTYPE_COMP_RUNNING_ANY: // -
+          case OPTYPE_COMP_RUNNING_ALL: // -
+          case OPTYPE_COMP_ALIVE: // v1
+          case OPTYPE_COMP_ALIVE_ANY: // -
+          case OPTYPE_COMP_ALIVE_ALL: // -
+            warning("State of component(s) may change during the actual snapshot.");
+            break;
+          case OPTYPE_TMR_READ: // r1     90
+          case OPTYPE_TMR_RUNNING: // r1 [r2] b4
+          case OPTYPE_TMR_RUNNING_ANY: // -
+            warning("State of timer(s) may change during the actual snapshot.");
+            break;
+          case OPTYPE_GETVERDICT: // -
+          case OPTYPE_ACTIVATE: // r1
+          case OPTYPE_ACTIVATE_REFD: //v1 t_list2
+          case OPTYPE_EXECUTE: // r1 [v2]
+          case OPTYPE_EXECUTE_REFD: // v1 t_list2 [v3]
+          case OPTYPE_LOG2STR: // logargs
+          case OPTYPE_PROF_RUNNING: // -     99
+          case OPTYPE_ENCVALUE_UNICHAR: // ti1 [v2] [v3] [v4]
+          case OPTYPE_DECVALUE_UNICHAR: // r1 r2 [v3] [v4] [v5]
+          case OPTYPE_GET_PORT_REF: // -optypes
+          case OPTYPE_ANY2UNISTR: // logarg: length = 1
+            break;
+          case OPTYPE_CHECKSTATE_ANY: // [r1] v2: port or any
+          case OPTYPE_CHECKSTATE_ALL: // [r1] v2: port or all
+            warning("State of port(s) may change during the actual snapshot.");
+            break;
+          case OPTYPE_HOSTID: // [v1]
+            if (u.expr.v1) u.expr.v1->chk_expr_immutability();
+            break;
+          case OPTYPE_ISTEMPLATEKIND: // ti1 v2
+            u.expr.v2->chk_expr_immutability();
+            u.expr.ti1->chk_immutability();
+            break;
+          default:
+            FATAL_ERROR("Value::chk_expr_immutability()");
+        }
+        break;
+      case V_ERROR: /**< erroneous */
+      case V_UNDEF_LOWERID: /**< undefined loweridentifier */
+      case V_NULL: /**< NULL (for ASN.1 NULL type: also in TTCN-3) */
+      case V_BOOL: /**< boolean */
+      case V_NAMEDINT: /**< integer / named number */
+      case V_NAMEDBITS: /**< named bits (identifiers) */
+      case V_INT: /**< integer */
+      case V_REAL: /**< real/float */
+      case V_ENUM: /**< enumerated */
+      case V_BSTR: /**< bitstring */
+      case V_HSTR: /**< hexstring */
+      case V_OSTR: /**< octetstring */
+      case V_CSTR: /**< charstring */
+      case V_USTR: /**< universal charstring */
+      case V_ISO2022STR: /**< ISO-2022 string (treat as octetstring) */
+      case V_CHARSYMS: /**< parsed ASN.1 universal string notation */
+      case V_OID: /**< object identifier */
+      case V_ROID: /**< relative object identifier */
+      case V_CHOICE: /**< choice; set directly by the ASN.1 parser */
+      case V_SEQOF: /**< sequence (record) of */
+      case V_SETOF: /**< set of */
+      case V_ARRAY: /**< array */
+      case V_SEQ: /**< sequence (record) */
+        // TODO test?
+      case V_SET: /**< set */
+      case V_OPENTYPE: /**< open type */
+      case V_UNDEF_BLOCK: /**< undefined {block} */
+      case V_OMIT: /**< special value for optional values */
+      case V_VERDICT: /**< verdict */
+      case V_TTCN3_NULL: /**< TTCN-3 null (for component or default references) */
+      case V_DEFAULT_NULL: /**< null default reference */
+      case V_FAT_NULL: /**< null for function: altstep and testcase */
+      case V_MACRO: /**< macros (%%something) */
+      case V_NOTUSED: /**< not used symbol ('-') */
+      case V_FUNCTION: /**< function */
+      case V_ALTSTEP: /**< altstep */
+      case V_TESTCASE: /**< testcase */
+      case V_INVOKE: /**< invoke operation */
+      case V_REFER: /**< refer(function) */
+      case V_ANY_VALUE: /**< any value (?) - used by template concatenation */
+      case V_ANY_OR_OMIT: /**< any or omit (*) - used by template concatenation */
+        break;
+      default:
+        FATAL_ERROR("Value::chk_expr_immutability()");
+    } // switch
+  }
+
   void Value::clean_up()
   {
     switch (valuetype) {
@@ -526,6 +767,8 @@ namespace Common {
     case OPTYPE_GETVERDICT:
     case OPTYPE_TESTCASENAME:
     case OPTYPE_PROF_RUNNING:
+    case OPTYPE_GET_PORT_REF: // type (not owned)
+    case OPTYPE_NOW:
       break;
     case OPTYPE_COMP_RUNNING: // v1 [r2] b4
     case OPTYPE_COMP_ALIVE:
@@ -927,6 +1170,10 @@ namespace Common {
     case OPTYPE_GETVERDICT:
     case OPTYPE_TESTCASENAME:
     case OPTYPE_PROF_RUNNING:
+    case OPTYPE_NOW:
+      break;
+    case OPTYPE_GET_PORT_REF:
+      u.expr.type = NULL; // will be set during semantic analysis
       break;
     default:
       FATAL_ERROR("Value::Value()");
@@ -1751,6 +1998,8 @@ namespace Common {
     case OPTYPE_GETVERDICT:
     case OPTYPE_TESTCASENAME:
     case OPTYPE_PROF_RUNNING:
+    case OPTYPE_GET_PORT_REF:
+    case OPTYPE_NOW:
       break;
     case OPTYPE_UNARYPLUS: // v1
     case OPTYPE_UNARYMINUS:
@@ -1998,6 +2247,8 @@ namespace Common {
     case OPTYPE_GETVERDICT:
     case OPTYPE_TESTCASENAME:
     case OPTYPE_PROF_RUNNING:
+    case OPTYPE_GET_PORT_REF:
+    case OPTYPE_NOW:
       break;
     case OPTYPE_COMP_RUNNING: // v1 [r2] b4
     case OPTYPE_COMP_ALIVE:
@@ -2373,6 +2624,8 @@ namespace Common {
       case OPTYPE_GETVERDICT:
       case OPTYPE_TESTCASENAME:
       case OPTYPE_PROF_RUNNING:
+      case OPTYPE_GET_PORT_REF:
+      case OPTYPE_NOW:
         break;
       case OPTYPE_COMP_RUNNING: // v1 [r2] b4
       case OPTYPE_COMP_ALIVE:
@@ -3345,6 +3598,8 @@ namespace Common {
         return Type::T_BOOL;
       case OPTYPE_GETVERDICT:
         return Type::T_VERDICT;
+      case OPTYPE_GET_PORT_REF:
+        return Type::T_PORT;
       case OPTYPE_VALUEOF: {
         Error_Context cntxt(this, "In the operand of operation `%s'",
                             get_opname());
@@ -3364,6 +3619,7 @@ namespace Common {
       case OPTYPE_STR2FLOAT:
       case OPTYPE_RND:
       case OPTYPE_RNDWITHVAL:
+      case OPTYPE_NOW:
         return Type::T_REAL;
       case OPTYPE_ACTIVATE:
         return Type::T_DEFAULT;
@@ -3790,6 +4046,9 @@ namespace Common {
 	} else return 0;
       case OPTYPE_COMP_CREATE:
 	return chk_expr_operand_comptyperef_create();
+      case OPTYPE_GET_PORT_REF:
+        chk_expr_operands(NULL, exp_val); // calculate the port type
+        return u.expr.type;
       default:
         break;
       }
@@ -3862,6 +4121,8 @@ namespace Common {
       return "getverdict()";
     case OPTYPE_TESTCASENAME:
       return "testcasename()";
+    case OPTYPE_NOW:
+      return "now";
     case OPTYPE_CHECKSTATE_ANY:
       if (u.expr.r1) {
         return "port.checkstate()";
@@ -4079,6 +4340,8 @@ namespace Common {
       return "ttcn2string()";
     case OPTYPE_PROF_RUNNING:
       return "@profiler.running";
+    case OPTYPE_GET_PORT_REF:
+      return "port.getref()";
     default:
       FATAL_ERROR("Value::get_opname()");
     } // switch
@@ -6876,6 +7139,33 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_TESTCASENAME:
     case OPTYPE_PROF_RUNNING:
       break;
+    case OPTYPE_NOW: {
+      Ttcn::StatementBlock* sb = my_scope->get_statementblock_scope();
+      if (sb == NULL || sb->get_my_def() == NULL) {
+        error("Operation `%s' can only be used in testcases, functions or "
+          "altsteps", opname);
+      }
+      break; }
+    case OPTYPE_GET_PORT_REF:
+      if (u.expr.type == NULL) {
+        Ttcn::PortScope* port_scope = my_scope->get_scope_port();
+        if (port_scope == NULL) {
+          error("Operation `%s' can only be used in a function with a port clause.",
+            opname);
+          set_valuetype(V_ERROR);
+          break;
+        }
+        u.expr.type = port_scope->get_port_type();
+        if (u.expr.type == NULL) {
+          FATAL_ERROR("Value::chk_expr_operands");
+        }
+        if (my_governor != NULL && !u.expr.type->is_identical(my_governor)) {
+          error("Type mismatch: A value of type `%s' was expected instead of `%s'",
+            my_governor->get_typename().c_str(), u.expr.type->get_typename().c_str());
+          set_valuetype(V_ERROR);
+        }
+      }
+      break;
     case OPTYPE_COMP_MTC:
     case OPTYPE_COMP_SYSTEM:
       chk_expr_comptype_compat();
@@ -7951,6 +8241,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_TMR_RUNNING_ANY:
     case OPTYPE_GETVERDICT:
     case OPTYPE_PROF_RUNNING:
+    case OPTYPE_GET_PORT_REF:
     case OPTYPE_RNDWITHVAL: // v1
     case OPTYPE_COMP_RUNNING: // v1
     case OPTYPE_COMP_ALIVE:
@@ -7984,6 +8275,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_JSON2CBOR: // v1
     case OPTYPE_BSON2JSON: // v1
     case OPTYPE_JSON2BSON: // v1
+    case OPTYPE_NOW:
       break;
     case OPTYPE_TESTCASENAME: { // -
       if (!my_scope) FATAL_ERROR("Value::evaluate_value()");
@@ -9275,6 +9567,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
       case OPTYPE_GETVERDICT:
       case OPTYPE_TESTCASENAME:
       case OPTYPE_PROF_RUNNING:
+      case OPTYPE_GET_PORT_REF:
       case OPTYPE_RNDWITHVAL: // v1
       case OPTYPE_MATCH: // v1 t2
       case OPTYPE_UNDEF_RUNNING: // v1
@@ -9306,6 +9599,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
       case OPTYPE_JSON2CBOR:
       case OPTYPE_BSON2JSON:
       case OPTYPE_JSON2BSON:
+      case OPTYPE_NOW:
         return true;
       case OPTYPE_COMP_NULL: // -
         return false;
@@ -9664,10 +9958,10 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
               }
               return 0;
             } else {
-              Value* temp = u.val_vs->get_v_byIndex(index);
+              Value* temp = u.val_vs->get_v_byIndex((size_t)index);
               if(!silent && temp->get_value_refd_last()->get_valuetype() == V_NOTUSED)
                 temp->error("Not used symbol is not allowed in this context");
-              return u.val_vs->get_v_byIndex(index);
+              return u.val_vs->get_v_byIndex((size_t)index);
             }
           } else {
             // Search the appropriate constant index.
@@ -9713,7 +10007,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
               }
               return 0;
             } else {
-              Value* temp = u.val_vs->get_v_byIndex(index);
+              Value* temp = u.val_vs->get_v_byIndex((size_t)index);
               if(!silent && temp->get_value_refd_last()->get_valuetype() == V_NOTUSED)
                 temp->error("Not used symbol is not allowed in this context");
               return temp;
@@ -9750,7 +10044,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
             if (index < 0 ||
                 index >= static_cast<Int>(u.val_vs->get_nof_vs()))
               return 0;
-            else return u.val_vs->get_v_byIndex(index);
+            else return u.val_vs->get_v_byIndex((size_t)index);
           } else {
             if (index < 0) return 0;
             for (size_t i = 0; i < u.val_vs->get_nof_ivs(); i++) {
@@ -9758,7 +10052,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
                 ->get_value_refd_last();
               if (iv_index->get_valuetype() != V_INT) continue;
               if (iv_index->get_val_Int()->get_val() == index)
-                return u.val_vs->get_iv_byIndex(index)->get_value();
+                return u.val_vs->get_iv_byIndex((size_t)index)->get_value();
             }
             return 0;
           }
@@ -10949,8 +11243,10 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_TMR_RUNNING_ANY: // -
     case OPTYPE_GETVERDICT: // -
     case OPTYPE_PROF_RUNNING: // -
+    case OPTYPE_GET_PORT_REF: // -
     case OPTYPE_CHECKSTATE_ANY:
     case OPTYPE_CHECKSTATE_ALL:
+    case OPTYPE_NOW: // -
       break; // nothing to do
 
     case OPTYPE_MATCH: // v1 t2
@@ -11363,6 +11659,8 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
         return string("rnd()");
       case OPTYPE_TESTCASENAME:
         return string("testcasename()");
+      case OPTYPE_NOW:
+        return string("now");
       case OPTYPE_UNARYPLUS:
         return create_stringRepr_unary("+");
       case OPTYPE_UNARYMINUS:
@@ -11825,6 +12123,8 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
         return ret_val; }
       case OPTYPE_PROF_RUNNING:
         return string("@profiler.running");
+      case OPTYPE_GET_PORT_REF:
+        return string("port.getref()");
       default:
         return string("<unsupported optype>");
       } // switch u.expr.v_optype
@@ -13372,6 +13672,9 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_TESTCASENAME: // -
       expr->expr = mputstr(expr->expr, "TTCN_Runtime::get_testcasename()");
       break;
+    case OPTYPE_NOW:
+      expr->expr = mputstr(expr->expr, "TTCN_Runtime::now()");
+      break;
     case OPTYPE_ACTIVATE: // r1
       generate_code_expr_activate(expr);
       break;
@@ -13419,6 +13722,17 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_PROF_RUNNING:
       expr->expr = mputstr(expr->expr, "ttcn3_prof.is_running()");
       break;
+    case OPTYPE_GET_PORT_REF: {
+      string tmp_id = my_scope->get_scope_mod_gen()->get_temporary_id();
+      expr->preamble = mputprintf(expr->preamble,
+        "%s* %s = dynamic_cast<%s*>(TTCN_Runtime::get_translation_port());\n"
+        "if (%s == NULL) TTCN_error(\"Internal error: Conversion of port "
+        "reference to type `%s' failed.\");\n",
+        u.expr.type->get_genname_value(my_scope).c_str(), tmp_id.c_str(),
+        u.expr.type->get_genname_value(my_scope).c_str(), tmp_id.c_str(),
+        u.expr.type->get_typename().c_str());
+      expr->expr = mputprintf(expr->expr, "(*%s)", tmp_id.c_str());
+      break; }
     default:
       FATAL_ERROR("Value::generate_code_expr_expr()");
     }
@@ -15089,6 +15403,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_CHECKSTATE_ANY:
     case OPTYPE_CHECKSTATE_ALL:
     case OPTYPE_HOSTID:
+    case OPTYPE_NOW:
       return true;
     case OPTYPE_ENCODE:
     case OPTYPE_DECODE:
@@ -15099,6 +15414,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
     case OPTYPE_TTCN2STRING:
     case OPTYPE_ENCVALUE_UNICHAR:
     case OPTYPE_DECVALUE_UNICHAR:
+    case OPTYPE_GET_PORT_REF:
       return false;
     case OPTYPE_COMP_RUNNING: // v1 [r2] b4
     case OPTYPE_COMP_ALIVE:
@@ -15606,7 +15922,7 @@ void Value::chk_expr_operand_execute_refd(Value *v1,
       case Assignment::A_PAR_VAL_IN:
       case Assignment::A_PAR_TEMPL_IN:
         refd_ass_is_lazy_or_fuzzy_fpar = ass->get_eval_type() != NORMAL_EVAL;
-        if (ass->get_eval_type() != NORMAL_EVAL) {
+        if (refd_ass_is_lazy_or_fuzzy_fpar) {
           *type_str = string("Lazy_Fuzzy_Expr<") + *type_str + string(">");
         }
         break;

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -85,7 +85,8 @@ public:
   static void send_create_req(const char *component_type_module,
     const char *component_type_name,
     const char *component_name,
-    const char *component_location, boolean is_alive);
+    const char *component_location, boolean is_alive,
+    timeval testcase_start_time);
   static void prepare_start_req(Text_Buf& text_buf,
     component component_reference, const char *module_name,
     const char *function_name);
@@ -138,9 +139,9 @@ public:
   static void send_mtc_ready();
 
   static void send_ptc_created(component component_reference);
-  static void prepare_stopped(Text_Buf& text_buf,
-    const char *return_type);
-  static void send_stopped();
+  static void prepare_stopped(Text_Buf& text_buf, verdicttype final_verdict,
+    const char *return_type, const char* reason = "");
+  static void send_stopped(verdicttype final_verdict, const char* reason = "");
   static void prepare_stopped_killed(Text_Buf& text_buf,
     verdicttype final_verdict, const char *return_type,
     const char* reason = "");

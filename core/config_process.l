@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -1256,7 +1256,7 @@ LOG_ALL	{
 
 <SC_MODULE_PARAMETERS>{ASN1LOWERIDENTIFIER}	{
     yylval.str_val = mcopystr(yytext);
-    for (size_t i = 0; i < yyleng; i++) {
+    for (size_t i = 0; i < (size_t)yyleng; i++) {
 	if (yylval.str_val[i] == '-') yylval.str_val[i] = '_';
     }
     TTCN_warning("In line %d of configuration file: `%s' is not a valid TTCN-3 "

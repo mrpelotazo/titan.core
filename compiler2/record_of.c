@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -960,7 +960,7 @@ void defRecordOfClass1(const struct_of_def *sdef, output_struct *output)
       src=mputprintf(src,
     "int %s::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_buf, "
     "int limit, raw_order_t top_bit_ord, boolean /*no_err*/, int sel_field"
-    ", boolean first_call){\n"
+    ", boolean first_call, const RAW_Force_Omit*){\n"
     "  int prepaddlength=p_buf.increase_pos_padd(p_td.raw->prepadding);\n"
     "  limit-=prepaddlength;\n"
     "  int decoded_length=0;\n"
@@ -1404,7 +1404,7 @@ void defRecordOfClass1(const struct_of_def *sdef, output_struct *output)
        * then use that to decode the value. */
       "    for(char * str = strtok(x_val, \" \\t\\x0A\\x0D\"); str != 0; str = strtok(x_val + x_pos, \" \\t\\x0A\\x0D\")) {\n"
       // Calling strtok with NULL won't work here, since the decoded element can have strtok calls aswell
-      "      x_pos += strlen(str) + 1;\n"
+      "      x_pos = (str - x_val) + strlen(str) + 1;\n"
       "      TTCN_Buffer buf_2;\n"
       "      buf_2.put_c('<');\n"
       "      write_ns_prefix(*p_td.oftype_descr, buf_2);\n"
@@ -1545,7 +1545,8 @@ void defRecordOfClass1(const struct_of_def *sdef, output_struct *output)
       "      \"Encoding an unbound value of type %s.\");\n"
       "    return -1;\n"
       "  }\n\n"
-      "  int enc_len = p_tok.put_next_token(JSON_TOKEN_ARRAY_START, NULL);\n"
+      "  int enc_len = p_tok.put_next_token(p_td.json->as_map ? "
+      "JSON_TOKEN_OBJECT_START : JSON_TOKEN_ARRAY_START, NULL);\n"
       "  for (int i = 0; i < val_ptr->n_elements; ++i) {\n"
       "    if (NULL != p_td.json && p_td.json->metainfo_unbound && !(*this)[i].is_bound()) {\n"
       // unbound elements are encoded as { "metainfo []" : "unbound" }
@@ -1560,7 +1561,8 @@ void defRecordOfClass1(const struct_of_def *sdef, output_struct *output)
       "      enc_len += ret_val;\n"
       "    }\n"
       "  }\n"
-      "  enc_len += p_tok.put_next_token(JSON_TOKEN_ARRAY_END, NULL);\n"
+      "  enc_len += p_tok.put_next_token(p_td.json->as_map ? "
+      "JSON_TOKEN_OBJECT_END : JSON_TOKEN_ARRAY_END, NULL);\n"
       "  return enc_len;\n"
       "}\n\n"
       , name, dispname);
@@ -1581,7 +1583,8 @@ void defRecordOfClass1(const struct_of_def *sdef, output_struct *output)
       "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, \"\");\n"
       "    return JSON_ERROR_FATAL;\n"
       "  }\n"
-      "  else if (JSON_TOKEN_ARRAY_START != token) {\n"
+      "  else if ((!p_td.json->as_map && JSON_TOKEN_ARRAY_START != token) ||\n"
+      "           (p_td.json->as_map && JSON_TOKEN_OBJECT_START != token)) {\n"
       "    return JSON_ERROR_INVALID_TOKEN;\n"
       "  }\n\n"
       "  set_size(0);\n"
@@ -1632,7 +1635,8 @@ void defRecordOfClass1(const struct_of_def *sdef, output_struct *output)
       "    dec_len += (size_t)ret_val2;\n"
       "  }\n\n"
       "  dec_len += p_tok.get_next_token(&token, NULL, NULL);\n"
-      "  if (JSON_TOKEN_ARRAY_END != token) {\n"
+      "  if ((!p_td.json->as_map && JSON_TOKEN_ARRAY_END != token) ||\n"
+      "      (p_td.json->as_map && JSON_TOKEN_OBJECT_END != token)) {\n"
       "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_REC_OF_END_TOKEN_ERROR, \"\");\n"
       "    if (p_silent) {\n"
       "      clean_up();\n"
@@ -2504,7 +2508,7 @@ void defRecordOfClassMemAllocOptimized(const struct_of_def *sdef, output_struct 
       src=mputprintf(src,
     "int %s::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_buf, "
     "int limit, raw_order_t top_bit_ord, boolean /*no_err*/, int sel_field"
-    ", boolean first_call){\n"
+    ", boolean first_call, const RAW_Force_Omit*){\n"
     "  int prepaddlength=p_buf.increase_pos_padd(p_td.raw->prepadding);\n"
     "  limit-=prepaddlength;\n"
     "  int decoded_length=0;\n"
@@ -4560,8 +4564,9 @@ void defRecordOfTemplate1(const struct_of_def *sdef, output_struct *output)
     "        break;\n"
     "      case Module_Param::MP_Permutation_Template: {\n"
     "        int perm_start_idx = curr_idx;\n"
-    "        for (size_t perm_i=0; perm_i<param.get_elem(p_i)->get_size(); perm_i++) {\n"
-    "          (*this)[curr_idx].set_param(*(param.get_elem(p_i)->get_elem(perm_i)));\n"
+    "        Module_Param* param_i = param.get_elem(p_i);\n"
+    "        for (size_t perm_i=0; perm_i<param_i->get_size(); perm_i++) {\n"
+    "          (*this)[curr_idx].set_param(*(param_i->get_elem(perm_i)));\n"
     "          curr_idx++;\n"
     "        }\n"
     "        int perm_end_idx = curr_idx - 1;\n"
@@ -4686,15 +4691,11 @@ void defRecordOfTemplate2(const struct_of_def *sdef, output_struct *output)
     "const %s_template& right_template);\n", name, name);
   def = mputprintf(def, "friend %s_template operator+(const %s& left_value, "
     "const %s_template& right_template);\n", name, name, name);
-  def = mputprintf(def, "friend %s_template operator+(const OPTIONAL<%s>& left_value, "
-    "const %s_template& right_template);\n", name, name, name);
   def = mputprintf(def, "friend %s_template operator+(template_sel left_template, "
     "const %s& right_value);\n", name, name);
   def = mputprintf(def, "friend %s_template operator+(template_sel left_template, "
     "const OPTIONAL<%s>& right_value);\n", name, name);
   def = mputprintf(def, "friend %s_template operator+(const %s& left_value, "
-    "template_sel right_template);\n", name, name);
-  def = mputprintf(def, "friend %s_template operator+(const OPTIONAL<%s>& left_value, "
     "template_sel right_template);\n", name, name);
 
   /* public member functions */
@@ -4821,18 +4822,6 @@ void defRecordOfTemplate2(const struct_of_def *sdef, output_struct *output)
     "ret_val.concat(pos, other_value);\n"
     "return ret_val;\n"
     "}\n\n", name, name, name, name);
-  
-  def = mputprintf(def, "%s_template operator+("
-    "const OPTIONAL<%s>& other_value) const;\n", name, name);
-  src = mputprintf(src,
-    "%s_template %s_template::operator+(const OPTIONAL<%s>& other_value) const\n"
-    "{\n"
-    "if (other_value.is_present()) {\n"
-    "return *this + (const %s&)other_value;\n"
-    "}\n"
-    "TTCN_error(\"Operand of %s of template concatenation is an unbound or "
-    "omitted record/set field.\");\n"
-    "}\n\n", name, name, name, name, sdef->kind == RECORD_OF ? "record" : "set");
   
   def = mputprintf(def, "%s_template operator+(template_sel other_value) const;\n",
     name);
@@ -5020,22 +5009,6 @@ void defRecordOfTemplate2(const struct_of_def *sdef, output_struct *output)
   
   output->header.function_prototypes =
     mputprintf(output->header.function_prototypes,
-    "extern %s_template operator+(const OPTIONAL<%s>& left_value, "
-    "const %s_template& right_template);\n", name, name, name);
-  output->source.function_bodies =
-    mputprintf(output->source.function_bodies,
-    "%s_template operator+(const OPTIONAL<%s>& left_value, "
-    "const %s_template& right_template)\n"
-    "{\n"
-    "if (left_value.is_present()) {\n"
-    "return (const %s&)left_value + right_template;\n"
-    "}\n"
-    "TTCN_error(\"Operand of %s of template concatenation is an unbound or "
-    "omitted record/set field.\");\n"
-    "}\n\n", name, name, name, name, sdef->kind == RECORD_OF ? "record" : "set");
-  
-  output->header.function_prototypes =
-    mputprintf(output->header.function_prototypes,
     "extern %s_template operator+(template_sel left_template, "
     "const %s& right_value);\n", name, name);
   output->source.function_bodies =
@@ -5057,22 +5030,6 @@ void defRecordOfTemplate2(const struct_of_def *sdef, output_struct *output)
   
   output->header.function_prototypes =
     mputprintf(output->header.function_prototypes,
-    "extern %s_template operator+(template_sel left_template, "
-    "const OPTIONAL<%s>& right_value);\n", name, name);
-  output->source.function_bodies =
-    mputprintf(output->source.function_bodies,
-    "%s_template operator+(template_sel left_template, "
-    "const OPTIONAL<%s>& right_value)\n"
-    "{\n"
-    "if (right_value.is_present()) {\n"
-    "return left_template + (const %s&)right_value;\n"
-    "}\n"
-    "TTCN_error(\"Operand of %s template concatenation is an unbound or "
-    "omitted record/set field.\");\n"
-    "}\n\n", name, name, name, sdef->kind == RECORD_OF ? "record" : "set");
-  
-  output->header.function_prototypes =
-    mputprintf(output->header.function_prototypes,
     "extern %s_template operator+(const %s& left_value, "
     "template_sel right_template);\n", name, name);
   output->source.function_bodies =
@@ -5091,20 +5048,4 @@ void defRecordOfTemplate2(const struct_of_def *sdef, output_struct *output)
     "ret_val.concat(pos);\n"
     "return ret_val;\n"
     "}\n\n", name, name, name, name, name);
-  
-  output->header.function_prototypes =
-    mputprintf(output->header.function_prototypes,
-    "extern %s_template operator+(const OPTIONAL<%s>& left_value, "
-    "template_sel right_template);\n", name, name);
-  output->source.function_bodies =
-    mputprintf(output->source.function_bodies,
-    "%s_template operator+(const OPTIONAL<%s>& left_value, "
-    "template_sel right_template)\n"
-    "{\n"
-    "if (left_value.is_present()) {\n"
-    "return (const %s&)left_value + right_template;\n"
-    "}\n"
-    "TTCN_error(\"Operand of %s template concatenation is an unbound or "
-    "omitted record/set field.\");\n"
-    "}\n\n", name, name, name, sdef->kind == RECORD_OF ? "record" : "set");
 }

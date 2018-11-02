@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   
@@ -56,6 +56,8 @@ public:
 
   static void initialize_component(const char *module_name,
     const char *component_type, boolean init_base_comps);
+  static void initialize_system_port(const char* module_name,
+    const char* component_type, const char* port_name);
 
   static void set_param(Module_Param& param);
 #ifdef TITAN_RUNTIME_2
@@ -122,6 +124,8 @@ public:
   typedef void (*log_param_func_t)();
   typedef boolean (*initialize_component_func_t)(const char *component_type,
     boolean init_base_comps);
+  typedef boolean (*initialize_system_port_func_t)(const char* component_type,
+    const char* port_name);
   typedef boolean (*start_func_t)(const char *function_name,
     Text_Buf& function_arguments);
   typedef void (*control_func_t)();
@@ -152,6 +156,7 @@ private:
   get_param_func_t get_param_func;
   log_param_func_t log_param_func;
   initialize_component_func_t initialize_component_func;
+  initialize_system_port_func_t initialize_system_port_func;
   start_func_t start_func;
   control_func_t control_func;
   struct function_list_item;
@@ -184,6 +189,7 @@ public:
     get_param_func_t par_get_param_func,
     log_param_func_t par_log_param_func,
     initialize_component_func_t par_initialize_component_func,
+    initialize_system_port_func_t par_initialize_system_port_func,
     start_func_t par_start_func,
     control_func_t par_control_func);
   TTCN_Module(const char *par_module_name,

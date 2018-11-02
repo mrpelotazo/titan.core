@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -373,6 +373,7 @@ void CodeGenHelper::finalize_generation(Type* type) {
   transfer_value(dst.functions.get_param, src.functions.get_param);
   transfer_value(dst.functions.log_param, src.functions.log_param);
   transfer_value(dst.functions.init_comp, src.functions.init_comp);
+  transfer_value(dst.functions.init_system_port, src.functions.init_system_port);
   transfer_value(dst.functions.start,     src.functions.start);
   transfer_value(dst.functions.control,   src.functions.control);
 }

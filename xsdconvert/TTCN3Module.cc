@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -37,6 +37,8 @@
 
 extern bool e_flag_used;
 extern bool z_flag_used;
+
+unsigned int TTCN3Module::static_const_counter = 1;
 
 TTCN3Module::TTCN3Module(const char * a_filename, XMLParser * a_parser)
 : parser(a_parser)
@@ -272,13 +274,13 @@ void TTCN3Module::generate_TTCN3_fileinfo(FILE * file) {
 
 void TTCN3Module::generate_TTCN3_modulestart(FILE * file) {
   fprintf(file,
-    "module %s {\n"
+    "%s %s {\n"
     "\n"
     "\n"
     "import from XSD all;\n"
     "\n"
     "\n",
-    modulename.c_str()
+    o_flag_used ? "group" : "module", modulename.c_str()
     );
 }
 

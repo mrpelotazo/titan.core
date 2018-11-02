@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   
@@ -262,16 +262,6 @@ HEXSTRING HEXSTRING::operator+(const HEXSTRING_ELEMENT& other_value) const
   ret_val.set_nibble(n_nibbles, other_value.get_nibble());
   return ret_val;
 }
-
-#ifdef TITAN_RUNTIME_2
-HEXSTRING HEXSTRING::operator+(const OPTIONAL<HEXSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const HEXSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of hexstring concatenation.");
-}
-#endif
 
 HEXSTRING HEXSTRING::operator~() const
 {
@@ -799,7 +789,7 @@ int HEXSTRING::RAW_encode(const TTCN_Typedescriptor_t& p_td,
 
 int HEXSTRING::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff,
   int limit, raw_order_t top_bit_ord, boolean no_err, int /*sel_field*/,
-  boolean /*first_call*/)
+  boolean /*first_call*/, const RAW_Force_Omit* /*force_omit*/)
 {
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);
   limit -= prepaddlength;
@@ -1235,17 +1225,6 @@ HEXSTRING HEXSTRING_ELEMENT::operator+(const HEXSTRING_ELEMENT& other_value) con
     | (other_value.str_val.get_nibble(other_value.nibble_pos) << 4);
   return HEXSTRING(2, &result);
 }
-
-#ifdef TITAN_RUNTIME_2
-HEXSTRING HEXSTRING_ELEMENT::operator+(
-  const OPTIONAL<HEXSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const HEXSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of hexstring concatenation.");
-}
-#endif
 
 HEXSTRING HEXSTRING_ELEMENT::operator~() const
 {
@@ -1722,16 +1701,6 @@ HEXSTRING_template HEXSTRING_template::operator+(
 }
 
 HEXSTRING_template HEXSTRING_template::operator+(
-  const OPTIONAL<HEXSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const HEXSTRING&)other_value;
-  }
-  TTCN_error("Operand of hexstring template concatenation is an "
-    "unbound or omitted record/set field.");
-}
-
-HEXSTRING_template HEXSTRING_template::operator+(
   template_sel other_template_sel) const
 {
   if (template_selection == ANY_VALUE && other_template_sel == ANY_VALUE &&
@@ -1764,16 +1733,6 @@ HEXSTRING_template operator+(const HEXSTRING_ELEMENT& left_value,
   const HEXSTRING_template& right_template)
 {
   return HEXSTRING(left_value) + right_template;
-}
-
-HEXSTRING_template operator+(const OPTIONAL<HEXSTRING>& left_value,
-  const HEXSTRING_template& right_template)
-{
-  if (left_value.is_present()) {
-    return (const HEXSTRING&)left_value + right_template;
-  }
-  TTCN_error("Operand of hexstring template concatenation is an "
-    "unbound or omitted record/set field.");
 }
 
 HEXSTRING_template operator+(template_sel left_template_sel,
@@ -1809,16 +1768,6 @@ HEXSTRING_template operator+(const HEXSTRING_ELEMENT& left_value,
   return HEXSTRING(left_value) + right_template_sel;
 }
 
-HEXSTRING_template operator+(const OPTIONAL<HEXSTRING>& left_value,
-  template_sel right_template_sel)
-{
-  if (left_value.is_present()) {
-    return (const HEXSTRING&)left_value + right_template_sel;
-  }
-  TTCN_error("Operand of hexstring template concatenation is an "
-    "unbound or omitted record/set field.");
-}
-
 HEXSTRING_template operator+(template_sel left_template_sel,
   const HEXSTRING& right_value)
 {
@@ -1833,16 +1782,6 @@ HEXSTRING_template operator+(template_sel left_template_sel,
   const HEXSTRING_ELEMENT& right_value)
 {
   return left_template_sel + HEXSTRING(right_value);
-}
-
-HEXSTRING_template operator+(template_sel left_template_sel,
-  const OPTIONAL<HEXSTRING>& right_value)
-{
-  if (right_value.is_present()) {
-    return left_template_sel + (const HEXSTRING&)right_value;
-  }
-  TTCN_error("Operand of hexstring template concatenation is an "
-    "unbound or omitted record/set field.");
 }
 #endif // TITAN_RUNTIME_2
 

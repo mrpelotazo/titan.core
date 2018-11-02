@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -34,6 +34,8 @@ class HEXSTRING;
 class OCTETSTRING;
 
 class Module_Param;
+
+class RAW_Force_Omit;
 
 template<typename T>
 class OPTIONAL;
@@ -172,7 +174,7 @@ public:
     * TTCN_Typedescriptor_t.  It must be public because called by
     * another types during encoding. Returns the number of decoded bits.  */
   int RAW_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&, int, raw_order_t,
-                 boolean no_err=FALSE, int sel_field=-1, boolean first_call=TRUE);
+                 boolean no_err=FALSE, int sel_field=-1, boolean first_call=TRUE, const RAW_Force_Omit* force_omit = NULL);
   int TEXT_encode(const TTCN_Typedescriptor_t&, TTCN_Buffer&) const;
   int TEXT_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&,
                   Limit_Token_List&, boolean no_err = FALSE, boolean first_call=TRUE);

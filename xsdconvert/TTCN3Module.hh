@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -19,6 +19,7 @@
 #include "GeneralTypes.hh"
 #include "GeneralFunctions.hh"
 #include "TTCN3ModuleInventory.hh"
+#include "converter.hh"
 
 class TTCN3ModuleInventory;
 class RootType;
@@ -98,6 +99,8 @@ class TTCN3Module {
   bool moduleNotIntoNameConversion;
   
   unsigned int const_counter;
+  
+  static unsigned int static_const_counter;
 
   TTCN3Module & operator=(const TTCN3Module &); // not implemented
   TTCN3Module(const TTCN3Module &); // not implemented
@@ -271,11 +274,16 @@ public:
   friend bool compareModules(TTCN3Module * lhs, TTCN3Module * rhs);
   
   unsigned int getConstCounter() {
-    return const_counter;
+    return o_flag_used ? static_const_counter : const_counter;
   }
   
   void increaseConstCounter() {
-    ++const_counter;
+    if (o_flag_used) {
+      ++static_const_counter;
+    }
+    else {
+      ++const_counter;
+    }
   }
 
   void dump() const;

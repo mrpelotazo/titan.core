@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -97,6 +97,43 @@ struct RAW_coding_par{
   raw_order_t fieldorder;
 };
 
+/** A list of field indexes, that identify the optional field to be omitted */
+struct RAW_Field_List {
+  int field_index;
+  const RAW_Field_List* next_ptr;
+  
+  RAW_Field_List(int p_field_index, const RAW_Field_List* p_next_ptr)
+  : field_index(p_field_index), next_ptr(p_next_ptr) {}
+  ~RAW_Field_List() { delete next_ptr; }
+};
+
+/** Helper class for the 'FORCEOMIT' coding instruction */
+class RAW_Force_Omit {
+  /** number of fields to be omitted */
+  int size;
+  /** lists of field indexes; each identifies one optional field */
+  const RAW_Field_List** lists;
+  /** indicates whether this is a temporary object (temporary objects are
+    * used as parameters for the RAW_decode function; non-temporary objects
+    * contain a type's 'FORCEOMIT' coding instruction in the type descriptor) */
+  bool temporary;
+  
+  RAW_Force_Omit(const RAW_Force_Omit&); // copy disabled
+  
+public:
+  /** constructs a non-temporary object, to be used in a type's RAW descriptor */
+  RAW_Force_Omit(int p_size, const RAW_Field_List** p_lists);
+  /** constructs a temporary object, from the parent's object and the object
+    * in the field's type descriptor, to be used in the field's RAW decoder
+    * function */
+  RAW_Force_Omit(int p_field_index, const RAW_Force_Omit* p_parent,
+    const RAW_Force_Omit* p_variant);
+  /** destructor */
+  ~RAW_Force_Omit();
+  /** returns whether the field with the given index should be omitted */
+  bool operator()(int p_field_index) const;
+};
+
 /** RAW attributes for runtime */
 struct TTCN_RAWdescriptor_t{
   int fieldlength; /**< length of field in \a unit s */
@@ -117,6 +154,7 @@ struct TTCN_RAWdescriptor_t{
   const unsigned char* padding_pattern;
   int length_restrition;
   CharCoding::CharCodingType stringformat;
+  const RAW_Force_Omit* forceomit;
 };
 
 enum calc_type {

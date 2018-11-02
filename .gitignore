@@ -8,9 +8,10 @@ Makefile.personal
 *.so.0
 *.so.0.0
 *.exe
-*.pdf
 META-INF
 build.properties
 build
 *.swp
+.cproject
+.settings/
 docker/packages

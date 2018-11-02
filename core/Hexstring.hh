@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   
@@ -38,6 +38,8 @@ class CHARSTRING;
 class HEXSTRING_ELEMENT;
 
 class Module_Param;
+
+class RAW_Force_Omit;
 
 template<typename T>
 class OPTIONAL;
@@ -85,9 +87,6 @@ public:
 
   HEXSTRING operator+(const HEXSTRING& other_value) const;
   HEXSTRING operator+(const HEXSTRING_ELEMENT& other_value) const;
-#ifdef TITAN_RUNTIME_2
-  HEXSTRING operator+(const OPTIONAL<HEXSTRING>& other_value) const;
-#endif
 
   HEXSTRING operator~() const;
   HEXSTRING operator&(const HEXSTRING& other_value) const;
@@ -149,7 +148,7 @@ public:
    * another types during encoding. Returns the number of decoded
    * bits. */
   int RAW_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&, int, raw_order_t,
-                 boolean no_err=FALSE, int sel_field=-1, boolean first_call=TRUE);
+                 boolean no_err=FALSE, int sel_field=-1, boolean first_call=TRUE, const RAW_Force_Omit* force_omit = NULL);
   int XER_encode(const XERdescriptor_t& p_td, TTCN_Buffer& p_buf,
     unsigned int flavor, unsigned int flavor2, int indent, embed_values_enc_struct_t*) const;
   int XER_decode(const XERdescriptor_t& p_td, XmlReaderWrap& reader,
@@ -186,9 +185,6 @@ public:
 
   HEXSTRING operator+(const HEXSTRING& other_value) const;
   HEXSTRING operator+(const HEXSTRING_ELEMENT& other_value) const;
-#ifdef TITAN_RUNTIME_2
-  HEXSTRING operator+(const OPTIONAL<HEXSTRING>& other_value) const;
-#endif
 
   HEXSTRING operator~() const;
   HEXSTRING operator&(const HEXSTRING& other_value) const;
@@ -224,22 +220,16 @@ private:
     const HEXSTRING_template& right_template);
   friend HEXSTRING_template operator+(const HEXSTRING_ELEMENT& left_value,
     const HEXSTRING_template& right_template);
-  friend HEXSTRING_template operator+(const OPTIONAL<HEXSTRING>& left_value,
-    const HEXSTRING_template& right_template);
   friend HEXSTRING_template operator+(template_sel left_template_sel,
     const HEXSTRING_template& right_template);
   friend HEXSTRING_template operator+(const HEXSTRING& left_value,
     template_sel right_template_sel);
   friend HEXSTRING_template operator+(const HEXSTRING_ELEMENT& left_value,
     template_sel right_template_sel);
-  friend HEXSTRING_template operator+(const OPTIONAL<HEXSTRING>& left_value,
-    template_sel right_template_sel);
   friend HEXSTRING_template operator+(template_sel left_template_sel,
     const HEXSTRING& right_value);
   friend HEXSTRING_template operator+(template_sel left_template_sel,
     const HEXSTRING_ELEMENT& right_value);
-  friend HEXSTRING_template operator+(template_sel left_template_sel,
-    const OPTIONAL<HEXSTRING>& right_value);
 #endif
   
   HEXSTRING single_value;
@@ -284,7 +274,6 @@ public:
   HEXSTRING_template operator+(const HEXSTRING_template& other_value) const;
   HEXSTRING_template operator+(const HEXSTRING& other_value) const;
   HEXSTRING_template operator+(const HEXSTRING_ELEMENT& other_value) const;
-  HEXSTRING_template operator+(const OPTIONAL<HEXSTRING>& other_value) const;
   HEXSTRING_template operator+(template_sel other_template_sel) const;
 #endif
 
@@ -335,22 +324,16 @@ extern HEXSTRING_template operator+(const HEXSTRING& left_value,
   const HEXSTRING_template& right_template);
 extern HEXSTRING_template operator+(const HEXSTRING_ELEMENT& left_value,
   const HEXSTRING_template& right_template);
-extern HEXSTRING_template operator+(const OPTIONAL<HEXSTRING>& left_value,
-  const HEXSTRING_template& right_template);
 extern HEXSTRING_template operator+(template_sel left_template_sel,
   const HEXSTRING_template& right_template);
 extern HEXSTRING_template operator+(const HEXSTRING& left_value,
   template_sel right_template_sel);
 extern HEXSTRING_template operator+(const HEXSTRING_ELEMENT& left_value,
   template_sel right_template_sel);
-extern HEXSTRING_template operator+(const OPTIONAL<HEXSTRING>& left_value,
-  template_sel right_template_sel);
 extern HEXSTRING_template operator+(template_sel left_template_sel,
   const HEXSTRING& right_value);
 extern HEXSTRING_template operator+(template_sel left_template_sel,
   const HEXSTRING_ELEMENT& right_value);
-extern HEXSTRING_template operator+(template_sel left_template_sel,
-  const OPTIONAL<HEXSTRING>& right_value);
 #endif
 
 #endif

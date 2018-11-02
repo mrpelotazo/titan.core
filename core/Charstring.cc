@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -324,16 +324,6 @@ CHARSTRING CHARSTRING::operator+(const CHARSTRING_ELEMENT& other_value) const
   return ret_val;
 }
 
-#ifdef TITAN_RUNTIME_2
-CHARSTRING CHARSTRING::operator+(const OPTIONAL<CHARSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const CHARSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of charstring concatenation.");
-}
-#endif
-
 UNIVERSAL_CHARSTRING CHARSTRING::operator+
   (const UNIVERSAL_CHARSTRING& other_value) const
 {
@@ -387,18 +377,6 @@ UNIVERSAL_CHARSTRING CHARSTRING::operator+
     return ret_val;
   }
 }
-
-#ifdef TITAN_RUNTIME_2
-UNIVERSAL_CHARSTRING CHARSTRING::operator+(
-  const OPTIONAL<UNIVERSAL_CHARSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const UNIVERSAL_CHARSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of universal charstring "
-    "concatenation.");
-}
-#endif
 
 CHARSTRING& CHARSTRING::operator+=(char other_value)
 {
@@ -1427,7 +1405,8 @@ int CHARSTRING::XER_decode(const XERdescriptor_t& p_td, XmlReaderWrap& reader,
         depth = reader.Depth();
       }
       else if ((depth != -1 || omit_tag)
-        && (XML_READER_TYPE_TEXT == type || XML_READER_TYPE_CDATA == type || (omit_tag && XML_READER_TYPE_ATTRIBUTE)))
+        && (XML_READER_TYPE_TEXT == type || XML_READER_TYPE_CDATA == type ||
+            (omit_tag && XML_READER_TYPE_ATTRIBUTE == type)))
         // Process #text node if we already processed the element node, or
         // there is no element node because UNTAGGED is in effect.
       {
@@ -1577,7 +1556,7 @@ int CHARSTRING::RAW_encode(const TTCN_Typedescriptor_t& p_td,
 
 int CHARSTRING::RAW_decode(const TTCN_Typedescriptor_t& p_td,
   TTCN_Buffer& buff, int limit, raw_order_t top_bit_ord, boolean no_err,
-  int /*sel_field*/, boolean /*first_call*/)
+  int /*sel_field*/, boolean /*first_call*/, const RAW_Force_Omit* /*force_omit*/)
 {
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);
   limit -= prepaddlength;
@@ -1998,17 +1977,6 @@ CHARSTRING CHARSTRING_ELEMENT::operator+(const CHARSTRING_ELEMENT&
   return CHARSTRING(2, result);
 }
 
-#ifdef TITAN_RUNTIME_2
-CHARSTRING CHARSTRING_ELEMENT::operator+(
-  const OPTIONAL<CHARSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const CHARSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of charstring concatenation.");
-}
-#endif
-
 UNIVERSAL_CHARSTRING CHARSTRING_ELEMENT::operator+
   (const UNIVERSAL_CHARSTRING& other_value) const
 {
@@ -2048,18 +2016,6 @@ UNIVERSAL_CHARSTRING CHARSTRING_ELEMENT::operator+
   result[1] = other_value.get_uchar();
   return UNIVERSAL_CHARSTRING(2, result);
 }
-
-#ifdef TITAN_RUNTIME_2
-UNIVERSAL_CHARSTRING CHARSTRING_ELEMENT::operator+(
-  const OPTIONAL<UNIVERSAL_CHARSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const UNIVERSAL_CHARSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of universal charstring "
-    "concatenation.");
-}
-#endif
 
 char CHARSTRING_ELEMENT::get_char() const
 {
@@ -2125,62 +2081,6 @@ CHARSTRING operator+(const char* string_value,
   ret_val.val_ptr->chars_ptr[string_len] = other_value.get_char();
   return ret_val;
 }
-
-#ifdef TITAN_RUNTIME_2
-CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const CHARSTRING& right_value)
-{
-  if (left_value.is_present()) {
-    return (const CHARSTRING&)left_value + right_value;
-  }
-  TTCN_error("Unbound or omitted left operand of charstring "
-    "concatenation.");
-}
-
-CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const CHARSTRING_ELEMENT& right_value)
-{
-  if (left_value.is_present()) {
-    return (const CHARSTRING&)left_value + right_value;
-  }
-  TTCN_error("Unbound or omitted left operand of charstring "
-    "concatenation.");
-}
-
-UNIVERSAL_CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const UNIVERSAL_CHARSTRING& right_value)
-{
-  if (left_value.is_present()) {
-    return (const CHARSTRING&)left_value + right_value;
-  }
-  TTCN_error("Unbound or omitted left operand of universal charstring "
-    "concatenation.");
-}
-
-UNIVERSAL_CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const UNIVERSAL_CHARSTRING_ELEMENT& right_value)
-{
-  if (left_value.is_present()) {
-    return (const CHARSTRING&)left_value + right_value;
-  }
-  TTCN_error("Unbound or omitted left operand of universal charstring "
-    "concatenation.");
-}
-
-UNIVERSAL_CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const OPTIONAL<UNIVERSAL_CHARSTRING>& right_value)
-{
-  if (!left_value.is_present()) {
-    TTCN_error("Unbound or omitted left operand of universal charstring "
-    "concatenation.");
-  }
-  if (!right_value.is_present()) {
-    TTCN_error("Unbound or omitted right operand of universal charstring "
-    "concatenation.");
-  }
-  return (const CHARSTRING&)left_value + (const UNIVERSAL_CHARSTRING&)right_value;
-}
-#endif // TITAN_RUNTIME_2
 
 CHARSTRING operator<<=(const char *string_value, const INTEGER& rotate_count)
 {
@@ -2411,20 +2311,6 @@ CHARSTRING_template CHARSTRING_template::operator+(
     "uninitialized or unsupported template.");
 }
 
-CHARSTRING_template CHARSTRING_template::operator+(
-  const OPTIONAL<CHARSTRING>& other_value) const
-{
-  if (template_selection != SPECIFIC_VALUE) {
-    TTCN_error("Operand of charstring template concatenation is an "
-      "uninitialized or unsupported template.");
-  }
-  if (!other_value.is_present()) {
-    TTCN_error("Operand of charstring template concatenation is an "
-      "unbound or omitted record/set field.");
-  }
-  return single_value + (const CHARSTRING&)other_value;
-}
-
 UNIVERSAL_CHARSTRING_template CHARSTRING_template::operator+(
   const UNIVERSAL_CHARSTRING& other_value) const
 {
@@ -2443,20 +2329,6 @@ UNIVERSAL_CHARSTRING_template CHARSTRING_template::operator+(
       "uninitialized or unsupported template.");
   }
   return single_value + other_value;
-}
-
-UNIVERSAL_CHARSTRING_template CHARSTRING_template::operator+(
-  const OPTIONAL<UNIVERSAL_CHARSTRING>& other_value) const
-{
-  if (template_selection != SPECIFIC_VALUE) {
-    TTCN_error("Operand of universal charstring template concatenation is an "
-      "uninitialized or unsupported template.");
-  }
-  if (!other_value.is_present()) {
-    TTCN_error("Operand of universal charstring template concatenation is an "
-      "unbound or omitted record/set field.");
-  }
-  return single_value + (const UNIVERSAL_CHARSTRING&)other_value;
 }
 
 CHARSTRING_template operator+(const CHARSTRING& left_value,
@@ -2479,20 +2351,6 @@ CHARSTRING_template operator+(const CHARSTRING_ELEMENT& left_value,
     "uninitialized or unsupported template.");
 }
 
-CHARSTRING_template operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const CHARSTRING_template& right_template)
-{
-  if (!left_value.is_present()) {
-    TTCN_error("Operand of charstring template concatenation is an "
-      "unbound or omitted record/set field.");
-  }
-  if (right_template.template_selection != SPECIFIC_VALUE) {
-    TTCN_error("Operand of charstring template concatenation is an "
-      "uninitialized or unsupported template.");
-  }
-  return (const CHARSTRING&)left_value + right_template.single_value;
-}
-
 UNIVERSAL_CHARSTRING_template operator+(const UNIVERSAL_CHARSTRING& left_value,
   const CHARSTRING_template& right_template)
 {
@@ -2512,21 +2370,6 @@ UNIVERSAL_CHARSTRING_template operator+(
       "uninitialized or unsupported template.");
   }
   return left_value + right_template.single_value;
-}
-
-UNIVERSAL_CHARSTRING_template operator+(
-  const OPTIONAL<UNIVERSAL_CHARSTRING>& left_value,
-  const CHARSTRING_template& right_template)
-{
-  if (!left_value.is_present()) {
-    TTCN_error("Operand of universal charstring template concatenation is an "
-      "unbound or omitted record/set field.");
-  }
-  if (right_template.template_selection != SPECIFIC_VALUE) {
-    TTCN_error("Operand of universal charstring template concatenation is an "
-      "uninitialized or unsupported template.");
-  }
-  return (const UNIVERSAL_CHARSTRING&)left_value + right_template.single_value;
 }
 #endif // TITAN_RUNTIME_2
 

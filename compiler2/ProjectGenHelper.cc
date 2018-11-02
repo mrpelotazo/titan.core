@@ -1,9 +1,9 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2000-2017 Ericsson Telecom AB
+// Copyright (c) 2000-2018 Ericsson Telecom AB
 // All rights reserved. This program and the accompanying materials
-// are made available under the terms of the Eclipse Public License v1.0
+// are made available under the terms of the Eclipse Public License v2.0
 // which accompanies this distribution, and is available at
-// http://www.eclipse.org/legal/epl-v10.html
+// https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 ///////////////////////////////////////////////////////////////////////////////
 #include "ProjectGenHelper.hh"
 #include "../common/memory.h"
@@ -607,7 +607,7 @@ bool ProjectGenHelper::isCPPSourceFile(const char* fileName) const
   if (std::string::npos == pos) return false;
   const std::string EXT_CC("cc");
   const std::string EXT_CPP("cpp");
-  int length = 0;
+  size_t length = 0;
   if (std::string::npos != fnStr.find (EXT_CC, pos + 1))
     length = EXT_CC.size();
   else if (std::string::npos != fnStr.find (EXT_CPP, pos + 1))
@@ -627,7 +627,7 @@ bool ProjectGenHelper::isCPPHeaderFile(const char* fileName) const
   const std::string EXT_HPP("hpp");
   const std::string EXT_HH("hh");
   const std::string EXT_H("h");
-  int length = 0;
+  size_t length = 0;
   if (std::string::npos != fnStr.find (EXT_HH, pos + 1))
     length = EXT_HH.size();
   else if (std::string::npos != fnStr.find (EXT_HPP, pos + 1))
@@ -647,7 +647,7 @@ bool ProjectGenHelper::isTtcnPPFile(const char* fileName) const
   size_t pos = fnStr.find_last_of('.');
   if (std::string::npos == pos) return false;
   const std::string EXT_TTCNPP("ttcnpp");
-  int length = 0;
+  size_t length = 0;
   if (std::string::npos != fnStr.find (EXT_TTCNPP, pos + 1))
     length = EXT_TTCNPP.size();
 

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -27,7 +27,7 @@
 // Author:                Janos Zoltan Szabo
 // mail:                  tmpjsz@eth.ericsson.se
 //
-// Copyright (c) 2000-2017 Ericsson Telecom AB
+// Copyright (c) 2000-2018 Ericsson Telecom AB
 //
 //----------------------------------------------------------------------------
 
@@ -874,6 +874,7 @@ boolean MainController::any_component_done_requested,
         MainController::all_component_done_requested,
         MainController::any_component_killed_requested,
         MainController::all_component_killed_requested;
+timeval MainController::testcase_start_time;
 
 void MainController::add_component(component_struct *comp)
 {
@@ -3232,16 +3233,19 @@ void MainController::send_create_mtc(host_struct *hc)
 
 void MainController::send_create_ptc(host_struct *hc,
   component component_reference, const qualified_name& component_type,
-  const char *component_name, boolean is_alive,
-  const qualified_name& current_testcase)
+  const qualified_name& system_type, const char *component_name,
+  boolean is_alive, const qualified_name& current_testcase)
 {
   Text_Buf text_buf;
   text_buf.push_int(MSG_CREATE_PTC);
   text_buf.push_int(component_reference);
   text_buf.push_qualified_name(component_type);
+  text_buf.push_qualified_name(system_type);
   text_buf.push_string(component_name);
   text_buf.push_int(is_alive ? 1 : 0);
   text_buf.push_qualified_name(current_testcase);
+  text_buf.push_int(testcase_start_time.tv_sec);
+  text_buf.push_int(testcase_start_time.tv_usec);
   send_message(hc->hc_fd, text_buf);
 }
 
@@ -3997,7 +4001,7 @@ void MainController::process_create_nak(host_struct *hc)
       tc->initial.location_str);
     if (new_host != NULL) {
       send_create_ptc(new_host, component_reference, tc->comp_type,
-        tc->comp_name, tc->is_alive, mtc->tc_fn_name);
+        system->comp_type, tc->comp_name, tc->is_alive, mtc->tc_fn_name);
       notify("PTC with component reference %d was relocated from host "
         "%s to %s because of overload: %s.", component_reference,
         hc->hostname, new_host->hostname, reason);
@@ -4118,6 +4122,8 @@ void MainController::process_create_req(component_struct *tc)
     component_location = NULL;
   }
   boolean is_alive = text_buf.pull_int().get_val();
+  testcase_start_time.tv_sec = text_buf.pull_int().get_val();
+  testcase_start_time.tv_usec = text_buf.pull_int().get_val();
 
   host_struct *host = choose_ptc_location(component_type.definition_name,
     component_name, component_location);
@@ -4145,8 +4151,8 @@ void MainController::process_create_req(component_struct *tc)
   }
 
   component comp_ref = next_comp_ref++;
-  send_create_ptc(host, comp_ref, component_type, component_name, is_alive,
-    mtc->tc_fn_name);
+  send_create_ptc(host, comp_ref, component_type, system->comp_type,
+    component_name, is_alive, mtc->tc_fn_name);
 
   tc->tc_state = TC_CREATE;
 
@@ -5863,6 +5869,9 @@ void MainController::process_stopped(component_struct *tc, int message_end)
     return;
   }
   Text_Buf& text_buf = *tc->text_buf;
+  tc->local_verdict = (verdicttype)text_buf.pull_int().get_val();
+  delete [] tc->verdict_reason;
+  tc->verdict_reason = text_buf.pull_string();
   delete [] tc->return_type;
   tc->return_type = text_buf.pull_string();
   tc->return_value_len = message_end - text_buf.get_pos();

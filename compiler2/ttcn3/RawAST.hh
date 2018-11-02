@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -49,6 +49,11 @@ typedef struct {
     char* value;
     Common::Value *v_value;
 } rawAST_tag_field_value;
+
+typedef struct {
+  int nElements;
+  rawAST_field_list** lists;
+} rawAST_force_omit;
 
 typedef struct {
     Common::Identifier* fieldName; // NULL == omit
@@ -115,6 +120,8 @@ public:
                                    multiple tagValues may be specified */
     rawAST_single_tag presence;    /**< Presence indicator expressions for an
                                    optional field */
+    rawAST_force_omit forceomit;   /**< forces lower level optional fields to
+                                   be omitted */
     int topleveleind;
     rawAST_toplevel toplevel;      /**< Toplevel attributes */
     int length_restrition;

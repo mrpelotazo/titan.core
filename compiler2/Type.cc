@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -1774,7 +1774,7 @@ namespace Common {
                 pt->get_typename().c_str());
               return 0;
             }
-            len = pt->get_sub_type()->get_length_restriction();
+            len = sub->get_length_restriction();
             if (len == -1) {
               ref->error("The type `%s' must have single size length restriction when used as a short-hand notation for nested indexes.",
                 pt->get_typename().c_str());
@@ -2487,6 +2487,33 @@ namespace Common {
               }
             }
           }
+          for (int j = 0; j < rawpar->forceomit.nElements; ++j) { // FORCEOMIT
+            Type* t = field_type_last;
+            bool erroneous = false;
+            for (int k = 0; k < rawpar->forceomit.lists[j]->nElements; ++k) {
+              Identifier* idf = rawpar->forceomit.lists[j]->names[k];
+              t = t->get_type_refd_last();
+              if (!t->is_secho()) {
+                error("Invalid field type in RAW parameter FORCEOMIT for "
+                  "field %s.", field_id.get_dispname().c_str());
+                erroneous = true;
+                break;
+              }
+              if (!t->has_comp_withName(*idf)) {
+                error("Invalid field name '%s' in RAW parameter FORCEOMIT for "
+                  "field %s",
+                  rawpar->forceomit.lists[j]->names[k]->get_dispname().c_str(),
+                  field_id.get_dispname().c_str());
+                erroneous = true;
+                break;
+              }
+              t = t->get_comp_byName(*idf)->get_type();
+            }
+            if (!erroneous && !t->is_optional_field()) {
+              error("RAW parameter FORCEOMIT for field %s does not refer to an "
+                "optional field.", field_id.get_dispname().c_str());
+            }
+          }
           for(int c=0;c<rawpar->crosstaglist.nElements;c++) { // CROSSTAG
             Identifier *idf=rawpar->crosstaglist.tag[c].fieldName;
             if(!field_type_last->is_secho()){
@@ -2977,14 +3004,76 @@ namespace Common {
             "record of, set of, array or field of a record or set");
         }
       }
-      if (jsonattrib->as_number &&
-          get_type_refd_last()->get_typetype_ttcn3() != T_ENUM_T) {
-        error("Invalid attribute, 'as number' is only allowed for enumerated "
-          "types");
+      if (jsonattrib->as_number) {
+        if (get_type_refd_last()->get_typetype_ttcn3() != T_ENUM_T) {
+          error("Invalid attribute, 'as number' is only allowed for enumerated "
+            "types");
+        }
+        else if (0 != jsonattrib->enum_texts.size()) {
+          warning("Attribute 'text ... as ...' will be ignored, because the "
+            "enumerated values are encoded as numbers");
+        }
       }
       
       if (NULL != jsonattrib->tag_list) {
         chk_json_tag_list();
+      }
+      
+      if (jsonattrib->as_map) {
+        Type* last = get_type_refd_last();
+        if (T_SEQOF != last->typetype && T_SETOF != last->typetype) {
+          error("Invalid attribute, 'as map' requires record of or set of");
+        }
+        else {
+          Type* of_type = last->get_ofType();
+          Type* of_type_last = of_type->get_type_refd_last();
+          if ((T_SEQ_T != of_type_last->typetype &&
+               T_SET_T != of_type_last->typetype) ||
+              of_type_last->get_nof_comps() != 2) {
+            error("Invalid attribute, 'as map' requires the element type to be "
+              "a record or set with 2 fields");
+          }
+          else {
+            Type* key_type = of_type_last->get_comp_byIndex(0)->get_type();
+            if (key_type->get_type_refd_last()->get_typetype() != T_USTR) {
+              error("Invalid attribute, 'as map' requires the element type's "
+                "first field to be a universal charstring");
+            }
+            if (key_type->is_optional_field()) {
+              error("Invalid attribute, 'as map' requires the element type's "
+                "first field to be mandatory");
+            }
+          }
+        }
+      }
+      
+      if (0 != jsonattrib->enum_texts.size()) {
+        Type* last = get_type_refd_last();
+        if (T_ENUM_T != last->get_typetype_ttcn3()) {
+          error("Invalid attribute, 'text ... as ...' requires an enumerated "
+            "type");
+        }
+        else {
+          for (size_t i = 0; i < jsonattrib->enum_texts.size(); ++i) {
+            Identifier id(Identifier::ID_TTCN,
+              string(jsonattrib->enum_texts[i]->from), true);
+            if (!last->has_ei_withName(id)) {
+              error("Attribute 'text ... as ...' refers to invalid enumerated "
+                "value '%s'", jsonattrib->enum_texts[i]->from);
+            }
+            else {
+              jsonattrib->enum_texts[i]->index = static_cast<int>(
+                last->get_eis_index_byName(id));
+              for (size_t j = 0; j < i; ++j) {
+                if (jsonattrib->enum_texts[j]->index ==
+                    jsonattrib->enum_texts[i]->index) {
+                  error("Duplicate attribute 'text ... as ...' for enumerated "
+                    "value '%s'", jsonattrib->enum_texts[i]->from);
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -3390,6 +3479,8 @@ namespace Common {
     if (legacy_codec_handling) {
       FATAL_ERROR("Type::add_coding");
     }
+
+    MessageEncodingType_t built_in_coding = get_enc_type(name);
     for (size_t i = 0; i < coding_table.size(); ++i) {
       if (!encode_attrib_mod_conflict && modifier != coding_table[i]->modifier) {
         encode_attrib_mod_conflict = true;
@@ -3399,11 +3490,13 @@ namespace Common {
       const char* coding_name = coding_table[i]->built_in ?
         get_encoding_name(coding_table[i]->built_in_coding) :
         coding_table[i]->custom_coding.name;
-      if (name == coding_name) {
+      const char* current_name = coding_table[i]->built_in ?
+        get_encoding_name(built_in_coding) : name.c_str();
+      if (strcmp(current_name, coding_name) == 0) {
         return; // coding already added
       }
     }
-    MessageEncodingType_t built_in_coding = get_enc_type(name);
+
     if (built_in_coding != CT_CUSTOM && built_in_coding != CT_PER) {
       if (get_type_refd_last()->can_have_coding(built_in_coding)) {
         coding_t* new_coding = new coding_t;
@@ -6508,8 +6601,8 @@ namespace Common {
 
       for (;;) {
         // For ASN.1 types, the answer depends solely on the -a switch.
-        // They are all considered to have Basic (i.e. useless) XER,
-        // unless the -a switch says removes XER from all ASN.1 types.
+        // They are all considered to not have XER,
+        // unless the -a switch says force XER from all ASN.1 types.
         if (t->is_asn1()) return memory.remember(t,
           asn1_xer ? ANSWER_YES : ANSWER_NO);
         else if (t->is_ref()) t = t->get_type_refd();
@@ -7387,6 +7480,7 @@ namespace Common {
       if (t->is_tagged() || t->rawattrib || t->textattrib || t->jsonattrib ||
           (!t->is_asn1() && t->hasEncodeAttr(get_encoding_name(CT_JSON))) ||
           (t->xerattrib && !t->xerattrib->empty() ) ||
+          (asn1_xer && t->is_asn1() && t->ownertype != OT_RECORD_OF && t->ownertype != OT_REF_SPEC) ||
           (t->oerattrib && !t->oerattrib->empty() && t->is_asn1()))
       {
         return t->get_genname_own(p_scope);
@@ -7571,7 +7665,11 @@ namespace Common {
   {
     Type *t = this;
     while (true) {
-      if (t->has_encoding(CT_JSON)) return t->get_genname_own(my_scope);
+      if ((t->jsonattrib != NULL && !t->jsonattrib->empty()) ||
+          (t->ownertype == OT_RECORD_OF && t->parent_type->jsonattrib != NULL && 
+           t->parent_type->jsonattrib->as_map)) {
+        return t->get_genname_own(my_scope);
+      }
       else if (t->is_ref()) t = t->get_type_refd();
       else break;
     }

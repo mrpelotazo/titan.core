@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -97,7 +97,7 @@ void AttributeType::nameConversion_names(QualifiedNames& used_ns) {
   }else {
     q = QualifiedName(empty_string, empty_string);
   }
-  XSDName2TTCN3Name(name.convertedValue, used_names, field_name, res, var);
+  XSDName2TTCN3Name(name.convertedValue, empty_string, used_names, field_name, res, var);
   name.convertedValue = res;
   addVariant(V_onlyValue, var);
   if (q.name != used_names.back().name) {
@@ -106,7 +106,7 @@ void AttributeType::nameConversion_names(QualifiedNames& used_ns) {
   }
 
   for (List<RootType*>::iterator st = nameDepList.begin(); st; st = st->Next) {
-    st->Data->setTypeValue(res);
+    st->Data->setTypeValueWoPrefix(res);
   }
 }
 

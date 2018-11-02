@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -24,8 +24,8 @@
 
 /* Version numbers */
 #define TTCN3_MAJOR 6
-#define TTCN3_MINOR 3
-#define TTCN3_PATCHLEVEL 1   //0-> x=A, 1-> x=B, ...
+#define TTCN3_MINOR 5
+#define TTCN3_PATCHLEVEL 0   //0-> x=A, 1-> x=B, ...
 //#define TTCN3_BUILDNUMBER 0  //0=R5x, 1=R5x01, 2=R5x02, ...
 
 /* The aggregated version number must be set manually since some stupid
@@ -38,7 +38,7 @@
  * TTCN3_VERSION = TTCN3_MAJOR * 1000000 + TTCN3_MINOR * 10000 +
  *                 TTCN3_PATCHLEVEL * 100 + TTCN3_BUILDNUMBER
  */
-#define TTCN3_VERSION 60301
+#define TTCN3_VERSION 60500
 
 /* A monotonically increasing version number.
  * An official release is deemed to have the highest possible build number (99)

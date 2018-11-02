@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -256,16 +256,6 @@ BITSTRING BITSTRING::operator+(const BITSTRING_ELEMENT& other_value) const
   ret_val.set_bit(n_bits, other_value.get_bit());
   return ret_val;
 }
-
-#ifdef TITAN_RUNTIME_2
-BITSTRING BITSTRING::operator+(const OPTIONAL<BITSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const BITSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of bitstring concatenation.");
-}
-#endif
 
 BITSTRING BITSTRING::operator~() const
 {
@@ -1038,7 +1028,7 @@ int BITSTRING::RAW_encode(const TTCN_Typedescriptor_t& p_td, RAW_enc_tree& mylea
 
 int BITSTRING::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff,
   int limit, raw_order_t top_bit_ord, boolean no_err, int /*sel_field*/,
-  boolean /*first_call*/)
+  boolean /*first_call*/, const RAW_Force_Omit* /*force_omit*/)
 {
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);
   limit -= prepaddlength;
@@ -1416,17 +1406,6 @@ BITSTRING BITSTRING_ELEMENT::operator+(const BITSTRING_ELEMENT& other_value)
   if (other_value.str_val.get_bit(other_value.bit_pos)) result |= 2;
   return BITSTRING(2, &result);
 }
-
-#ifdef TITAN_RUNTIME_2
-BITSTRING BITSTRING_ELEMENT::operator+(
-  const OPTIONAL<BITSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const BITSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of bitstring concatenation.");
-}
-#endif
 
 BITSTRING BITSTRING_ELEMENT::operator~() const
 {
@@ -1906,16 +1885,6 @@ BITSTRING_template BITSTRING_template::operator+(
 }
 
 BITSTRING_template BITSTRING_template::operator+(
-  const OPTIONAL<BITSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const BITSTRING&)other_value;
-  }
-  TTCN_error("Operand of bitstring template concatenation is an "
-    "unbound or omitted record/set field.");
-}
-
-BITSTRING_template BITSTRING_template::operator+(
   template_sel other_template_sel) const
 {
   if (template_selection == ANY_VALUE && other_template_sel == ANY_VALUE &&
@@ -1948,16 +1917,6 @@ BITSTRING_template operator+(const BITSTRING_ELEMENT& left_value,
   const BITSTRING_template& right_template)
 {
   return BITSTRING(left_value) + right_template;
-}
-
-BITSTRING_template operator+(const OPTIONAL<BITSTRING>& left_value,
-  const BITSTRING_template& right_template)
-{
-  if (left_value.is_present()) {
-    return (const BITSTRING&)left_value + right_template;
-  }
-  TTCN_error("Operand of bitstring template concatenation is an "
-    "unbound or omitted record/set field.");
 }
 
 BITSTRING_template operator+(template_sel left_template_sel,
@@ -1993,16 +1952,6 @@ BITSTRING_template operator+(const BITSTRING_ELEMENT& left_value,
   return BITSTRING(left_value) + right_template_sel;
 }
 
-BITSTRING_template operator+(const OPTIONAL<BITSTRING>& left_value,
-  template_sel right_template_sel)
-{
-  if (left_value.is_present()) {
-    return (const BITSTRING&)left_value + right_template_sel;
-  }
-  TTCN_error("Operand of bitstring template concatenation is an "
-    "unbound or omitted record/set field.");
-}
-
 BITSTRING_template operator+(template_sel left_template_sel,
   const BITSTRING& right_value)
 {
@@ -2017,16 +1966,6 @@ BITSTRING_template operator+(template_sel left_template_sel,
   const BITSTRING_ELEMENT& right_value)
 {
   return left_template_sel + BITSTRING(right_value);
-}
-
-BITSTRING_template operator+(template_sel left_template_sel,
-  const OPTIONAL<BITSTRING>& right_value)
-{
-  if (right_value.is_present()) {
-    return left_template_sel + (const BITSTRING&)right_value;
-  }
-  TTCN_error("Operand of bitstring template concatenation is an "
-    "unbound or omitted record/set field.");
 }
 #endif // TITAN_RUNTIME_2
 

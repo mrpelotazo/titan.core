@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -501,6 +501,24 @@ void PORT::all_halt()
 
 boolean PORT::port_is_started() {
   return is_started;
+}
+
+void PORT::safe_start()
+{
+  if (!is_started) {
+    activate_port(TRUE);
+    start();
+  }
+}
+
+void PORT::add_port(PORT* /*p*/)
+{
+  TTCN_error("Internal error: Calling PORT::add_port");
+}
+
+void PORT::remove_port(PORT* /*p*/)
+{
+  TTCN_error("Internal error: Calling PORT::remove_port");
 }
 
 PORT* PORT::get_provider_port() {
@@ -2493,6 +2511,9 @@ void PORT::terminate_local_connection(const char *src_port,
 
 void PORT::map_port(const char *component_port, const char *system_port, boolean translation)
 {
+  if (translation == TRUE) {
+    TTCN_Runtime::initialize_system_port(system_port);
+  }
   const char *port_name = translation == FALSE ? component_port : system_port;
   PORT *port_ptr = lookup_by_name(port_name, translation);
   if (port_ptr == NULL) TTCN_error("Map operation refers to "
@@ -2505,17 +2526,21 @@ void PORT::map_port(const char *component_port, const char *system_port, boolean
   } else {
     port_ptr->map(component_port, translation);
   }
-  if (!TTCN_Runtime::is_single()) {
-    if (translation == FALSE) {
-      TTCN_Communication::send_mapped(component_port, system_port, translation);
-    } else {
-      TTCN_Communication::send_mapped(system_port, component_port, translation);
+  if (translation == TRUE) {
+    PORT* other_port_ptr = lookup_by_name(component_port, FALSE);
+    if (other_port_ptr == NULL) {
+      TTCN_error("Map operation refers to non-existent port %s.", port_name);
     }
+    other_port_ptr->add_port(port_ptr);
+    port_ptr->add_port(other_port_ptr);
   }
 }
 
 void PORT::unmap_port(const char *component_port, const char *system_port, boolean translation)
 {
+  if (translation == TRUE) {
+    TTCN_Runtime::initialize_system_port(system_port);
+  }
   const char *port_name = translation == FALSE ? component_port : system_port;
   PORT *port_ptr = lookup_by_name(port_name, translation);
   if (port_ptr == NULL) TTCN_error("Unmap operation refers to "
@@ -2525,8 +2550,14 @@ void PORT::unmap_port(const char *component_port, const char *system_port, boole
   } else {
     port_ptr->unmap(component_port, translation);
   }
-  if (!TTCN_Runtime::is_single())
-    TTCN_Communication::send_unmapped(component_port, system_port, translation);
+  if (translation == TRUE) {
+    PORT* other_port_ptr = lookup_by_name(component_port, FALSE);
+    if (other_port_ptr == NULL) {
+      TTCN_error("Unmap operation refers to non-existent port %s.", port_name);
+    }
+    other_port_ptr->remove_port(port_ptr);
+    port_ptr->remove_port(other_port_ptr);
+  }
 }
 
 boolean PORT::check_port_state(const CHARSTRING& type) const

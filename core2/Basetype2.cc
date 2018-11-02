@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -1266,7 +1266,7 @@ void Record_Of_Type::BER_decode_opentypes(TTCN_Type_list& p_typelist,
 
 int Record_Of_Type::RAW_decode(const TTCN_Typedescriptor_t& p_td,
   TTCN_Buffer& buff, int limit, raw_order_t top_bit_ord, boolean /*no_err*/,
-  int sel_field, boolean first_call)
+  int sel_field, boolean first_call, const RAW_Force_Omit* /*force_omit*/)
 {
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);
   limit -= prepaddlength;
@@ -1476,7 +1476,8 @@ int Record_Of_Type::JSON_encode(const TTCN_Typedescriptor_t& p_td, JSON_Tokenize
     return -1;
   }
   
-  int enc_len = p_tok.put_next_token(JSON_TOKEN_ARRAY_START, NULL);
+  int enc_len = p_tok.put_next_token(p_td.json->as_map ? JSON_TOKEN_OBJECT_START :
+    JSON_TOKEN_ARRAY_START, NULL);
   
   for (int i = 0; i < get_nof_elements(); ++i) {
     if (NULL != p_td.json && p_td.json->metainfo_unbound && !get_at(i)->is_bound()) {
@@ -1493,7 +1494,8 @@ int Record_Of_Type::JSON_encode(const TTCN_Typedescriptor_t& p_td, JSON_Tokenize
     }
   }
   
-  enc_len += p_tok.put_next_token(JSON_TOKEN_ARRAY_END, NULL);
+  enc_len += p_tok.put_next_token(p_td.json->as_map ? JSON_TOKEN_OBJECT_END :
+    JSON_TOKEN_ARRAY_END, NULL);
   return enc_len;
 }
 
@@ -1507,7 +1509,8 @@ int Record_Of_Type::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_desc
     return -1;
   }
   
-  int enc_len = p_tok.put_next_token(JSON_TOKEN_ARRAY_START, NULL);
+  int enc_len = p_tok.put_next_token(p_td.json->as_map ? JSON_TOKEN_OBJECT_START :
+    JSON_TOKEN_ARRAY_START, NULL);
   
   int values_idx = 0;
   int edescr_idx = 0;
@@ -1583,7 +1586,8 @@ int Record_Of_Type::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_desc
     }
   }
   
-  enc_len += p_tok.put_next_token(JSON_TOKEN_ARRAY_END, NULL);
+  enc_len += p_tok.put_next_token(p_td.json->as_map ? JSON_TOKEN_OBJECT_END :
+    JSON_TOKEN_ARRAY_END, NULL);
   return enc_len;
 }
 
@@ -1601,7 +1605,8 @@ int Record_Of_Type::JSON_decode(const TTCN_Typedescriptor_t& p_td, JSON_Tokenize
     JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, "");
     return JSON_ERROR_FATAL;
   }
-  else if (JSON_TOKEN_ARRAY_START != token) {
+  else if ((!p_td.json->as_map && JSON_TOKEN_ARRAY_START != token) ||
+           (p_td.json->as_map && JSON_TOKEN_OBJECT_START != token)) {
     return JSON_ERROR_INVALID_TOKEN;
   } 
   
@@ -1661,7 +1666,8 @@ int Record_Of_Type::JSON_decode(const TTCN_Typedescriptor_t& p_td, JSON_Tokenize
   }
   
   dec_len += p_tok.get_next_token(&token, NULL, NULL);
-  if (JSON_TOKEN_ARRAY_END != token) {
+  if ((!p_td.json->as_map && JSON_TOKEN_ARRAY_END != token) ||
+      (p_td.json->as_map && JSON_TOKEN_OBJECT_END != token)) {
     JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_REC_OF_END_TOKEN_ERROR, "");
     if (p_silent) {
       clean_up();
@@ -2474,7 +2480,7 @@ int Record_Of_Type::XER_decode(const XERdescriptor_t& p_td,
      * to decode the value. */
     for(char * str = strtok(val, " \t\x0A\x0D"); str != 0; str = strtok(val + pos, " \t\x0A\x0D")) {
       // Calling strtok with NULL won't work here, since the decoded element can have strtok calls aswell
-      pos += strlen(str) + 1;
+      pos = (str - val) + strlen(str) + 1;
       // Construct a new XML Reader with the current token.
       TTCN_Buffer buf2;
       const XERdescriptor_t& sub_xer = *p_td.oftype_descr;
@@ -3589,7 +3595,8 @@ int Record_Type::RAW_encode_negtest(const Erroneous_descriptor_t *p_err_descr,
 }
 
 int Record_Type::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff,
-  int limit, raw_order_t top_bit_ord, boolean no_err, int, boolean)
+  int limit, raw_order_t top_bit_ord, boolean no_err, int, boolean,
+  const RAW_Force_Omit* force_omit)
 {
   int field_cnt = get_count();
   int opt_cnt = optional_count();
@@ -3616,14 +3623,16 @@ int Record_Type::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff
       const int* optional_indexes = get_optional_indexes();
       for (int i=0; i<field_cnt; i++) { /* decoding fields without TAG */
         boolean is_optional_field = optional_indexes && (optional_indexes[next_optional_idx]==i);
-        if (field_map[i] == 0) {
+        if (field_map[i] == 0 && (!is_optional_field ||
+            (force_omit == NULL || !(*force_omit)(i)))) {
           Base_Type* field_ptr = get_at(i);
           if (is_optional_field) {
             field_ptr->set_to_present();
             field_ptr=field_ptr->get_opt_value();
           }
+          RAW_Force_Omit field_force_omit(i, force_omit, fld_descr(i)->raw->forceomit);
           int decoded_field_length = field_ptr->RAW_decode(*fld_descr(i), buff,
-            limit, local_top_order, TRUE);
+            limit, local_top_order, TRUE, -1, TRUE, &field_force_omit);
           if ( (is_optional_field && (decoded_field_length>0)) ||
             (!is_optional_field && (decoded_field_length>=0)) ) {
             decoded_length += decoded_field_length;
@@ -3676,7 +3685,8 @@ continue_while: ;
     for (int i=0; i<field_cnt; i++) { /* decoding fields */
       boolean is_optional_field = optional_indexes && (optional_indexes[next_optional_idx]==i);
       /* check if enough bits to decode the field*/
-      if (!is_optional_field || (limit>0)) {
+      if (!is_optional_field || (limit>0 &&
+          (force_omit == NULL || !(*force_omit)(i)))) {
         /* decoding of normal field */
         fl_start_pos = buff.get_pos_bit();
         Base_Type* field_ptr = get_at(i);
@@ -3684,8 +3694,9 @@ continue_while: ;
           field_ptr->set_to_present();
           field_ptr=field_ptr->get_opt_value();
         }
+        RAW_Force_Omit field_force_omit(i, force_omit, fld_descr(i)->raw->forceomit);
         decoded_field_length = field_ptr->RAW_decode(*fld_descr(i), buff, limit,
-          local_top_order, is_optional_field ? TRUE : no_err);
+          local_top_order, is_optional_field ? TRUE : no_err, -1, TRUE, &field_force_omit);
         boolean field_present = TRUE;
         if (is_optional_field) {
           if (decoded_field_length < 1) { // swallow any error and become omit
@@ -5809,15 +5820,21 @@ int Record_Type::XER_decode(const XERdescriptor_t& p_td, XmlReaderWrap& reader,
           else {
             // In case the field is an optional anyElement -> check if it should be omitted
             boolean optional_any_elem_check = TRUE;
-            if (get_at(i)->is_optional() && (xer_descr(i)->xer_bits & ANY_ELEMENT)) {
-              // The "anyElement" coding instruction can only be applied to a universal charstring field
-              OPTIONAL<UNIVERSAL_CHARSTRING>* opt_field = dynamic_cast<OPTIONAL<UNIVERSAL_CHARSTRING>*>(get_at(i));
-              if (opt_field) {
-                const char* next_field_name = NULL;
-                if (i < field_cnt - 1) {
-                  next_field_name = fld_name(i + 1);
+            if (xer_descr(i)->xer_bits & ANY_ELEMENT) {
+              if (get_at(i)->is_optional()) {
+                // The "anyElement" coding instruction can only be applied to a universal charstring field
+                OPTIONAL<UNIVERSAL_CHARSTRING>* opt_field = dynamic_cast<OPTIONAL<UNIVERSAL_CHARSTRING>*>(get_at(i));
+                if (opt_field) {
+                  const char* next_field_name = NULL;
+                  if (i < field_cnt - 1) {
+                    next_field_name = fld_name(i + 1);
+                  }
+                  optional_any_elem_check = opt_field->XER_check_any_elem(reader, next_field_name, tag_closed);
                 }
-                optional_any_elem_check = opt_field->XER_check_any_elem(reader, next_field_name, tag_closed);
+              }
+              else if (tag_closed) {
+                // If the record is emptyElement, there's no way it will have an anyElement field
+                reader.Read();
               }
             }
             if (optional_any_elem_check && !already_processed) {
@@ -5946,6 +5963,21 @@ int Record_Type::JSON_encode(const TTCN_Typedescriptor_t& p_td, JSON_Tokenizer& 
     return get_at(0)->JSON_encode(*fld_descr(0), p_tok);
   }
   
+  if (p_td.json->as_map) {
+    const UNIVERSAL_CHARSTRING* key_ustr = dynamic_cast<
+      const UNIVERSAL_CHARSTRING*>(get_at(0));
+    if (NULL == key_ustr) {
+      TTCN_error("Internal error: attribute 'as map' is set, but the first "
+        "field is not a universal charstring");
+    }
+    TTCN_Buffer key_buf;
+    key_ustr->encode_utf8(key_buf);
+    CHARSTRING key_str;
+    key_buf.get_string(key_str);
+    return p_tok.put_next_token(JSON_TOKEN_NAME, (const char*) key_str) +
+      get_at(1)->JSON_encode(*fld_descr(1), p_tok);
+  }
+  
   int enc_len = p_tok.put_next_token(JSON_TOKEN_OBJECT_START, NULL);
   
   int field_count = get_count();
@@ -5984,8 +6016,9 @@ int Record_Type::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_descr,
   }
   
   boolean as_value = NULL != p_td.json && p_td.json->as_value;
+  boolean as_map = NULL != p_td.json && p_td.json->as_map;
   
-  int enc_len = as_value ? 0 : p_tok.put_next_token(JSON_TOKEN_OBJECT_START, NULL);
+  int enc_len = (as_value || as_map) ? 0 : p_tok.put_next_token(JSON_TOKEN_OBJECT_START, NULL);
   
   int values_idx = 0;
   int edescr_idx = 0;
@@ -5999,7 +6032,7 @@ int Record_Type::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_descr,
     const Erroneous_values_t* err_vals = p_err_descr->next_field_err_values(i, values_idx);
     const Erroneous_descriptor_t* emb_descr = p_err_descr->next_field_emb_descr(i, edescr_idx);
     
-    if (!as_value && NULL != err_vals && NULL != err_vals->before) {
+    if (!as_value && !as_map && NULL != err_vals && NULL != err_vals->before) {
       if (NULL == err_vals->before->errval) {
         TTCN_error("internal error: erroneous before value missing");
       }
@@ -6025,26 +6058,55 @@ int Record_Type::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_descr,
           if (NULL == err_vals->value->type_descr) {
             TTCN_error("internal error: erroneous before typedescriptor missing");
           }
-          // only replace the field's value, keep the field name
-          if (!as_value) {
-            enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, field_name);
+          if (as_map && 0 == i) {
+            const UNIVERSAL_CHARSTRING* key_ustr = dynamic_cast<
+              const UNIVERSAL_CHARSTRING*>(err_vals->value->errval);
+            if (NULL == key_ustr) {
+              TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND,
+                "Erroneous value for the first field of the 'as map' element type "
+                "is not a universal charstring");
+            }
+            TTCN_Buffer key_buf;
+            key_ustr->encode_utf8(key_buf);
+            CHARSTRING key_str;
+            key_buf.get_string(key_str);
+            enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, (const char*) key_str);
           }
-          enc_len += err_vals->value->errval->JSON_encode(*(err_vals->value->type_descr), p_tok);
+          else {
+            // only replace the field's value, keep the field name
+            if (!as_value && !as_map) {
+              enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, field_name);
+            }
+            enc_len += err_vals->value->errval->JSON_encode(*(err_vals->value->type_descr), p_tok);
+          }
         }
       }
     } else {
       boolean metainfo_unbound = NULL != fld_descr(i)->json && fld_descr(i)->json->metainfo_unbound;
       if ((NULL != fld_descr(i)->json && fld_descr(i)->json->omit_as_null) || 
           get_at(i)->is_present() || metainfo_unbound || as_value) {
-        if (!as_value) {
+        if (!as_value && !as_map) {
           enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, field_name);
         }
-        if (!as_value && metainfo_unbound && !get_at(i)->is_bound()) {
+        if (!as_value && !as_map && metainfo_unbound && !get_at(i)->is_bound()) {
           enc_len += p_tok.put_next_token(JSON_TOKEN_LITERAL_NULL);
           char* metainfo_str = mprintf("metainfo %s", field_name);
           enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, metainfo_str);
           Free(metainfo_str);
           enc_len += p_tok.put_next_token(JSON_TOKEN_STRING, "\"unbound\"");
+        }
+        else if (as_map && 0 == i) {
+          const UNIVERSAL_CHARSTRING* key_ustr = dynamic_cast<
+            const UNIVERSAL_CHARSTRING*>(get_at(0));
+          if (NULL == key_ustr) {
+            TTCN_error("Internal error: attribute 'as map' is set, but the first "
+              "field is not a universal charstring");
+          }
+          TTCN_Buffer key_buf;
+          key_ustr->encode_utf8(key_buf);
+          CHARSTRING key_str;
+          key_buf.get_string(key_str);
+          enc_len += p_tok.put_next_token(JSON_TOKEN_NAME, (const char*) key_str);
         }
         else if (NULL != emb_descr) {
           enc_len += get_at(i)->JSON_encode_negtest(emb_descr, *fld_descr(i), p_tok);
@@ -6054,7 +6116,7 @@ int Record_Type::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_descr,
       }
     }
     
-    if (!as_value && NULL != err_vals && NULL != err_vals->after) {
+    if (!as_value && !as_map && NULL != err_vals && NULL != err_vals->after) {
       if (NULL == err_vals->after->errval) {
         TTCN_error("internal error: erroneous after value missing");
       }
@@ -6075,7 +6137,7 @@ int Record_Type::JSON_encode_negtest(const Erroneous_descriptor_t* p_err_descr,
     }
   }
   
-  if (!as_value) {
+  if (!as_value && !as_map) {
     enc_len += p_tok.put_next_token(JSON_TOKEN_OBJECT_END, NULL);
   }
   return enc_len;
@@ -6088,7 +6150,33 @@ int Record_Type::JSON_decode(const TTCN_Typedescriptor_t& p_td, JSON_Tokenizer& 
     // decode that without the need of any brackets or field names 
     return get_at(0)->JSON_decode(*fld_descr(0), p_tok, p_silent);
   }
+  
   json_token_t token = JSON_TOKEN_NONE;
+  
+  if (p_td.json->as_map) {
+    UNIVERSAL_CHARSTRING* key_ustr = dynamic_cast<
+      UNIVERSAL_CHARSTRING*>(get_at(0));
+    if (NULL == key_ustr) {
+      TTCN_error("Internal error: attribute 'as map' is set, but the first "
+        "field is not a universal charstring");
+    }
+    char* name = NULL;
+    size_t name_len = 0;
+    size_t buf_pos = p_tok.get_buf_pos();
+    size_t dec_len = p_tok.get_next_token(&token, &name, &name_len);
+    if (JSON_TOKEN_ERROR == token) {
+      JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, "");
+      return JSON_ERROR_FATAL;
+    }
+    else if (JSON_TOKEN_NAME != token) {
+      p_tok.set_buf_pos(buf_pos);
+      return JSON_ERROR_INVALID_TOKEN;
+    }
+    key_ustr->decode_utf8(name_len, (unsigned char*) name);
+    
+    return get_at(1)->JSON_decode(*fld_descr(1), p_tok, p_silent) + dec_len;
+  }
+  
   size_t dec_len = p_tok.get_next_token(&token, NULL, NULL);
   if (JSON_TOKEN_ERROR == token) {
     JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, "");
@@ -6269,9 +6357,16 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
   // If extendable record and has real extensions the first bit of the
   // preamble is 1
   if (p_td.oer->extendable) {
-    for (int i = p_td.oer->nr_of_root_comps; i < field_count; i++) {
+    for (int i = 0; i < field_count; i++) {
+      boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+      const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
+      if (is_default_field) {
+        next_default_idx++;
+      }
       // If there are extension fields the first bit is 1
-      if (get_at(p_td.oer->p[i])->is_bound() && get_at(p_td.oer->p[i])->is_present()) {
+      if (i >= p_td.oer->nr_of_root_comps &&
+          get_at(p_td.oer->p[i])->is_bound() && get_at(p_td.oer->p[i])->is_present() &&
+          (!is_default_field || !get_at(p_td.oer->p[i])->is_equal(default_value))) {
         c = 1 << 7;
         has_extension = true;
         break;
@@ -6280,14 +6375,19 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
     pos--;
     limit = p_td.oer->nr_of_root_comps;
   }
+  next_default_idx = 0;
   for (int i = 0; i < limit; i++) {
     boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+    const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
     if (is_default_field) {
       next_default_idx++;
     }
     if (get_at(p_td.oer->p[i])->is_optional() || is_default_field) {
       pos--;
-      c += get_at(p_td.oer->p[i])->is_present() << pos;
+      if (get_at(p_td.oer->p[i])->is_present() &&
+          (!is_default_field || !get_at(p_td.oer->p[i])->is_equal(default_value))) {
+        c += 1 << pos;
+      }
       if (pos == 0) {
         p_buf.put_c(c);
         pos = 8;
@@ -6298,9 +6398,19 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
   if (pos != 8) {
     p_buf.put_c(c);
   }
+  next_default_idx = 0;
   for (int i = 0; i < limit; ++i) {
-    get_at(p_td.oer->p[i])->OER_encode(*fld_descr(p_td.oer->p[i]), p_buf);
+    boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+    const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
+    if (is_default_field) {
+      next_default_idx++;
+    }
+    if (!is_default_field || !get_at(p_td.oer->p[i])->is_equal(default_value)) {
+      get_at(p_td.oer->p[i])->OER_encode(*fld_descr(p_td.oer->p[i]), p_buf);
+    }
   }
+  
+  int ext_default_idx_start = next_default_idx;
 
   // If the record is extendable and has real extensions
   if (has_extension) {
@@ -6310,21 +6420,38 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
     pos = 8;
     int eag_pos = p_td.oer->eag_len == 0 ? -1 : 0;
     for (int i = limit; i < field_count; i++) {
+      boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+      const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
+      if (is_default_field) {
+        next_default_idx++;
+      }
       pos--;
       if (eag_pos != -1 && p_td.oer->eag[eag_pos] == i - limit) {
         eag_pos++;
+        bool found = false;
         for (int j = i; j < limit + p_td.oer->eag[eag_pos]; j++) {
-          if (get_at(p_td.oer->p[j])->is_bound() && get_at(p_td.oer->p[j])->is_present()) {
-            // Add bit if there are at least one present field
-            c += 1 << pos;
-            break;
+          if (j != i) {
+            is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[j]);
+            default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
+            if (is_default_field) {
+              next_default_idx++;
+            }
           }
+          if (get_at(p_td.oer->p[j])->is_bound() && get_at(p_td.oer->p[j])->is_present() &&
+              (!is_default_field || !get_at(p_td.oer->p[j])->is_equal(default_value))) {
+            found = true;
+          }
+        }
+        if (found) {
+          // Add bit if there is at least one present field
+          c += 1 << pos;
         }
         i += p_td.oer->eag[eag_pos] - p_td.oer->eag[eag_pos-1] - 1;
         eag_pos++;
       } else {
         // extension attribute groups counted as one in the presence bitmap
-        if (get_at(p_td.oer->p[i])->is_present()) {
+        if (get_at(p_td.oer->p[i])->is_present() &&
+            (!is_default_field || !get_at(p_td.oer->p[i])->is_equal(default_value))) {
           c += 1 << pos;
         }
       }
@@ -6346,9 +6473,11 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
     p_buf.put_buf(tmp_buf);
     tmp_buf.clear();
     
+    next_default_idx = ext_default_idx_start;
     eag_pos = p_td.oer->eag_len == 0 ? -1 : 0;
     for (int i = limit; i < field_count; ++i) {
       boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+      const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
       if (is_default_field) {
         next_default_idx++;
       }
@@ -6361,18 +6490,24 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
         if (is_default_field) {
           next_default_idx--;
         }
+        int current_default_idx = next_default_idx;
         bool has_present = false;
         for (int j = i; j < limit + p_td.oer->eag[eag_pos]; j++) {
-          if (get_at(p_td.oer->p[j])->is_present()) {
-            has_present = true;
-          }
           is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[j]);
+          default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
           if (is_default_field) {
             next_default_idx++;
           }
+          if (get_at(p_td.oer->p[j])->is_present() &&
+              (!is_default_field || !get_at(p_td.oer->p[j])->is_equal(default_value))) {
+            has_present = true;
+          }
           if (get_at(p_td.oer->p[j])->is_optional() || is_default_field) {
             pos--;
-            c += get_at(p_td.oer->p[j])->is_present() << pos;
+            if (get_at(p_td.oer->p[j])->is_present() &&
+                (!is_default_field || !get_at(p_td.oer->p[j])->is_equal(default_value))) {
+              c += 1 << pos;
+            }
             if (pos == 0) {
               tmp_buf.put_c(c);
               pos = 8;
@@ -6384,8 +6519,16 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
           tmp_buf.put_c(c);
         }
         if (has_present) {
+          next_default_idx = current_default_idx;
           for (int j = i; j < limit + p_td.oer->eag[eag_pos]; j++) {
-            get_at(p_td.oer->p[j])->OER_encode(*fld_descr(p_td.oer->p[j]), tmp_buf);
+            is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[j]);
+            default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
+            if (is_default_field) {
+              next_default_idx++;
+            }
+            if (!is_default_field || !get_at(p_td.oer->p[j])->is_equal(default_value)) {
+              get_at(p_td.oer->p[j])->OER_encode(*fld_descr(p_td.oer->p[j]), tmp_buf);
+            }
           }
           encode_oer_length(tmp_buf.get_len(), p_buf, FALSE);
           p_buf.put_buf(tmp_buf);
@@ -6393,7 +6536,8 @@ int Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
         tmp_buf.clear();
         i += p_td.oer->eag[eag_pos] - p_td.oer->eag[eag_pos-1] - 1;
         eag_pos++;
-      } else if (get_at(p_td.oer->p[i])->is_bound() && get_at(p_td.oer->p[i])->is_present()) {
+      } else if (get_at(p_td.oer->p[i])->is_bound() && get_at(p_td.oer->p[i])->is_present() &&
+                 (!is_default_field || !get_at(p_td.oer->p[i])->is_equal(default_value))) {
         get_at(p_td.oer->p[i])->OER_encode(*fld_descr(p_td.oer->p[i]), tmp_buf);
         encode_oer_length(tmp_buf.get_len(), p_buf, FALSE);
         p_buf.put_buf(tmp_buf);
@@ -6809,12 +6953,18 @@ int Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
   next_default_idx = 0;
   for (int i = 0; i < limit; ++i) {
     boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+    const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
     if (is_default_field) {
       next_default_idx++;
     }
     if (get_at(p_td.oer->p[i])->is_optional() || is_default_field) {
       if (!(uc[0] & 1 << (7-act_pos))) {
-        get_at(p_td.oer->p[i])->set_to_omit();
+        if (get_at(p_td.oer->p[i])->is_optional()) {
+          get_at(p_td.oer->p[i])->set_to_omit();
+        }
+        else if (is_default_field) {
+          get_at(p_td.oer->p[i])->set_value(default_value);
+        }
       } else {
         get_at(p_td.oer->p[i])->OER_decode(*fld_descr(p_td.oer->p[i]), p_buf, p_oer);
       }
@@ -6841,6 +6991,7 @@ int Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
     // Decode fields
     for (int i = limit; i < field_count; ++i) {
       boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+      const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
       if (is_default_field) {
         next_default_idx++;
       }
@@ -6850,8 +7001,18 @@ int Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
         if (eag_pos != -1 && p_td.oer->eag[eag_pos] == i - limit) {
           eag_pos++;
           for (int j = i; j < limit + p_td.oer->eag[eag_pos]; j++) {
+            if (j != i) {
+              is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[j]);
+              default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
+              if (is_default_field) {
+                next_default_idx++;
+              }
+            }
             if (get_at(p_td.oer->p[j])->is_optional()) {
               get_at(p_td.oer->p[j])->set_to_omit();
+            }
+            else if (is_default_field) {
+              get_at(p_td.oer->p[j])->set_value(default_value);
             }
           }
           i += p_td.oer->eag[eag_pos] - p_td.oer->eag[eag_pos-1] - 1;
@@ -6859,6 +7020,9 @@ int Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
         } else {
           if (get_at(p_td.oer->p[i])->is_optional()) {
             get_at(p_td.oer->p[i])->set_to_omit();
+          }
+          else if (is_default_field) {
+            get_at(p_td.oer->p[i])->set_value(default_value);
           }
         }
       } else {
@@ -6890,6 +7054,7 @@ int Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
           next_default_idx = old_next_default_idx;
           for (int j = i; j < limit + p_td.oer->eag[eag_pos]; j++) {
             is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[j]);
+            default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
             if (is_default_field) {
               next_default_idx++;
             }
@@ -6898,6 +7063,9 @@ int Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
               if (!(uc2[0] & 1 << (7-act_pos2))) {
                 if (get_at(p_td.oer->p[j])->is_optional()) {
                   get_at(p_td.oer->p[j])->set_to_omit();
+                }
+                else if (is_default_field) {
+                  get_at(p_td.oer->p[j])->set_value(default_value);
                 }
               } else {
                 // Field is present
@@ -6924,6 +7092,23 @@ int Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_bu
       if (act_pos == 8) {
         uc++;
         act_pos = 0;
+      }
+    }
+    // TODO: handle extra extension fields
+  }
+  else if (p_td.oer->extendable) {
+    // Set the optional fields after the extension to 'omit'
+    for (int i = limit; i < field_count; ++i) {
+      boolean is_default_field = default_indexes && (default_indexes[next_default_idx].index==p_td.oer->p[i]);
+      const Base_Type* default_value = is_default_field ? default_indexes[next_default_idx].value : NULL;
+      if (is_default_field) {
+        next_default_idx++;
+      }
+      if (get_at(p_td.oer->p[i])->is_optional()) {
+        get_at(p_td.oer->p[i])->set_to_omit();
+      }
+      else if (is_default_field) {
+        get_at(p_td.oer->p[i])->set_value(default_value);
       }
     }
   }
@@ -7199,7 +7384,8 @@ int Empty_Record_Type::RAW_encode(const TTCN_Typedescriptor_t& p_td,
 
 int Empty_Record_Type::RAW_decode(const TTCN_Typedescriptor_t& p_td,
   TTCN_Buffer& buff, int /*limit*/, raw_order_t /*top_bit_ord*/,
-  boolean /*no_err*/, int /*sel_field*/, boolean /*first_call*/)
+  boolean /*no_err*/, int /*sel_field*/, boolean /*first_call*/,
+  const RAW_Force_Omit* /*force_omit*/)
 {
   bound_flag = TRUE;
   return buff.increase_pos_padd(p_td.raw->prepadding)
@@ -7340,17 +7526,30 @@ int Empty_Record_Type::JSON_decode(const TTCN_Typedescriptor_t& p_td, JSON_Token
   return (int)dec_len;
 }
 
-int Empty_Record_Type::OER_encode(const TTCN_Typedescriptor_t&, TTCN_Buffer&) const {
+int Empty_Record_Type::OER_encode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_buf) const {
   if (!is_bound()) {
     TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND,
       "Encoding an unbound empty %s value.", is_set() ? "set" : "record");
     return -1;
   }
+  if (p_td.oer->extendable) {
+    p_buf.put_c(0);
+  }
   return 0;
 }
   
-int Empty_Record_Type::OER_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&, OER_struct&) {
+int Empty_Record_Type::OER_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_buf, OER_struct&) {
   bound_flag = TRUE;
+  if (p_td.oer->extendable) {
+    const unsigned char* uc = p_buf.get_read_data();
+    boolean has_extension = (uc[0] & 0x80) != 0;
+    p_buf.increase_pos(1);
+    if (has_extension) {
+      size_t bytes = decode_oer_length(p_buf, FALSE);
+      p_buf.increase_pos(bytes);
+      // TODO: handle extension fields
+    }
+  }
   return 0;
 }
 

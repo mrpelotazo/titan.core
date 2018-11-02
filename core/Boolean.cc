@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -575,7 +575,7 @@ int BOOLEAN::RAW_encode(const TTCN_Typedescriptor_t& p_td, RAW_enc_tree& myleaf)
 
 int BOOLEAN::RAW_decode(const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& buff,
   int limit, raw_order_t top_bit_ord, boolean no_err, int /*sel_field*/,
-  boolean /*first_call*/)
+  boolean /*first_call*/, const RAW_Force_Omit* /*force_omit*/)
 {
   bound_flag = FALSE;
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);

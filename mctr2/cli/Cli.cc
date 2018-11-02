@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -336,11 +336,11 @@ void Cli::printWelcome()
     "*************************************************************************\n"
     "* TTCN-3 Test Executor - Main Controller 2                              *\n"
     "* Version: %-40s                     *\n"
-    "* Copyright (c) 2000-2017 Ericsson Telecom AB                           *\n"
+    "* Copyright (c) 2000-2018 Ericsson Telecom AB                           *\n"
     "* All rights reserved. This program and the accompanying materials      *\n"
-    "* are made available under the terms of the Eclipse Public License v1.0 *\n"
+    "* are made available under the terms of the Eclipse Public License v2.0 *\n"
     "* which accompanies this distribution, and is available at              *\n"
-    "* http://www.eclipse.org/legal/epl-v10.html                             *\n"
+    "* https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html            *\n"
     "*************************************************************************\n"
     "\n", PRODUCT_NUMBER);
 }
@@ -520,6 +520,7 @@ void Cli::cmtcCallback(const char *arguments)
   case mctr::MC_LISTENING_CONFIGURED:
     puts("Waiting for HC to connect...");
     waitMCState(WAIT_HC_CONNECTED);
+    //intentional fall through
   case mctr::MC_HC_CONNECTED:
     MainController::configure(mycfg.config_read_buffer);
     waitMCState(WAIT_ACTIVE);
@@ -527,6 +528,7 @@ void Cli::cmtcCallback(const char *arguments)
       puts("Error during initialization. Cannot create MTC.");
       break;
     }
+    //intentional fall through
   case mctr::MC_ACTIVE:
     MainController::create_mtc(hostIndex);
     waitMCState(WAIT_MTC_CREATED);
@@ -1157,7 +1159,7 @@ boolean Cli::conditionHolds(waitStateEnum askedState)
 
 int Cli::getHostIndex(const char* hostname)
 {
-  int hostname_len = strlen(hostname);
+  size_t hostname_len = strlen(hostname);
   int index, found = -1;
   for (index = 0; ; index++) {
     const mctr::host_struct *host =

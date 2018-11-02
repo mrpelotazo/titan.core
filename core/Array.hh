@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -202,6 +202,14 @@ public:
   {
     for (unsigned int v_index = 0; v_index < array_size; v_index++) {
       array_elements[v_index].activate_port();
+    }
+  }
+  
+  // needed by the init_system_port function
+  void safe_start()
+  {
+    for (unsigned int v_index = 0; v_index < array_size; v_index++) {
+      array_elements[v_index].safe_start();
     }
   }
 
@@ -2464,7 +2472,7 @@ template <typename T_value_type, typename T_template_type,
 void TEMPLATE_ARRAY<T_value_type,T_template_type,array_size,index_offset>::
 encode_text(Text_Buf& text_buf) const
 {
-  encode_text_restricted(text_buf);
+  encode_text_permutation(text_buf);
   switch (template_selection)
   {
     case SPECIFIC_VALUE:
@@ -2495,7 +2503,7 @@ void TEMPLATE_ARRAY<T_value_type,T_template_type,array_size,index_offset>::
 decode_text(Text_Buf& text_buf)
 {
   clean_up();
-  decode_text_restricted(text_buf);
+  decode_text_permutation(text_buf);
   switch (template_selection)
   {
     case SPECIFIC_VALUE:

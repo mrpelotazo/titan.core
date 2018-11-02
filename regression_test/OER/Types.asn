@@ -1,9 +1,9 @@
 --/////////////////////////////////////////////////////////////////////////////
--- Copyright (c) 2000-2017 Ericsson Telecom AB
+-- Copyright (c) 2000-2018 Ericsson Telecom AB
 -- All rights reserved. This program and the accompanying materials
--- are made available under the terms of the Eclipse Public License v1.0
+-- are made available under the terms of the Eclipse Public License v2.0
 -- which accompanies this distribution, and is available at
--- http://www.eclipse.org/legal/epl-v10.html
+-- https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 --
 -- Contributors:
 --   Szabo, Bence Janos
@@ -328,7 +328,7 @@ ExtensionRecord6 ::= SEQUENCE {
 	[[f8 INTEGER DEFAULT 4]],
 	[[f9 INTEGER OPTIONAL]],
 	[[f-nul NULL OPTIONAL]],
-	f10 INTEGER,
+	f10 INTEGER DEFAULT 4,
 	[[f11 INTEGER,
 	f12 INTEGER]],
 	f13 INTEGER
@@ -534,7 +534,26 @@ Enum529017 ::= ENUMERATED
   val1
 }
 
+Rec533061 ::= SEQUENCE
+{
+  field1 INTEGER,
+  field2 INTEGER OPTIONAL,
+  ...,
+  field-ext1 INTEGER OPTIONAL,
+  field-ext2 REAL OPTIONAL
+}
 
+RecWithDefault ::= SEQUENCE
+{
+  field1 INTEGER DEFAULT 1,
+  field2 INTEGER
+}
+
+EmptyExtendableSequence ::= SEQUENCE {
+  ...
+}
+
+SequenceOfInteger ::= SEQUENCE OF INTEGER
 
 
 END

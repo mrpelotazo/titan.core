@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
- Copyright (c) 2000-2017 Ericsson Telecom AB
+ Copyright (c) 2000-2018 Ericsson Telecom AB
  All rights reserved. This program and the accompanying materials
- are made available under the terms of the Eclipse Public License v1.0
+ are made available under the terms of the Eclipse Public License v2.0
  which accompanies this distribution, and is available at
- http://www.eclipse.org/legal/epl-v10.html
+ https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 
  Contributors:
   Balasko, Jeno
@@ -144,6 +144,8 @@
                 <File path="../xsd/attrib_enum.xsd" />
                 <File path="../xsd/substitutiongroup_main.xsd" />
                 <File path="../xsd/substitutiongroup_ref.xsd" />
+                <File path="../xsd/substitution_group_one.xsd" />
+                <File path="../xsd/substitution_group_two.xsd" />
 		<File path="../xsd/simpletype_base.xsd" />
 		<File path="../xsd/type_substitution.xsd" />
 		<File path="../xsd/type_substitution_chain.xsd" />
@@ -389,6 +391,7 @@
 		<File path="../XmlTest_expectedTtcns/www_example_org_attrib_enum_e.ttcn" />
 		<File path="../XmlTest_expectedTtcns/www_example_org_substitutiongroup_ref_e.ttcn" />
 		<File path="../XmlTest_expectedTtcns/www_example_org_substitutiongroup_main_e.ttcn" />
+		<File path="../XmlTest_expectedTtcns/XSD_Definitions_e.ttcn" />
 	        <File path="../XmlTest_expectedTtcns/www_example_org_simpletype_base_e.ttcn" />
 	        <File path="../XmlTest_expectedTtcns/www_example_org_type_substitution_e.ttcn" />
 	        <File path="../XmlTest_expectedTtcns/www_example_org_type_substitution_chain_e.ttcn" />

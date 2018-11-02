@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <time.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -850,7 +851,7 @@ void TTCN_Communication::send_hc_ready()
 
 void TTCN_Communication::send_create_req(const char *component_type_module,
   const char *component_type_name, const char *component_name,
-  const char *component_location, boolean is_alive)
+  const char *component_location, boolean is_alive, timeval testcase_start_time)
 {
   Text_Buf text_buf;
   text_buf.push_int(MSG_CREATE_REQ);
@@ -859,6 +860,8 @@ void TTCN_Communication::send_create_req(const char *component_type_module,
   text_buf.push_string(component_name);
   text_buf.push_string(component_location);
   text_buf.push_int(is_alive ? 1 : 0);
+  text_buf.push_int(testcase_start_time.tv_sec);
+  text_buf.push_int(testcase_start_time.tv_usec);
   send_message(text_buf);
 }
 
@@ -1115,16 +1118,21 @@ void TTCN_Communication::send_ptc_created(component component_reference)
 }
 
 void TTCN_Communication::prepare_stopped(Text_Buf& text_buf,
-  const char *return_type)
+  verdicttype final_verdict, const char *return_type, const char* reason)
 {
   text_buf.push_int(MSG_STOPPED);
+  text_buf.push_int(final_verdict);
+  text_buf.push_string(reason);
   text_buf.push_string(return_type);
 }
 
-void TTCN_Communication::send_stopped()
+void TTCN_Communication::send_stopped(verdicttype final_verdict,
+  const char* reason)
 {
   Text_Buf text_buf;
   text_buf.push_int(MSG_STOPPED);
+  text_buf.push_int(final_verdict);
+  text_buf.push_string(reason);
   // add an empty return type
   text_buf.push_string(NULL);
   send_message(text_buf);
@@ -1352,32 +1360,43 @@ void TTCN_Communication::process_create_ptc()
       "component reference %d.", component_reference);
     return;
   }
-  qualified_name component_type;
+  qualified_name component_type, system_type;
   incoming_buf.pull_qualified_name(component_type);
+  incoming_buf.pull_qualified_name(system_type);
   if (component_type.module_name == NULL ||
-    component_type.definition_name == NULL) {
+      component_type.definition_name == NULL ||
+      system_type.module_name == NULL ||
+      system_type.definition_name == NULL) {
     incoming_buf.cut_message();
     delete [] component_type.module_name;
     delete [] component_type.definition_name;
+    delete [] system_type.module_name;
+    delete [] system_type.definition_name;
     send_error("Message CREATE_PTC with component reference %d contains "
-      "an invalid component type.", component_reference);
+      "an invalid component type or system type.", component_reference);
     return;
   }
   char *component_name = incoming_buf.pull_string();
   boolean is_alive = incoming_buf.pull_int().get_val();
   qualified_name current_testcase;
   incoming_buf.pull_qualified_name(current_testcase);
+  timeval testcase_start_time;
+  testcase_start_time.tv_sec = incoming_buf.pull_int().get_val();
+  testcase_start_time.tv_usec = incoming_buf.pull_int().get_val();
   incoming_buf.cut_message();
 
   try {
     TTCN_Runtime::process_create_ptc(component_reference,
       component_type.module_name, component_type.definition_name,
+      system_type.module_name, system_type.definition_name,
       component_name, is_alive, current_testcase.module_name,
-      current_testcase.definition_name);
+      current_testcase.definition_name, testcase_start_time);
   } catch (...) {
     // to prevent from memory leaks
     delete [] component_type.module_name;
     delete [] component_type.definition_name;
+    delete [] system_type.module_name;
+    delete [] system_type.definition_name;
     delete [] component_name;
     delete [] current_testcase.module_name;
     delete [] current_testcase.definition_name;
@@ -1386,6 +1405,8 @@ void TTCN_Communication::process_create_ptc()
 
   delete [] component_type.module_name;
   delete [] component_type.definition_name;
+  delete [] system_type.module_name;
+  delete [] system_type.definition_name;
   delete [] component_name;
   delete [] current_testcase.module_name;
   delete [] current_testcase.definition_name;
@@ -1754,6 +1775,13 @@ void TTCN_Communication::process_map()
     if (translation == TRUE) {
       PORT::map_port(local_port, system_port, TRUE);
     }
+    if (!TTCN_Runtime::is_single()) {
+      if (translation == FALSE) {
+        send_mapped(local_port, system_port, translation);
+      } else {
+        send_mapped(system_port, local_port, translation);
+      }
+    }
   } catch (...) {
     delete [] local_port;
     delete [] system_port;
@@ -1792,6 +1820,13 @@ void TTCN_Communication::process_unmap()
     PORT::unmap_port(local_port, system_port, FALSE);
     if (translation == TRUE) {
       PORT::unmap_port(local_port, system_port, TRUE);
+    }
+    if (!TTCN_Runtime::is_single()) {
+      if (translation == FALSE) {
+        send_unmapped(local_port, system_port, translation);
+      } else {
+        send_unmapped(system_port, local_port, translation);
+      }
     }
   } catch (...) {
     delete [] local_port;

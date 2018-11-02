@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -73,6 +73,7 @@ static void yyprint(FILE *file, int type, const YYSTYPE& value);
     Common::Value::verdict_t verdictval;
     Common::Identifier *identifier;
     rawAST_field_list *fieldlist;
+    rawAST_force_omit forceomit;
     rawAST_tag_list taglist;
     rawAST_tag_field_value keyid;
     rawAST_single_tag singletag;
@@ -149,6 +150,7 @@ static void yyprint(FILE *file, int type, const YYSTYPE& value);
 %token XTagKeyword
 %token XCrossTagKeyword
 %token XPresenceKeyword
+%token XForceOmitKeyword
 %token XFieldLengthKeyword
 %token XAlignKeyword
 %token <enumval> XLeft
@@ -296,6 +298,7 @@ static void yyprint(FILE *file, int type, const YYSTYPE& value);
 %token XAsValueKeyword    "asValue"
 %token XChosenKeyword     "chosen"
 %token XJsonOtherwise     "otherwise"
+%token XJsonMap           "map"
 
 
 %type <enumval>
@@ -307,6 +310,9 @@ static void yyprint(FILE *file, int type, const YYSTYPE& value);
 
 %type <fieldlist>
     XLengthIndexDef XStructFieldRefOrEmpty XStructFieldRef
+
+%type <forceomit>
+    XStructFieldRefList
 
 %type <str>
     XEncodeToken XmatchDef XAliasToken XJsonValueSegment XJsonValueCore XJsonValue
@@ -381,6 +387,14 @@ XRecordFieldRef
 XLengthIndexDef
 XStructFieldRef
 XStructFieldRefOrEmpty
+
+%destructor {
+  for (int i = 0; i < $$.nElements; ++i) {
+    free_rawAST_field_list($$.lists[i]);
+  }
+  Free($$.lists);
+}
+XStructFieldRefList
 
 %destructor { free_rawAST_tag_list(&$$); }
 XAssocList
@@ -478,6 +492,8 @@ XSingleEncodingDef : XPaddingDef
         {raw_f=true; }
     | XPresenceDef
         { raw_f=true;}
+    | XForceOmitDef
+        { raw_f = true; }
     | XFieldLengthDef
         { rawstruct->fieldlength = $1*length_multiplier; raw_f=true;}
     | XPtrOffsetDef
@@ -747,6 +763,42 @@ XPresenceDef : XPresenceKeyword '(' XKeyIdList XoptSemiColon ')'
         { free_rawAST_single_tag(&(rawstruct->presence));
         link_rawAST_single_tag(&(rawstruct->presence), &$3);};
 
+/* ForceOmit */
+XForceOmitDef:
+  XForceOmitKeyword '(' XStructFieldRefList ')'
+  {
+    if (rawstruct->forceomit.nElements == 0) {
+      rawstruct->forceomit = $3;
+    }
+    else {
+      rawstruct->forceomit.lists = static_cast<rawAST_field_list**>(
+        Realloc(rawstruct->forceomit.lists,
+        (rawstruct->forceomit.nElements + $3.nElements) *
+        sizeof(rawAST_field_list*)));
+      memcpy(rawstruct->forceomit.lists + rawstruct->forceomit.nElements,
+        $3.lists, $3.nElements * sizeof(rawAST_field_list*));
+      rawstruct->forceomit.nElements += $3.nElements;
+      Free($3.lists);
+    }
+  }
+;
+
+XStructFieldRefList:
+  XStructFieldRef
+  {
+    $$.nElements = 1;
+    $$.lists = static_cast<rawAST_field_list**>(
+      Malloc(sizeof(rawAST_field_list*)) );
+    $$.lists[0] = $1;
+  }
+| XStructFieldRefList ',' XStructFieldRef
+  {
+    $$.nElements = $1.nElements + 1;
+    $$.lists = static_cast<rawAST_field_list**>(
+      Realloc($1.lists, $$.nElements * sizeof(rawAST_field_list*)) );
+    $$.lists[$1.nElements] = $3;
+  }
+;
 
 /* FieldLength */
 XFieldLengthDef : XFieldLengthKeyword '(' XNumber ')'
@@ -1453,9 +1505,49 @@ XERattribute:
       }
     | text
       {
-        xerstruct->text_ = (NamespaceSpecification *)Realloc(xerstruct->text_,
-          ++xerstruct->num_text_ * sizeof(NamespaceSpecification));
-        xerstruct->text_[xerstruct->num_text_-1] = $1;
+        if (selected_codec == Common::Type::CT_XER || legacy_codec_handling) {
+          xerstruct->text_ = (NamespaceSpecification *)Realloc(xerstruct->text_,
+            ++xerstruct->num_text_ * sizeof(NamespaceSpecification));
+          xerstruct->text_[xerstruct->num_text_-1] = $1;
+        }
+        if (selected_codec != Common::Type::CT_XER) {
+          XerAttributes::NameChange special;
+          special.nn_ = $1.prefix;
+          switch (special.kw_) {
+          case NamespaceSpecification::NO_MANGLING:
+          case NamespaceSpecification::CAPITALIZED:
+          case NamespaceSpecification::UNCAPITALIZED:
+          case NamespaceSpecification::UPPERCASED:
+          case NamespaceSpecification::LOWERCASED:
+          case NamespaceSpecification::ALL:
+            if (!legacy_codec_handling &&
+                selected_codec == Common::Type::CT_JSON) {
+              Common::Location loc(infile, @$);
+              loc.error("This format is not supported for the JSON codec");
+            }
+            break;
+          default: // it's a real string
+            if (selected_codec == Common::Type::CT_JSON ||
+                legacy_codec_handling) {
+              if (legacy_codec_handling) {
+                // in this case the strings are saved in both the XML and JSON
+                // structs, so we can't use the same strings
+                jsonstruct->enum_texts.add(
+                  new JsonEnumText(mcopystr($1.prefix), mcopystr($1.uri)));
+              }
+              else {
+                jsonstruct->enum_texts.add(
+                  new JsonEnumText($1.prefix, $1.uri));
+              }
+              json_f = true;
+            }
+            else {
+              Free($1.prefix);
+              Free($1.uri);
+            }
+            break;
+          }
+        }
       }
     | XKWuntagged  { xerstruct->untagged_  = true; }
     | XKWuseNil    { xerstruct->useNil_    = true; }
@@ -1789,6 +1881,7 @@ JSONattribute:
 | JMetainfoForUnbound
 | JAsNumber
 | JChosen
+| JAsMap
 ;
 
 JOmitAsNull:
@@ -1827,6 +1920,10 @@ JChosen:
     }
     link_rawAST_tag_list(jsonstruct->tag_list, &$3);
   }
+;
+
+JAsMap:
+  XKWas XJsonMap { jsonstruct->as_map = true; }
 ;
 
 %%

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -487,6 +487,62 @@ namespace Ttcn {
       FieldOrArrayRef *ref = subrefs.get_ref(i);
       if (ref->get_type() == FieldOrArrayRef::ARRAY_REF)
         ref->get_val()->set_code_section(p_code_section);
+    }
+  }
+  
+  void Ref_base::chk_immutability()
+  {
+    Common::Assignment* ass = get_refd_assignment();
+    switch (ass->get_asstype()) {
+    case Common::Assignment::A_TYPE:           /**< type */
+    case Common::Assignment::A_CONST:          /**< value (const) */
+    case Common::Assignment::A_UNDEF:          /**< undefined/undecided (ASN.1) */
+    case Common::Assignment::A_ERROR:          /**< erroneous; the kind cannot be deduced (ASN.1) */
+    case Common::Assignment::A_OC:             /**< information object class (ASN.1) */
+    case Common::Assignment::A_OBJECT:         /**< information object (ASN.1) */
+    case Common::Assignment::A_OS:             /**< information object set (ASN.1) */
+    case Common::Assignment::A_VS:             /**< value set (ASN.1) */
+    case Common::Assignment::A_EXT_CONST:      /**< external constant (TTCN-3) */
+    case Common::Assignment::A_MODULEPAR:      /**< module parameter (TTCN-3) */
+    case Common::Assignment::A_MODULEPAR_TEMP: /**< template module parameter */
+    case Common::Assignment::A_VAR:            /**< variable (TTCN-3) */
+    case Common::Assignment::A_VAR_TEMPLATE:   /**< template variable: dynamic template (TTCN-3) */
+    case Common::Assignment::A_TIMER:          /**< timer (TTCN-3) */
+    case Common::Assignment::A_PORT:           /**< port (TTCN-3) */
+    case Common::Assignment::A_ALTSTEP:        /**< altstep (TTCN-3) */
+    case Common::Assignment::A_TESTCASE:       /**< testcase Assignment::(TTCN-3) */
+    case Common::Assignment::A_PAR_TIMER:      /**< formal parameter (timer) (TTCN-3) */
+    case Common::Assignment::A_PAR_PORT:        /**< formal parameter (port) (TTCN-3) */
+      break;
+    case Common::Assignment::A_TEMPLATE:
+      if (get_parlist() != NULL) {
+        get_parlist()->chk_immutability();
+      }
+      break;
+    case Common::Assignment::A_FUNCTION:       /**< function without return type (TTCN-3) */
+    case Common::Assignment::A_FUNCTION_RVAL:  /**< function that returns a value (TTCN-3) */
+    case Common::Assignment::A_FUNCTION_RTEMP: /**< function that returns a template (TTCN-3) */
+    case Common::Assignment::A_EXT_FUNCTION:   /**< external function without return type (TTCN-3) */
+    case Common::Assignment::A_EXT_FUNCTION_RVAL:  /**< ext. func that returns a value (TTCN-3) */
+    case Common::Assignment::A_EXT_FUNCTION_RTEMP: /**< ext. func that returns a template (TTCN-3) */
+      warning("Function invocation '%s' may change the actual snapshot.",
+        get_dispname().c_str());
+      break;
+    case Common::Assignment::A_PAR_VAL:        /**< formal parameter (value) (TTCN-3) */
+    case Common::Assignment::A_PAR_VAL_IN:     /**< formal parameter (in value) (TTCN-3) */
+    case Common::Assignment::A_PAR_VAL_OUT:    /**< formal parameter (out value) (TTCN-3) */
+      // TODO: @fuzzy INOUT parameter is not valid
+    case Common::Assignment::A_PAR_VAL_INOUT:  /**< formal parameter (inout value) (TTCN-3) */
+    case Common::Assignment::A_PAR_TEMPL_IN:   /**< formal parameter ([in] template) (TTCN-3) */
+    case Common::Assignment::A_PAR_TEMPL_OUT:  /**< formal parameter (out template) (TTCN-3) */
+    case Common::Assignment::A_PAR_TEMPL_INOUT:/**< formal parameter (inout template) (TTCN-3) */
+      if (ass->get_eval_type() == FUZZY_EVAL) {
+        warning("Fuzzy parameter '%s' may change (during) the actual snapshot.",
+          get_dispname().c_str());
+      }
+      break;
+    default:
+      FATAL_ERROR("Ref_base::chk_immutability()");
     }
   }
 
@@ -7391,7 +7447,7 @@ namespace Ttcn {
       // checking for remaining data in the buffer if decoding was successful
       str = mputprintf(str, "if (TTCN_EncDec::get_last_error_type() == "
           "TTCN_EncDec::ET_NONE) {\n"
-        "if (ttcn_buffer.get_pos() < ttcn_buffer.get_len()-1 && "
+        "if (ttcn_buffer.get_pos() < ttcn_buffer.get_len() && "
           "TTCN_Logger::log_this_event(TTCN_WARNING)) {\n"
         "ttcn_buffer.cut();\n"
         "%s remaining_stream;\n",
@@ -8382,11 +8438,10 @@ namespace Ttcn {
     if (!type) FATAL_ERROR("FormalPar::get_Type()");
     return type;
   }
-
+  
   void FormalPar::chk()
   {
     if (checked) return;
-    checked = true;
     TemplateInstance *default_value = defval.ti;
     defval.ti = 0;
     if (type) {
@@ -8400,6 +8455,8 @@ namespace Ttcn {
         case A_PAR_VAL_INOUT:
           asstype = A_PAR_PORT;
           break;
+        case A_PAR_PORT:
+          break; // should only happen in recursive calls
         default:
           error("Port type `%s' cannot be used as %s",
             t->get_fullname().c_str(), get_assname());
@@ -8428,7 +8485,9 @@ namespace Ttcn {
         }
       }
     } else if (asstype != A_PAR_TIMER) FATAL_ERROR("FormalPar::chk()");
-
+    
+    checked = true;
+    
     if (default_value) {
       Error_Context cntxt(default_value, "In default value");
       defval.ap = chk_actual_par(default_value, Type::EXPECTED_STATIC_VALUE);
@@ -8838,13 +8897,14 @@ namespace Ttcn {
               ref->error("%s", info.get_error_str_str().c_str());
             }
           }
-          else if ((asstype == A_PAR_VAL_OUT || asstype == A_PAR_VAL_INOUT ||
+          else if (type->get_type_refd_last()->get_typetype() != Common::Type::T_COMPONENT &&
+                   (asstype == A_PAR_VAL_OUT || asstype == A_PAR_VAL_INOUT ||
                    asstype == A_PAR_TEMPL_OUT || asstype == A_PAR_TEMPL_INOUT) &&
                    !ref_type->is_compatible(type, &info, NULL,
                    &l_chain_base, &r_chain_base)) {
             // run the type compatibility check in the reverse order, too, for 
             // 'out' and 'inout' parameters (they need to be converted back after
-            // the function call)
+            // the function call; except if they're component types)
             // this should never fail if the first type compatibility succeeded
             FATAL_ERROR("FormalPar::chk_actual_par_by_ref");
           }
@@ -9016,6 +9076,18 @@ namespace Ttcn {
       }
       return new ActualPar(ref);
     } else {
+      if (ap_template->get_templatetype() == Template::SPECIFIC_VALUE) {
+        Value* val = ap_template->get_specific_value();
+        if (val->get_valuetype() == Common::Value::V_EXPR &&
+            val->get_optype() == Common::Value::OPTYPE_GET_PORT_REF) {
+          Value *v = ap_template->get_Value(); // steal the value
+          v->set_my_governor(type);
+          type->chk_this_value_ref(v);
+          type->chk_this_value(v, 0, exp_val, INCOMPLETE_NOT_ALLOWED,
+            OMIT_NOT_ALLOWED, SUB_CHK);
+          return new ActualPar(v);
+        }
+      }
       actual_par->error("Reference to a port or port parameter was expected "
         "for a port parameter");
       return new ActualPar();
@@ -10413,15 +10485,35 @@ namespace Ttcn {
             param_eval == LAZY_EVAL);
         }
         else if (use_runtime_2) {
-          // for now single expressions are not handled separately, since this
-          // may change the order of function calls in the default templates
+          // use the actual parameter's scope, not the formal parameter's
+          act->temp->set_my_scope(my_scope);
+          Template* temp_ = act->temp->get_Template();
+          if (temp_->get_templatetype() == Template::TEMPLATE_REFD ||
+              (temp_->get_templatetype() == Template::SPECIFIC_VALUE &&
+               temp_->get_specific_value()->get_valuetype() == Common::Value::V_REFD)) {
+            Common::Assignment* ass = temp_->get_templatetype() == Template::TEMPLATE_REFD ?
+              temp_->get_reference()->get_refd_assignment() :
+              temp_->get_specific_value()->get_reference()->get_refd_assignment();
+            if (ass->get_asstype() != Common::Assignment::A_FUNCTION_RVAL &&
+                ass->get_asstype() != Common::Assignment::A_FUNCTION_RTEMP &&
+                ass->get_asstype() != Common::Assignment::A_EXT_FUNCTION_RVAL &&
+                ass->get_asstype() != Common::Assignment::A_EXT_FUNCTION_RTEMP &&
+                (ass->get_asstype() != Common::Assignment::A_TEMPLATE ||
+                 ass->get_FormalParList() == NULL)) {
+              // reference to a deterministic value or template, generate normally
+              act->temp->generate_code(expr, act->get_gen_restriction_check());
+              break;
+            }
+          }
+          // the template might contain non-deterministic function calls,
+          // re-generate the template's initializer code every time the
+          // parameter's default value is used
+          // (for now single expressions are not handled separately, since this
+          // may change the order of function calls in the default templates)
           string tmp_id = my_scope->get_scope_mod_gen()->get_temporary_id();
           expr->preamble = mputprintf(expr->preamble, "%s %s;\n",
             formal_par->get_Type()->get_genname_template(my_scope).c_str(),
             tmp_id.c_str());
-          // use the actual parameter's scope, not the formal parameter's, when
-          // generating the template's initialization code
-          act->temp->set_my_scope(my_scope);
           expr->preamble = FormalPar::generate_code_defval_template(expr->preamble,
             act->temp, tmp_id, act->get_gen_restriction_check());
           expr->expr = mputstr(expr->expr, tmp_id.c_str());
@@ -10577,6 +10669,34 @@ namespace Ttcn {
     for (size_t i = 0; i < nof_pars; i++)
       params[i]->chk_recursions(refch);
   }
+
+  void ActualParList::chk_immutability() {
+      size_t num = this->get_nof_pars();
+        for (size_t i = 0; i < num; ++i) {
+          const Ttcn::ActualPar *ap = this->get_par(i);
+        deeper:
+          switch (ap->get_selection()) {
+            case ActualPar::AP_ERROR:
+              break;
+            case ActualPar::AP_VALUE: ///< "in" value parameter
+              ap->get_Value()->chk_expr_immutability();
+              break;
+            case ActualPar::AP_TEMPLATE: ///< "in" template parameter
+              ap->get_TemplateInstance()->chk_immutability();
+              break;
+            case ActualPar::AP_REF: ///< out/inout value or template parameter
+              ap->get_Ref()->chk_immutability();
+              break;
+            case ActualPar::AP_DEFAULT: { ///< created from the default value of a formal parameter
+              // TODO: test!
+              ap = ap->get_ActualPar();
+              goto deeper;
+              break;
+            }
+            // no default
+          } // switch actual par selection
+        }   // next
+    }
 
   void ActualParList::generate_code_noalias(expression_struct *expr, FormalParList *p_fpl)
   {

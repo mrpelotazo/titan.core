@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -43,6 +43,8 @@ class UNIVERSAL_CHARSTRING_ELEMENT;
 #ifdef TITAN_RUNTIME_2
 class UNIVERSAL_CHARSTRING_template;
 #endif
+
+class RAW_Force_Omit;
 
 class Module_Param;
 
@@ -161,16 +163,9 @@ public:
   CHARSTRING operator+(const char* other_value) const;
   CHARSTRING operator+(const CHARSTRING& other_value) const;
   CHARSTRING operator+(const CHARSTRING_ELEMENT& other_value) const;
-#ifdef TITAN_RUNTIME_2
-  CHARSTRING operator+(const OPTIONAL<CHARSTRING>& other_value) const;
-#endif
   UNIVERSAL_CHARSTRING operator+(const UNIVERSAL_CHARSTRING& other_value) const;
   UNIVERSAL_CHARSTRING operator+
     (const UNIVERSAL_CHARSTRING_ELEMENT& other_value) const;
-#ifdef TITAN_RUNTIME_2
-  UNIVERSAL_CHARSTRING operator+(
-    const OPTIONAL<UNIVERSAL_CHARSTRING>& other_value) const;
-#endif
 
   CHARSTRING& operator+=(char other_value);
   CHARSTRING& operator+=(const char *other_value);
@@ -239,7 +234,7 @@ public:
     * another types during encoding. Returns the number of decoded
     * bits */
   int RAW_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&, int, raw_order_t,
-                 boolean no_err=FALSE, int sel_field=-1, boolean first_call=TRUE);
+                 boolean no_err=FALSE, int sel_field=-1, boolean first_call=TRUE, const RAW_Force_Omit* force_omit = NULL);
   int TEXT_encode(const TTCN_Typedescriptor_t&,
                  TTCN_Buffer&) const;
   int TEXT_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&,  Limit_Token_List&,
@@ -322,16 +317,9 @@ public:
   CHARSTRING operator+(const char *other_value) const;
   CHARSTRING operator+(const CHARSTRING& other_value) const;
   CHARSTRING operator+(const CHARSTRING_ELEMENT& other_value) const;
-#ifdef TITAN_RUNTIME_2
-  CHARSTRING operator+(const OPTIONAL<CHARSTRING>& other_value) const;
-#endif
   UNIVERSAL_CHARSTRING operator+(const UNIVERSAL_CHARSTRING& other_value) const;
   UNIVERSAL_CHARSTRING operator+
     (const UNIVERSAL_CHARSTRING_ELEMENT& other_value) const;
-#ifdef TITAN_RUNTIME_2
-  UNIVERSAL_CHARSTRING operator+(
-    const OPTIONAL<UNIVERSAL_CHARSTRING>& other_value) const;
-#endif
 
   inline boolean is_bound() const { return bound_flag; }
   inline boolean is_present() const { return bound_flag; }
@@ -365,18 +353,6 @@ extern CHARSTRING operator+(const char* string_value,
                             const CHARSTRING& other_value);
 extern CHARSTRING operator+(const char* string_value,
                             const CHARSTRING_ELEMENT& other_value);
-#ifdef TITAN_RUNTIME_2
-extern CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const CHARSTRING& right_value);
-extern CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const CHARSTRING_ELEMENT& right_value);
-extern UNIVERSAL_CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const UNIVERSAL_CHARSTRING& right_value);
-extern UNIVERSAL_CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const UNIVERSAL_CHARSTRING_ELEMENT& right_value);
-extern UNIVERSAL_CHARSTRING operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const OPTIONAL<UNIVERSAL_CHARSTRING>& right_value);
-#endif
 
 extern CHARSTRING operator<<=(const char *string_value,
                               const INTEGER& rotate_count);
@@ -396,16 +372,11 @@ class CHARSTRING_template : public Restricted_Length_Template {
     const CHARSTRING_template& right_template);
   friend CHARSTRING_template operator+(const CHARSTRING_ELEMENT& left_value,
     const CHARSTRING_template& right_template);
-  friend CHARSTRING_template operator+(const OPTIONAL<CHARSTRING>& left_value,
-    const CHARSTRING_template& right_template);
   friend UNIVERSAL_CHARSTRING_template operator+(
     const UNIVERSAL_CHARSTRING& left_value,
     const CHARSTRING_template& right_template);
   friend UNIVERSAL_CHARSTRING_template operator+(
     const UNIVERSAL_CHARSTRING_ELEMENT& left_value,
-    const CHARSTRING_template& right_template);
-  friend UNIVERSAL_CHARSTRING_template operator+(
-    const OPTIONAL<UNIVERSAL_CHARSTRING>& left_value,
     const CHARSTRING_template& right_template);
   friend UNIVERSAL_CHARSTRING_template operator+(
     const CHARSTRING_template& left_template,
@@ -479,13 +450,10 @@ public:
   CHARSTRING_template operator+(const CHARSTRING_template& other_value) const;
   CHARSTRING_template operator+(const CHARSTRING& other_value) const;
   CHARSTRING_template operator+(const CHARSTRING_ELEMENT& other_value) const;
-  CHARSTRING_template operator+(const OPTIONAL<CHARSTRING>& other_value) const;
   UNIVERSAL_CHARSTRING_template operator+(
     const UNIVERSAL_CHARSTRING& other_value) const;
   UNIVERSAL_CHARSTRING_template operator+(
     const UNIVERSAL_CHARSTRING_ELEMENT& other_value) const;
-  UNIVERSAL_CHARSTRING_template operator+(
-    const OPTIONAL<UNIVERSAL_CHARSTRING>& other_value) const;
 #endif
 
   CHARSTRING_ELEMENT operator[](int index_value);
@@ -544,16 +512,11 @@ extern CHARSTRING_template operator+(const CHARSTRING& left_value,
   const CHARSTRING_template& right_template);
 extern CHARSTRING_template operator+(const CHARSTRING_ELEMENT& left_value,
   const CHARSTRING_template& right_template);
-extern CHARSTRING_template operator+(const OPTIONAL<CHARSTRING>& left_value,
-  const CHARSTRING_template& right_template);
 extern UNIVERSAL_CHARSTRING_template operator+(
   const UNIVERSAL_CHARSTRING& left_value,
   const CHARSTRING_template& right_template);
 extern UNIVERSAL_CHARSTRING_template operator+(
   const UNIVERSAL_CHARSTRING_ELEMENT& left_value,
-  const CHARSTRING_template& right_template);
-extern UNIVERSAL_CHARSTRING_template operator+(
-  const OPTIONAL<UNIVERSAL_CHARSTRING>& left_value,
   const CHARSTRING_template& right_template);
 #endif
 

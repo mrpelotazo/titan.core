@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -29,6 +29,14 @@ public:
   ~JsonSchemaExtension();
 };
 
+struct JsonEnumText {
+  char* from;
+  char* to;
+  int index; // set during semantic analysis
+  JsonEnumText(char* p_from, char* p_to): from(p_from), to(p_to) {}
+  ~JsonEnumText();
+};
+
 class JsonAST {
   private:
     void init_JsonAST();
@@ -43,10 +51,14 @@ class JsonAST {
     boolean metainfo_unbound;
     boolean as_number;
     rawAST_tag_list* tag_list;
+    boolean as_map;
+    vector<JsonEnumText> enum_texts;
   
     JsonAST() { init_JsonAST(); }
     JsonAST(const JsonAST *other_val);
     ~JsonAST();
+    
+    boolean empty() const;
     
     void print_JsonAST() const;
 };

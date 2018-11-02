@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -627,6 +627,110 @@ testcase tc_attribute_chosen_negtest() runs on MTC {
   setverdict(pass);
 }
 
+// Testing JSON decoding with attributes 'chosen' and 'default'.
+// (The conditions in the attribute 'chosen' depend on fields that have default values.)
+testcase tc_attribute_chosen_default() runs on MTC {
+  // Test #1: both fields use their default values
+  var octetstring buff := char2oct("{\"field\":{\"num\":1,\"str\":\"abc\"}}");
+  var PduWithId2 dec_exp := { protocolId1 := 1, protocolId2 := 0, field := { type1 := { num := 1, str := "abc" } } };
+  var PduWithId2 dec := f_dec_pduwithid2(buff);
+  if (dec != dec_exp) {
+    setverdict(fail, "Test #1 failed. Expected: ", dec_exp, ", got: ", dec);
+  }
+  
+  // Test #2: the first field uses its default value, the second decodes its value from the buffer
+  buff := char2oct("{\"protocolId2\":-1,\"field\":{\"num\":1,\"str\":\"abc\"}}");
+  dec_exp := { protocolId1 := 1, protocolId2 := -1, field := { type1 := { num := 1, str := "abc" } } };
+  dec := f_dec_pduwithid2(buff);
+  if (dec != dec_exp) {
+    setverdict(fail, "Test #2 failed. Expected: ", dec_exp, ", got: ", dec);
+  }
+  
+  // Test #3: the second field uses its default value, the first decodes its value from the buffer
+  buff := char2oct("{\"protocolId1\":6,\"field\":{\"num\":1,\"str\":\"abc\"}}");
+  dec_exp := { protocolId1 := 6, protocolId2 := 0, field := { type3 := { num := 1.0, str := "abc" } } };
+  dec := f_dec_pduwithid2(buff);
+  if (dec != dec_exp) {
+    setverdict(fail, "Test #3 failed. Expected: ", dec_exp, ", got: ", dec);
+  }
+  
+  // Test #4: both fields decode their values from the buffer
+  buff := char2oct("{\"protocolId1\":6,\"protocolId2\":-1}");
+  dec_exp := { protocolId1 := 6, protocolId2 := -1, field := omit };
+  dec := f_dec_pduwithid2(buff);
+  if (dec != dec_exp) {
+    setverdict(fail, "Test #4 failed. Expected: ", dec_exp, ", got: ", dec);
+  }
+  
+  // Test #5: both fields decode their values from the buffer,
+  // however, the first field appears after the union field in the buffer,
+  // so its default value is used when checking the conditions of the attribute 'chosen'
+  buff := char2oct("{\"protocolId2\":-1,\"field\":{\"num\":1,\"str\":\"abc\"},\"protocolId1\":6}");
+  dec_exp := { protocolId1 := 6, protocolId2 := -1, field := { type1 := { num := 1, str := "abc" } } };
+  dec := f_dec_pduwithid2(buff);
+  if (dec != dec_exp) {
+    setverdict(fail, "Test #5 failed. Expected: ", dec_exp, ", got: ", dec);
+  }
+  
+  setverdict(pass);
+}
+
+// Testing the attribute 'as map'
+testcase tc_attribute_as_map() runs on MTC {
+  var Map x := { { "one", 1 }, { "two", 2 }, { "three", 3 }, { "zero", omit } };
+  var octetstring enc_exp := char2oct("{\"one\":1,\"two\":2,\"three\":3,\"zero\":null}");
+  var octetstring enc := f_enc_map(x);
+  if (enc != enc_exp) {
+    setverdict(fail, "Encoding failed. Expected: ", enc_exp, ", got: ", enc);
+  }
+  var Map dec := f_dec_map(enc_exp);
+  if (dec != x) {
+    setverdict(fail, "Decoding failed. Expected: ", x, ", got: ", dec);
+  }
+  setverdict(pass);
+}
+
+// Testing the attribute 'as map' in a union with the attribute 'as value'
+testcase tc_attribute_as_map_in_union() runs on MTC {
+  var JsonValue x := {
+    JsonObject := {
+      {
+        key := "num",
+        val := { JsonInteger := 2 }
+      },
+      {
+        key := "str",
+        val := { JsonString := "abc" }
+      }
+    }
+  };
+  var octetstring enc_exp := char2oct("{\"num\":2,\"str\":\"abc\"}");
+  var octetstring enc := f_enc_json_val(x);
+  if (enc != enc_exp) {
+    setverdict(fail, "Encoding failed. Expected: ", enc_exp, ", got: ", enc);
+  }
+  var JsonValue dec := f_dec_json_val(enc_exp);
+  if (dec != x) {
+    setverdict(fail, "Decoding failed. Expected: ", x, ", got: ", dec);
+  }
+  setverdict(pass);
+}
+
+// Testing the attribute 'text ... as ...'
+testcase tc_attribute_text_as() runs on MTC {
+  var EnumNumberList x := { One, Two, Three };
+  var octetstring enc_exp := char2oct("[\"1\",\"2\",\"3\"]");
+  var octetstring enc := f_enc_enum_list(x);
+  if (enc != enc_exp) {
+    setverdict(fail, "Encoding failed. Expected: ", enc_exp, ", got: ", enc);
+  }
+  var EnumNumberList dec := f_dec_enum_list(enc_exp);
+  if (dec != x) {
+    setverdict(fail, "Decoding failed. Expected: ", x, ", got: ", dec);
+  }
+  setverdict(pass);
+}
+
 
 control {
   execute(tc_NoAttributeOnUpperLevel())
@@ -655,5 +759,9 @@ control {
   execute(tc_attribute_default_struct());
   execute(tc_attribute_chosen());
   execute(tc_attribute_chosen_negtest());
+  execute(tc_attribute_chosen_default());
+  execute(tc_attribute_as_map());
+  execute(tc_attribute_as_map_in_union());
+  execute(tc_attribute_text_as());
 }
 }

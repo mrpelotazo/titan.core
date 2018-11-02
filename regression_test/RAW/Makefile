@@ -1,9 +1,9 @@
 ##############################################################################
-# Copyright (c) 2000-2017 Ericsson Telecom AB
+# Copyright (c) 2000-2018 Ericsson Telecom AB
 # All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
+# are made available under the terms of the Eclipse Public License v2.0
 # which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
+# https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
 #
 # Contributors:
 #   Balasko, Jeno
@@ -18,7 +18,8 @@
 TOPDIR := ..
 include $(TOPDIR)/Makefile.regression
 
-RDIRS = Examples HN25015 HQ26535 HQ49956 HS16977 ustr Annex_E_variants Bug521125 Lengthto_Offset Bug522656
+RDIRS = Examples HN25015 HQ26535 HQ49956 HS16977 ustr Annex_E_variants Bug521125 \
+        Lengthto_Offset Bug522656 RAW_integer RAW_bitstring ForceOmit
 
 all dep clean run distclean:
 	for dir in $(RDIRS); do (cd $$dir && $(MAKE) $@) || exit; done

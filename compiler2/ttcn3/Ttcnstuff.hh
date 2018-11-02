@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -390,6 +390,7 @@ private:
   Types *in_list, *out_list, *inout_list;
   bool in_all, out_all, inout_all; // whether "(in|out|inout) all" was used
   bool checked;
+  bool attributes_checked;
   bool legacy; // Old extension syntax or new standard syntax
   /* Types and signatures that can be sent and received.
    * These are initially empty; filled by PortTypeBody::chk_list based on

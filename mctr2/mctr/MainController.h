@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -26,7 +26,7 @@
 // Author:                Janos Zoltan Szabo
 // mail:                  tmpjsz@eth.ericsson.se
 //
-// Copyright (c) 2000-2017 Ericsson Telecom AB
+// Copyright (c) 2000-2018 Ericsson Telecom AB
 //
 #ifndef MCTR_MAINCONTROLLER_H
 #define MCTR_MAINCONTROLLER_H
@@ -35,6 +35,7 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <time.h>
 
 #include "../../core/Types.h"
 #include "../../common/NetworkHandler.hh"
@@ -364,6 +365,7 @@ class MainController {
   static boolean any_component_done_requested, any_component_done_sent,
   all_component_done_requested, any_component_killed_requested,
   all_component_killed_requested;
+  static timeval testcase_start_time;
   static void add_component(component_struct *comp);
   static component_struct *lookup_component(component comp_ref);
   static void destroy_all_components();
@@ -491,8 +493,9 @@ private:
   static void send_exit_hc(host_struct *hc);
   static void send_create_mtc(host_struct *hc);
   static void send_create_ptc(host_struct *hc, component component_reference,
-    const qualified_name& component_type, const char *component_name,
-    boolean is_alive, const qualified_name& current_testcase);
+    const qualified_name& component_type, const qualified_name& system_type,
+    const char *component_name, boolean is_alive,
+    const qualified_name& current_testcase);
   static void send_kill_process(host_struct *hc,
     component component_reference);
 

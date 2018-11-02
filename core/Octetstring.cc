@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -185,16 +185,6 @@ OCTETSTRING OCTETSTRING::operator+(const OCTETSTRING_ELEMENT& other_value) const
   ret_val.val_ptr->octets_ptr[val_ptr->n_octets] = other_value.get_octet();
   return ret_val;
 }
-
-#ifdef TITAN_RUNTIME_2
-OCTETSTRING OCTETSTRING::operator+(const OPTIONAL<OCTETSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const OCTETSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of octetstring concatenation.");
-}
-#endif
 
 OCTETSTRING& OCTETSTRING::operator+=(const OCTETSTRING& other_value)
 {
@@ -1235,14 +1225,14 @@ int OCTETSTRING::RAW_encode(const TTCN_Typedescriptor_t& p_td,
     for (int a = 0; a < blength; a++) bc[a] = val_ptr->octets_ptr[a] << 1;
   }
   else myleaf.body.leaf.data_ptr = val_ptr->octets_ptr;
-  if (p_td.raw->endianness == ORDER_MSB) myleaf.align = -align_length;
-  else myleaf.align = align_length;
+  if (p_td.raw->endianness == ORDER_MSB) myleaf.align = align_length;
+  else myleaf.align = -align_length;
   return myleaf.length = bl + align_length;
 }
 
 int OCTETSTRING::RAW_decode(const TTCN_Typedescriptor_t& p_td,
   TTCN_Buffer& buff, int limit, raw_order_t top_bit_ord, boolean no_err,
-  int /*sel_field*/, boolean /*first_call*/)
+  int /*sel_field*/, boolean /*first_call*/, const RAW_Force_Omit* /*force_omit*/)
 {
   int prepaddlength = buff.increase_pos_padd(p_td.raw->prepadding);
   limit -= prepaddlength;
@@ -1517,17 +1507,6 @@ OCTETSTRING OCTETSTRING_ELEMENT::operator+
   result[1] = other_value.str_val.val_ptr->octets_ptr[other_value.octet_pos];
   return OCTETSTRING(2, result);
 }
-
-#ifdef TITAN_RUNTIME_2
-OCTETSTRING OCTETSTRING_ELEMENT::operator+(
-  const OPTIONAL<OCTETSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const OCTETSTRING&)other_value;
-  }
-  TTCN_error("Unbound or omitted right operand of octetstring concatenation.");
-}
-#endif
 
 OCTETSTRING OCTETSTRING_ELEMENT::operator~() const
 {
@@ -2017,16 +1996,6 @@ OCTETSTRING_template OCTETSTRING_template::operator+(
 }
 
 OCTETSTRING_template OCTETSTRING_template::operator+(
-  const OPTIONAL<OCTETSTRING>& other_value) const
-{
-  if (other_value.is_present()) {
-    return *this + (const OCTETSTRING&)other_value;
-  }
-  TTCN_error("Operand of octetstring template concatenation is an "
-    "unbound or omitted record/set field.");
-}
-
-OCTETSTRING_template OCTETSTRING_template::operator+(
   template_sel other_template_sel) const
 {
   if (template_selection == ANY_VALUE && other_template_sel == ANY_VALUE &&
@@ -2059,16 +2028,6 @@ OCTETSTRING_template operator+(const OCTETSTRING_ELEMENT& left_value,
   const OCTETSTRING_template& right_template)
 {
   return OCTETSTRING(left_value) + right_template;
-}
-
-OCTETSTRING_template operator+(const OPTIONAL<OCTETSTRING>& left_value,
-  const OCTETSTRING_template& right_template)
-{
-  if (left_value.is_present()) {
-    return (const OCTETSTRING&)left_value + right_template;
-  }
-  TTCN_error("Operand of octetstring template concatenation is an "
-    "unbound or omitted record/set field.");
 }
 
 OCTETSTRING_template operator+(template_sel left_template_sel,
@@ -2104,16 +2063,6 @@ OCTETSTRING_template operator+(const OCTETSTRING_ELEMENT& left_value,
   return OCTETSTRING(left_value) + right_template_sel;
 }
 
-OCTETSTRING_template operator+(const OPTIONAL<OCTETSTRING>& left_value,
-  template_sel right_template_sel)
-{
-  if (left_value.is_present()) {
-    return (const OCTETSTRING&)left_value + right_template_sel;
-  }
-  TTCN_error("Operand of octetstring template concatenation is an "
-    "unbound or omitted record/set field.");
-}
-
 OCTETSTRING_template operator+(template_sel left_template_sel,
   const OCTETSTRING& right_value)
 {
@@ -2128,16 +2077,6 @@ OCTETSTRING_template operator+(template_sel left_template_sel,
   const OCTETSTRING_ELEMENT& right_value)
 {
   return left_template_sel + OCTETSTRING(right_value);
-}
-
-OCTETSTRING_template operator+(template_sel left_template_sel,
-  const OPTIONAL<OCTETSTRING>& right_value)
-{
-  if (right_value.is_present()) {
-    return left_template_sel + (const OCTETSTRING&)right_value;
-  }
-  TTCN_error("Operand of octetstring template concatenation is an "
-    "unbound or omitted record/set field.");
 }
 #endif // TITAN_RUNTIME_2
 

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -49,7 +49,8 @@ extern bool t_flag_used;
 // 				variant - generated variant string for TTCN-3
 //
 
-void XSDName2TTCN3Name(const Mstring& in_str, QualifiedNames & used_names, modeType type_of_the_name,
+void XSDName2TTCN3Name(const Mstring& in_str, const Mstring& in_namespace,
+  QualifiedNames & used_names, modeType type_of_the_name,
   Mstring & res, Mstring & variant, bool no_replace) {
   static const char* TTCN3_reserved_words[] = {
     "action", "activate", "address", "alive", "all", "alt", "altstep", "and", "and4b", "any", "any2unistr", "anytype", "apply",
@@ -150,7 +151,7 @@ void XSDName2TTCN3Name(const Mstring& in_str, QualifiedNames & used_names, modeT
     // if (type_of_the_name == type_reference_name || type_of_the_name == field_reference_name) {
 
     if (type_of_the_name == type_reference_name) {
-      if (isBuiltInType(res)) {
+      if (isBuiltInType(res) && (in_namespace == empty_string || in_namespace == XMLSchema)) {
         res[0] = (char)toupper(res[0]);
         res = "XSD." + res;
         return;
@@ -858,9 +859,9 @@ void generate_TTCN3_header(FILE * file, const char * modulename, const bool time
   }
   fprintf(file,
     "* All rights reserved. This program and the accompanying materials\n"
-    "* are made available under the terms of the Eclipse Public License v1.0\n"
+    "* are made available under the terms of the Eclipse Public License v2.0\n"
     "* which accompanies this distribution, and is available at\n"
-    "* http://www.eclipse.org/legal/epl-v10.html\n"
+    "* https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html\n"
     "*******************************************************************************/\n"
     "//\n"
     "//  File:          %s.ttcn\n"

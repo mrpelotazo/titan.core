@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -818,7 +818,7 @@ static CharCoding::CharCodingType is_utf8(size_t length, const unsigned char* st
       // the second and third (and so on) UTF-8 byte looks like 10xx xxxx      
       while (0 < noofUTF8 ) {
         ++i;
-        if (!(strptr[i] & MSB) || (strptr[i] & MSBmin1) || i >= length) { // if not like this: 10xx xxxx
+        if (i >= length || !(strptr[i] & MSB) || (strptr[i] & MSBmin1)) { // if not like this: 10xx xxxx
           return CharCoding::UNKNOWN;
         }
         --noofUTF8;

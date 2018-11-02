@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -60,6 +60,7 @@
 #include <TitanLoggerApi.hh>
 #include "Profiler.hh"
 #include "Integer.hh"
+#include "Float.hh"
 #include "Port.hh"
 
 namespace API = TitanLoggerApi;
@@ -74,11 +75,13 @@ TTCN_Runtime::executor_state_enum
     TTCN_Runtime::executor_state = UNDEFINED_STATE;
 
 qualified_name TTCN_Runtime::component_type = { NULL, NULL };
+qualified_name TTCN_Runtime::system_type = { NULL, NULL };
 char *TTCN_Runtime::component_name = NULL;
 boolean TTCN_Runtime::is_alive = FALSE;
 
 const char *TTCN_Runtime::control_module_name = NULL;
 qualified_name TTCN_Runtime::testcase_name = { NULL, NULL };
+timeval TTCN_Runtime::start_time = { 0, 0 };
 
 char *TTCN_Runtime::host_name = NULL;
 
@@ -137,8 +140,14 @@ void TTCN_Runtime::set_port_state(const INTEGER& state, const CHARSTRING& info, 
     }
   } else {
     TTCN_error("setstate operation was called without being in a translation procedure.");
-    translation_count--;
   }
+}
+
+PORT* TTCN_Runtime::get_translation_port() {
+  if (p == NULL) {
+    TTCN_error("Operation 'port.getref' was called while not in a port translation procedure.");
+  }
+  return p;
 }
 
 void TTCN_Runtime::set_translation_mode(boolean enabled, PORT* port) {
@@ -197,6 +206,7 @@ void TTCN_Runtime::clear_qualified_name(qualified_name& q_name)
 void TTCN_Runtime::clean_up()
 {
   clear_qualified_name(component_type);
+  clear_qualified_name(system_type);
   Free(component_name);
   component_name = NULL;
   control_module_name = NULL;
@@ -260,6 +270,20 @@ void TTCN_Runtime::set_component_type(const char *component_type_module,
 
   component_type.module_name = mcopystr(component_type_module);
   component_type.definition_name = mcopystr(component_type_name);
+}
+
+void TTCN_Runtime::set_system_type(const char* system_type_module,
+  const char* system_type_name)
+{
+  if (system_type_module == NULL || system_type_module[0] == '\0' ||
+      system_type_name == NULL || system_type_name[0] == '\0') {
+    TTCN_error("Internal error: TTCN_Runtime::set_system_type: "
+      "Trying to set an invalid system component type.");
+  }
+
+  clear_qualified_name(system_type);
+  system_type.module_name = mcopystr(system_type_module);
+  system_type.definition_name = mcopystr(system_type_name);
 }
 
 void TTCN_Runtime::set_component_name(const char *new_component_name)
@@ -373,6 +397,20 @@ CHARSTRING TTCN_Runtime::get_testcasename()
       ", but the name of the current testcase is not set.");
 
   return CHARSTRING(testcase_name.definition_name);
+}
+
+FLOAT TTCN_Runtime::now()
+{
+  if (start_time.tv_sec == 0 && start_time.tv_usec == 0) {
+    TTCN_error("Accessing the test system time while no test case is running.");
+  }
+  
+  struct timeval current_time;
+  if (gettimeofday(&current_time, NULL) == -1) {
+    TTCN_error("gettimeofday() system call failed.");
+  }
+  return FLOAT((double)(current_time.tv_sec - start_time.tv_sec) +
+    1e-6 * (double)(current_time.tv_usec - start_time.tv_usec));
 }
 
 void TTCN_Runtime::load_logger_plugins()
@@ -619,6 +657,12 @@ int TTCN_Runtime::ptc_main()
   return ret_val;
 }
 
+void TTCN_Runtime::initialize_system_port(const char* port_name)
+{
+  Module_List::initialize_system_port(system_type.module_name,
+    system_type.definition_name, port_name);
+}
+
 component TTCN_Runtime::create_component(
   const char *created_component_type_module,
   const char *created_component_type_name, const char *created_component_name,
@@ -666,7 +710,7 @@ component TTCN_Runtime::create_component(
   }
   TTCN_Communication::send_create_req(created_component_type_module,
     created_component_type_name, created_component_name,
-    created_component_location, created_component_alive);
+    created_component_location, created_component_alive, start_time);
   if (is_mtc()) {
     // updating the component status flags
     // 'any component.done' and 'any component.killed' might be successful
@@ -783,7 +827,7 @@ void TTCN_Runtime::start_function(const char *module_name,
         "Function %s was stopped. PTC remains alive and is waiting for next start.",
         function_name);
       // send a STOPPED message without return value
-      TTCN_Communication::send_stopped();
+      TTCN_Communication::send_stopped(local_verdict, verdict_reason);
       // return and do nothing else
       return;
     case PTC_EXIT:
@@ -825,8 +869,10 @@ void TTCN_Runtime::prepare_function_finished(const char *return_type,
     TTCN_error("Internal error: PTC behaviour function finished in invalid "
                "state.");
   if (is_alive) {
-    // Prepare a STOPPED message with the possible return value.
-    TTCN_Communication::prepare_stopped(text_buf, return_type);
+    // Prepare a STOPPED message with the current verdict and
+    // possible return value.
+    TTCN_Communication::prepare_stopped(text_buf, local_verdict, return_type,
+      verdict_reason);
   } else {
     // First the ports and timers must be stopped and deactivated.  The
     // user_unmap and user_stop functions of Test Ports may detect errors
@@ -2033,6 +2079,7 @@ void TTCN_Runtime::begin_testcase(
   TIMER::save_control_timers();
   TTCN_Default::save_control_defaults();
   set_testcase_name(par_module_name, par_testcase_name);
+  set_system_type(system_comptype_module, system_comptype_name);
   char *command_arguments = mprintf("%s.%s", testcase_name.module_name,
     testcase_name.definition_name);
   execute_command(begin_testcase_command, command_arguments);
@@ -2046,6 +2093,9 @@ void TTCN_Runtime::begin_testcase(
   all_component_done_status = ALT_YES;
   any_component_killed_status = ALT_NO;
   all_component_killed_status = ALT_YES;
+  if (gettimeofday(&start_time, NULL) == -1) {
+    TTCN_error("gettimeofday() system call failed.");
+  }
 }
 
 verdicttype TTCN_Runtime::end_testcase()
@@ -2103,6 +2153,8 @@ verdicttype TTCN_Runtime::end_testcase()
   // restore the control part timers and defaults
   TTCN_Default::restore_control_defaults();
   TIMER::restore_control_timers();
+  start_time.tv_sec = 0;
+  start_time.tv_usec = 0;
   if (executor_state == MTC_PAUSED) {
     TTCN_Logger::log_executor_runtime(
       API::ExecutorRuntime_reason::user__paused__waiting__to__resume);
@@ -2413,8 +2465,10 @@ void TTCN_Runtime::process_create_mtc()
 
 void TTCN_Runtime::process_create_ptc(component component_reference,
   const char *component_type_module, const char *component_type_name,
+  const char *system_type_module, const char *system_type_name,
   const char *par_component_name, boolean par_is_alive,
-  const char *current_testcase_module, const char *current_testcase_name)
+  const char *current_testcase_module, const char *current_testcase_name,
+  timeval testcase_start_time)
 {
   switch (executor_state) {
   case HC_ACTIVE:
@@ -2459,9 +2513,11 @@ void TTCN_Runtime::process_create_ptc(component component_reference,
     TTCN_Communication::close_mc_connection();
     self = component_reference;
     set_component_type(component_type_module, component_type_name);
+    set_system_type(system_type_module, system_type_name);
     set_component_name(par_component_name);
     is_alive = par_is_alive;
     set_testcase_name(current_testcase_module, current_testcase_name);
+    start_time = testcase_start_time;
     executor_state = PTC_INITIAL;
   }
 }
@@ -2609,7 +2665,7 @@ void TTCN_Runtime::process_kill()
     terminate_component_type();
     // Send a KILLED message so that the value returned by previous behaviour
     // function remains active.
-    TTCN_Communication::send_killed(local_verdict);
+    TTCN_Communication::send_killed(local_verdict, (const char *)verdict_reason);
     TTCN_Logger::log_final_verdict(TRUE, local_verdict, local_verdict,
                                    local_verdict, (const char *)verdict_reason);
     executor_state = PTC_EXIT;

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -3579,7 +3579,7 @@ error:
   {
     Error_Context cntxt(this, "In send statement");
     // checking the port reference
-    Type *port_type;
+    Type *port_type = NULL;
     if (port_op.translate) {
       PortScope* ps = my_sb->get_scope_port();
       if (ps) {
@@ -3973,7 +3973,7 @@ error:
     const char *stmt_name = get_stmt_name();
     Error_Context cntxt(this, "In %s statement", stmt_name);
     // checking the port reference
-    Type *port_type;
+    Type *port_type = NULL;
     if (port_op.translate) {
       PortScope* ps = my_sb->get_scope_port();
       if (ps) {
@@ -4088,6 +4088,11 @@ error:
       Common::Assignment *t_ass = port_op.portref->get_refd_assignment();
       chk_index_redirect(port_op.r.redirect.index,
         t_ass != NULL ? t_ass->get_Dimensions() : NULL, port_op.anyfrom, "port");
+    }
+
+    // checking deterministic
+    if (port_op.r.rcvpar) {
+      port_op.r.rcvpar->chk_immutability();
     }
   }
 
@@ -4960,9 +4965,10 @@ error:
       }
     } else {
       // we have no idea which one is the system port
-      config_op.translate = (!ptb1->is_legacy() && ptb1->is_translate(ptb2)) ||
-                            (!ptb2->is_legacy() && ptb2->is_translate(ptb1));
-      if (!config_op.translate && !ptb1->is_mappable(ptb1) && !ptb2->is_mappable(ptb1)) {
+      bool first_is_mapped_to_second = !ptb1->is_legacy() && ptb1->is_translate(ptb2);
+      bool second_is_mapped_to_first = !ptb2->is_legacy() && ptb2->is_translate(ptb1);
+      config_op.translate = first_is_mapped_to_second || second_is_mapped_to_first;
+      if (!config_op.translate && !ptb1->is_mappable(ptb2) && !ptb2->is_mappable(ptb1)) {
         error("The mapping between port types `%s' and `%s' is not consistent",
                 pt1->get_typename().c_str(), pt2->get_typename().c_str());
       }
@@ -4981,6 +4987,21 @@ error:
       if ((!ptb1->is_legacy() && ptb1->get_type() == PortTypeBody::PT_USER) ||
           (!ptb2->is_legacy() && ptb2->get_type() == PortTypeBody::PT_USER)) {
         note("This mapping is not done in translation mode");
+      }
+    } else {
+      if (!config_op.compref1->get_expr_governor(Type::EXPECTED_DYNAMIC_VALUE)) {
+        if (statementtype == S_MAP) {
+          config_op.compref1->warning(
+            "Cannot determine the type of the component in the first parameter."
+            "The port translation will not work.");
+        }
+      }
+      if (!config_op.compref2->get_expr_governor(Type::EXPECTED_DYNAMIC_VALUE)) {
+        if (statementtype == S_MAP) {
+          config_op.compref2->warning(
+            "Cannot determine the type of the component in the second parameter."
+            "The port translation will not work.");
+        }
       }
     }
   }
@@ -7616,41 +7637,7 @@ error:
   {
     expression_struct expr;
     Code::init_expr(&expr);
-    bool warning = false;
-    if (config_op.translate == true) {
-      if (!config_op.compref1->get_expr_governor(Type::EXPECTED_DYNAMIC_VALUE)) {
-        warning = true;
-        if (strcmp(opname, "map") == 0) {
-          config_op.compref2->warning(
-            "Cannot determine the type of the component in the first parameter."
-            "The port translation will not work.");
-        }
-      }
-      if (!config_op.compref2->get_expr_governor(Type::EXPECTED_DYNAMIC_VALUE)) {
-        warning = true;
-        if (strcmp(opname, "map") == 0) {
-          config_op.compref2->warning(
-            "Cannot determine the type of the component in the second parameter."
-            "The port translation will not work.");
-        }
-      }
-      if (warning == false) {
-        expr.expr = mputstr(expr.expr, "if (!(");
-        config_op.portref1->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, ".port_is_started())) {\n");
-        config_op.portref1->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, ".activate_port(TRUE);\n");
-        config_op.portref1->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, ".start();\n}\n");
-        expr.expr = mputstr(expr.expr, "if (!(");
-        config_op.portref2->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, ".port_is_started())) {\n");
-        config_op.portref2->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, ".activate_port(TRUE);\n");
-        config_op.portref2->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, ".start();\n}\n");
-      }
-    }
+
     expr.expr = mputprintf(expr.expr, "TTCN_Runtime::%s_port(", opname);
     config_op.compref1->generate_code_expr(&expr);
     expr.expr = mputstr(expr.expr, ", ");
@@ -7677,32 +7664,10 @@ error:
       // a simple string shall be formed from the port name and array indices
       generate_code_portref(&expr, config_op.portref2);
     }
-    if (config_op.translate == true && warning == false) {
-      expr.expr = mputstr(expr.expr, ", TRUE");
-      }
-    expr.expr = mputstr(expr.expr, ")");
     if (config_op.translate == true) {
-      string funcname;
-      if (strcmp(opname, "map") == 0) {
-        funcname = "add_port";
-      } else if (strcmp(opname, "unmap") == 0) {
-        funcname = "remove_port";
-      } else {
-        //connect, disconnect are not supported
-      }
-      if (!funcname.empty() && warning == false) {
-        expr.expr = mputstr(expr.expr, ";\n");
-        config_op.portref1->generate_code_portref(&expr, my_sb);
-        expr.expr = mputprintf(expr.expr, ".%s(&(", funcname.c_str());
-        config_op.portref2->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, "));\n");
-
-        config_op.portref2->generate_code_portref(&expr, my_sb);
-        expr.expr = mputprintf(expr.expr, ".%s(&(", funcname.c_str());
-        config_op.portref1->generate_code_portref(&expr, my_sb);
-        expr.expr = mputstr(expr.expr, "))");
-      }
+      expr.expr = mputstr(expr.expr, ", TRUE");
     }
+    expr.expr = mputstr(expr.expr, ")");
     return Code::merge_free_expr(str, &expr);
   }
 
@@ -12789,6 +12754,7 @@ error:
       if (expr) {
 	Error_Context cntxt(expr, "In guard expression");
         expr->chk_expr_bool(Type::EXPECTED_DYNAMIC_VALUE);
+        expr->chk_expr_immutability();
       }
       {
 	Error_Context cntxt(stmt, "In guard operation");
@@ -12800,6 +12766,7 @@ error:
       if (expr) {
 	Error_Context cntxt(expr, "In guard expression");
         expr->chk_expr_bool(Type::EXPECTED_DYNAMIC_VALUE);
+        expr->chk_expr_immutability();
       }
       {
 	Error_Context cntxt(ref, "In guard statement");
@@ -12819,6 +12786,7 @@ error:
       if (expr) {
 	Error_Context cntxt(expr, "In guard expression");
         expr->chk_expr_bool(Type::EXPECTED_DYNAMIC_VALUE);
+        expr->chk_expr_immutability();
       }
       {
         if (!invoke.t_list) return; //already_checked

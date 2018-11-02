@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -25,6 +25,77 @@
 #include "Integer.hh"
 
 #include <openssl/bn.h>
+
+RAW_Force_Omit::RAW_Force_Omit(int p_size, const RAW_Field_List** p_lists)
+: size(p_size), lists(p_lists), temporary(false)
+{
+}
+
+RAW_Force_Omit::RAW_Force_Omit(int p_field_index,
+                               const RAW_Force_Omit* p_parent,
+                               const RAW_Force_Omit* p_variant)
+: size(p_variant != NULL ? p_variant->size : 0), lists(NULL), temporary(true)
+{
+  // the first index in each of the parent's field index lists should be skipped
+  // (as these refer to the parent type's fields)
+  if (p_parent != NULL) {
+    for (int i = 0; i < p_parent->size; ++i) {
+      if (p_parent->lists[i]->field_index == p_field_index &&
+          p_parent->lists[i]->next_ptr != NULL) {
+        ++size;
+      }
+    }
+  }
+  if (size == 0) {
+    return;
+  }
+  lists = new const RAW_Field_List*[size];
+  int j = 0;
+  if (p_parent != NULL) {
+    for (int i = 0; i < p_parent->size; ++i) {
+      if (p_parent->lists[i]->field_index == p_field_index &&
+          p_parent->lists[i]->next_ptr != NULL) {
+        lists[j] = p_parent->lists[i]->next_ptr;
+        ++j;
+      }
+    }
+  }
+  if (p_variant != NULL) {
+    memcpy(lists + j, p_variant->lists, static_cast<size_t>(p_variant->size) *
+      sizeof(RAW_Field_List*));
+  }
+}
+
+RAW_Force_Omit::~RAW_Force_Omit()
+{
+  if (!temporary) {
+    // the list array is statically allocated in this case, but the lists
+    // themselves are allocated dynamically and need to be deleted
+    for (int i = 0; i < size; ++i) {
+      // only delete the list head, its destructor will do the rest
+      delete lists[i];
+    }
+  }
+  else {
+    // temporary objects only contain pointers to the lists in RAW descriptors;
+    // only the list array needs to be deleted
+    delete[] lists;
+  }
+}
+
+bool RAW_Force_Omit::operator()(int p_field_index) const
+{
+  for (int i = 0; i < size; ++i) {
+    if (lists[i]->field_index == p_field_index &&
+        lists[i]->next_ptr == NULL) {
+      // the field index is correct, and it's the last index in the list
+      // => the field should be omitted
+      return true;
+    }
+  }
+  // none of the lists indicate this field => it should not be omitted
+  return false;
+}
 
 const unsigned char BitReverseTable[256] =
 {
@@ -165,10 +236,10 @@ void RAW_enc_tree::put_to_buf(TTCN_Buffer &buf){
 void RAW_enc_tree::calc_fields()
 {
   if (isleaf) {
-    int szumm = 0;
-    RAW_enc_tree *atm;
     switch (calc) {
     case CALC_LENGTH: {
+      int szumm = 0;
+      RAW_enc_tree *atm;
       if (calcof.lengthto.unit != -1) {
         for (int a = 0; a < calcof.lengthto.num_of_fields; a++) {
           atm = get_node(calcof.lengthto.fields[a]);
@@ -195,7 +266,8 @@ void RAW_enc_tree::calc_fields()
         b = get_node(curr_pos);
       }
       curr_pos.pos[curr_pos.level - 1] = cl;
-      atm = get_node(calcof.pointerto.target);
+      int szumm = 0;
+      RAW_enc_tree *atm = get_node(calcof.pointerto.target);
       if (atm) szumm = (atm->startpos - b->startpos + calcof.pointerto.unit - 1
         - calcof.pointerto.ptr_offset) / calcof.pointerto.unit;
       INTEGER temp(szumm);
@@ -437,12 +509,13 @@ int min_of_ints(unsigned int num_of_int,...)
  *                                                                                                                                                       |     unit
  *                                                                                                                                                       |     | padding_pattern_length
  *                                                                                                                                                       |     |   padding_pattern
- *                                                 length,comp ,byteorder,align    ,ord_field,ord_octet,ext_bit   ,hexorder,fieldorder,top_bit,          |     |        length_restriction*/
-const TTCN_RAWdescriptor_t INTEGER_raw_=               {8,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
-const TTCN_RAWdescriptor_t BOOLEAN_raw_=               {1,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
-const TTCN_RAWdescriptor_t BITSTRING_raw_=             {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
-const TTCN_RAWdescriptor_t OCTETSTRING_raw_=           {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
-const TTCN_RAWdescriptor_t HEXSTRING_raw_=             {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
-const TTCN_RAWdescriptor_t CHARSTRING_raw_=            {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
-const TTCN_RAWdescriptor_t FLOAT_raw_=                {64,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
-const TTCN_RAWdescriptor_t UNIVERSAL_CHARSTRING_raw_ = {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN};
+ *                                                                                                                                                       |     |        length_restriction
+ *                                                 length,comp ,byteorder,align    ,ord_field,ord_octet,ext_bit   ,hexorder,fieldorder,top_bit,          |     |        |  stringformat,       forceomit */
+const TTCN_RAWdescriptor_t INTEGER_raw_=               {8,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};
+const TTCN_RAWdescriptor_t BOOLEAN_raw_=               {1,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};
+const TTCN_RAWdescriptor_t BITSTRING_raw_=             {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};
+const TTCN_RAWdescriptor_t OCTETSTRING_raw_=           {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};
+const TTCN_RAWdescriptor_t HEXSTRING_raw_=             {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};
+const TTCN_RAWdescriptor_t CHARSTRING_raw_=            {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};
+const TTCN_RAWdescriptor_t FLOAT_raw_=                {64,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};
+const TTCN_RAWdescriptor_t UNIVERSAL_CHARSTRING_raw_ = {0,SG_NO,ORDER_LSB,ORDER_LSB,ORDER_LSB,ORDER_LSB,EXT_BIT_NO,ORDER_LSB,ORDER_LSB,TOP_BIT_INHERITED,0,0,0,8,0,NULL,-1,CharCoding::UNKNOWN,NULL};

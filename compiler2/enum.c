@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -29,6 +29,7 @@
 #include "encdec.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "main.hh"
 #include "ttcn3/compiler.h"
@@ -268,13 +269,15 @@ void defEnumClass(const enum_def *edef, output_struct *output)
   src = mputprintf(src, "%s %s::str_to_enum(const char *str_par)\n"
     "{\n", qualified_enum_type, name);
   for (i = 0; i < edef->nElements; i++) {
-    if (edef->elements[i].text) {
-      src = mputprintf(src, "if (!strcmp(str_par, \"%s\") || !strcmp(str_par, \"%s\") || !strcmp(str_par, \"%s\")) return %s;\n"
-        "else ", edef->elements[i].text, edef->elements[i].descaped_text, edef->elements[i].dispname, edef->elements[i].name);
-    }
-    else {
+    if (!edef->elements[i].text) {
       src = mputprintf(src, "if (!strcmp(str_par, \"%s\")) return %s;\n"
         "else ", edef->elements[i].dispname, edef->elements[i].name);
+    } else if (!strcmp(edef->elements[i].text, edef->elements[i].descaped_text)) {
+      src = mputprintf(src, "if (!strcmp(str_par, \"%s\") || !strcmp(str_par, \"%s\")) return %s;\n"
+        "else ", edef->elements[i].text, edef->elements[i].dispname, edef->elements[i].name);
+    } else {
+      src = mputprintf(src, "if (!strcmp(str_par, \"%s\") || !strcmp(str_par, \"%s\") || !strcmp(str_par, \"%s\")) return %s;\n"
+        "else ", edef->elements[i].text, edef->elements[i].descaped_text, edef->elements[i].dispname, edef->elements[i].name);
     }
   }
   src = mputprintf(src, "return %s;\n"
@@ -619,7 +622,8 @@ void defEnumClass(const enum_def *edef, output_struct *output)
     }
     src = mputprintf(src,
       "int %s::RAW_decode(const TTCN_Typedescriptor_t& p_td,TTCN_Buffer& p_buf,"
-      "int limit, raw_order_t top_bit_ord, boolean no_err, int, boolean)\n"
+      "int limit, raw_order_t top_bit_ord, boolean no_err, int, boolean, "
+      "const RAW_Force_Omit*)\n"
       "{\n"
       "  int decoded_value = 0;\n"
       "  int decoded_length = RAW_decode_enum_type(p_td, p_buf, limit, "
@@ -798,8 +802,23 @@ void defEnumClass(const enum_def *edef, output_struct *output)
       "      \"Encoding an unbound value of enumerated type %s.\");\n"
       "    return -1;\n"
       "  }\n\n"
-      "  char* tmp_str = p_td.json->as_number ? mprintf(\"%%d\", enum_value) : "
-      "mprintf(\"\\\"%%s\\\"\", enum_to_str(enum_value));\n"
+      "  char* tmp_str;\n"
+      "  if (p_td.json->as_number) {"
+      "    tmp_str = mprintf(\"%%d\", enum_value);\n"
+      "  }\n"
+      "  else {\n"
+      "    boolean text_found = false;\n"
+      "    for (size_t i = 0; i < p_td.json->nof_enum_texts; ++i) {\n"
+      "      if (p_td.json->enum_texts[i].index == enum_value) {\n"
+      "        tmp_str = mprintf(\"\\\"%%s\\\"\", p_td.json->enum_texts[i].text);\n"
+      "        text_found = true;\n"
+      "        break;\n"
+      "      }\n"
+      "    }\n"
+      "    if (!text_found) {\n"
+      "      tmp_str = mprintf(\"\\\"%%s\\\"\", enum_to_str(enum_value));\n"
+      "    }\n"
+      "  }\n"
       "  int enc_len = p_tok.put_next_token(p_td.json->as_number ? "
       "JSON_TOKEN_NUMBER : JSON_TOKEN_STRING, tmp_str);\n"
       "  Free(tmp_str);\n"
@@ -831,7 +850,17 @@ void defEnumClass(const enum_def *edef, output_struct *output)
       "  else if ((JSON_TOKEN_STRING == token && !p_td.json->as_number) || use_default) {\n"
       "    if (use_default || (value_len > 2 && value[0] == '\\\"' && value[value_len - 1] == '\\\"')) {\n"
       "      if (!use_default) value[value_len - 1] = 0;\n"
-      "      enum_value = str_to_enum(value + (use_default ? 0 : 1));\n"
+      "      boolean text_found = false;\n"
+      "      for (size_t i = 0; i < p_td.json->nof_enum_texts; ++i) {\n"
+      "        if (strcmp(p_td.json->enum_texts[i].text, value + (use_default ? 0 : 1)) == 0) {\n"
+      "          enum_value = static_cast<%s>(p_td.json->enum_texts[i].index);\n"
+      "          text_found = true;\n"
+      "          break;\n"
+      "        }\n"
+      "      }\n"
+      "      if (!text_found) {\n"
+      "        enum_value = str_to_enum(value + (use_default ? 0 : 1));\n"
+      "      }\n"
       "      if (!use_default) value[value_len - 1] = '\\\"';\n"
       "      if (%s == enum_value) {\n"
       "        error = TRUE;\n"
@@ -867,7 +896,7 @@ void defEnumClass(const enum_def *edef, output_struct *output)
       "  }\n"
       "  return (int)dec_len;\n"
       "}\n\n"
-      , name, unknown_value, enum_type, unbound_value, unbound_value);
+      , name, enum_type, unknown_value, enum_type, unbound_value, unbound_value);
   }
   
   if (oer_needed) {

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -164,6 +164,8 @@ namespace Ttcn {
     /** Checks the embedded recursions within the values and template
      * instances of actual parameters. */
     void chk_recursions(ReferenceChain& refch);
+
+    void chk_immutability();
     /** Generates the C++ equivalent of the actual parameter list without
      * considering any aliasing between variables and 'in' parameters. */
     void generate_code_noalias(expression_struct *expr, FormalParList *p_fpl);
@@ -308,6 +310,7 @@ namespace Ttcn {
     virtual bool has_single_expr();
     virtual void set_code_section(
       GovernedSimple::code_section_t p_code_section);
+    void chk_immutability();
     /** Generates the C++ equivalent of the reference (including the parameter
      * list and sub-references) as an access to a constant resource.
      */

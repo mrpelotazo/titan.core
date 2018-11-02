@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -451,6 +451,7 @@ none		RETURN(NoneKeyword);
 not		RETURN(NotKeyword);
 not_a_number  RETURN(NaNKeyword);
 not4b		RETURN(Not4bKeyword);
+now		RETURN(NowKeyword);
 nowait		RETURN(NowaitKeyword);
 null		RETURN(NullKeyword);
 objid		RETURN(ObjectIdentifierKeyword);
@@ -534,6 +535,8 @@ xor4b		RETURN(Xor4bKeyword);
 "@catch"  RETURN(TitanSpecificCatchKeyword);
 "@profiler" RETURN(TitanSpecificProfilerKeyword);
 "@update" RETURN(TitanSpecificUpdateKeyword);
+
+"getref"  RETURN_DOT(GetRefKeyword);
 
 	/* Predefined function identifiers */
 

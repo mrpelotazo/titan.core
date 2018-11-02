@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -2779,10 +2779,9 @@ SingleValue:
   }
 | TOK_Block
   {
-    /** \todo: It would be more straightforward to create an undefined
-     * constraint here and classify it later on during parsing or semantic
-     * analysis to SimpleTableConstraint or SingleValue. */
-    $$ = new TableConstraint($1, 0);
+    /* Create an undefined constraint for now, and classify it later on during
+       semantic analysis to TableConstraint or SingleValueConstraint. */
+    $$ = new UndefinedBlockConstraint($1);
     $$->set_location(asn1_infile, @1.first_line);
   }
 | ReferencedValue_reg

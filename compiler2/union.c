@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -400,11 +400,12 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
      "  if (m_p->get_type()!=Module_Param::MP_Assignment_List) {\n"
      "    param.error(\"union value with field name was expected\");\n"
      "  }\n"
-     "  Module_Param* mp_last = m_p->get_elem(m_p->get_size()-1);\n");
+     "  Module_Param* mp_last = m_p->get_elem(m_p->get_size()-1);\n"
+     "  char* last_name = mp_last->get_id()->get_name();\n");
 
   for (i = 0; i < sdef->nElements; i++) {
     src = mputprintf(src, 
-      "  if (!strcmp(mp_last->get_id()->get_name(), \"%s\")) {\n"
+      "  if (!strcmp(last_name, \"%s\")) {\n"
       "    %s%s().set_param(*mp_last);\n"
       "    if (!%s%s().is_bound()) "
       , sdef->elements[i].dispname, at_field, sdef->elements[i].name
@@ -424,7 +425,7 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
       "  }\n");
   }
   src = mputprintf(src,
-    "  mp_last->error(\"Field %%s does not exist in type %s.\", mp_last->get_id()->get_name());\n"
+    "  mp_last->error(\"Field %%s does not exist in type %s.\", last_name);\n"
     "}\n\n", dispname);
   
   /* get param function, RT2 only */
@@ -839,7 +840,8 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
     }
     src = mputprintf(src, "int %s::RAW_decode(\n"
       "const TTCN_Typedescriptor_t& p_td, TTCN_Buffer& p_buf, int limit, \n"
-      "raw_order_t top_bit_ord, boolean no_err, int sel_field, boolean)\n"
+      "raw_order_t top_bit_ord, boolean no_err, int sel_field, boolean, "
+      "const RAW_Force_Omit* force_omit)\n"
       "{\n"
       "  int prepaddlength=p_buf.increase_pos_padd(p_td.raw->prepadding);\n"
       "  limit-=prepaddlength;\n"
@@ -849,10 +851,13 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
       "    switch(sel_field){\n", name);
     for (i = 0; i < sdef->nElements; i++) {
       src = mputprintf(src,
-        "    case %lu:\n"
+        "    case %lu: {\n"
+        "      RAW_Force_Omit field_force_omit(%d, force_omit, "
+        "%s_descr_.raw->forceomit);\n"
         "      decoded_length = %s().RAW_decode(%s_descr_, p_buf, limit, "
-        "top_bit_ord, no_err);\n"
-        "      break;\n", (unsigned long) i, sdef->elements[i].name,
+        "top_bit_ord, no_err, -1, TRUE, &field_force_omit);\n"
+        "      break; }\n", (unsigned long) i, (int) i,
+        sdef->elements[i].typedescrname, sdef->elements[i].name,
         sdef->elements[i].typedescrname);
     }
     src = mputstr(src, "    default: break;\n"
@@ -966,10 +971,13 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
             }
             src = mputprintf(src, ") {\n"
               "          p_buf.set_pos_bit(starting_pos);\n"
+              "          RAW_Force_Omit field_force_omit(%d, force_omit, "
+              "%s_descr_.raw->forceomit);\n"
               "          decoded_length = %s().RAW_decode(%s_descr_, p_buf, "
-              "limit, top_bit_ord, TRUE);\n"
-              "          if (decoded_length > 0) {\n", sdef->elements[i].name,
-              sdef->elements[i].typedescrname);
+              "limit, top_bit_ord, TRUE, -1, TRUE, &field_force_omit);\n"
+              "          if (decoded_length > 0) {\n",
+              (int) i, sdef->elements[i].typedescrname,
+              sdef->elements[i].name, sdef->elements[i].typedescrname);
             src = mputstr(src, "             if (");
             src = genRawFieldChecker(src, cur_choice, TRUE);
             src = mputstr(src, ") {\n"
@@ -991,10 +999,13 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
           if (cur_choice->fields[j].start_pos < 0) {
             src = mputprintf(src, "    if (already_failed) {\n"
               "      p_buf.set_pos_bit(starting_pos);\n"
+              "      RAW_Force_Omit field_force_omit(%d, force_omit, "
+              "%s_descr_.raw->forceomit);\n"
               "      decoded_length = %s().RAW_decode(%s_descr_, p_buf, limit, "
-              "top_bit_ord, TRUE);\n"
-              "      if (decoded_length > 0) {\n", sdef->elements[i].name,
-              sdef->elements[i].typedescrname);
+              "top_bit_ord, TRUE, -1, TRUE, &field_force_omit);\n"
+              "      if (decoded_length > 0) {\n",
+              (int) i, sdef->elements[i].typedescrname,
+              sdef->elements[i].name, sdef->elements[i].typedescrname);
             src = mputstr(src, "        if (");
             src = genRawFieldChecker(src, cur_choice, TRUE);
             src = mputstr(src, ") {\n"
@@ -1015,10 +1026,13 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
         rawAST_coding_taglist* cur_choice = sdef->raw.taglist.list
           - tag_type[i] - 1;
         src = mputprintf(src, "      p_buf.set_pos_bit(starting_pos);\n"
+          "      RAW_Force_Omit field_%d_force_omit(%d, force_omit, "
+          "%s_descr_.raw->forceomit);\n"
           "      decoded_length = %s().RAW_decode(%s_descr_, p_buf, limit, "
-          "top_bit_ord, TRUE);\n"
-          "      if (decoded_length >= 0) {\n", sdef->elements[i].name,
-          sdef->elements[i].typedescrname);
+          "top_bit_ord, TRUE, -1, TRUE, &field_%d_force_omit);\n"
+          "      if (decoded_length >= 0) {\n",
+          (int) i, (int) i, sdef->elements[i].typedescrname,
+          sdef->elements[i].name, sdef->elements[i].typedescrname, (int) i);
         src = mputstr(src, "        if (");
         src = genRawFieldChecker(src, cur_choice, TRUE);
         src = mputstr(src, ") {\n"
@@ -1031,10 +1045,13 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
     for (i = 0; i < sdef->nElements; i++) { /* fields without tag */
       if (!tag_type[i]) {
         src = mputprintf(src, "      p_buf.set_pos_bit(starting_pos);\n"
+          "      RAW_Force_Omit field_%d_force_omit(%d, force_omit, "
+          "%s_descr_.raw->forceomit);\n"
           "      decoded_length = %s().RAW_decode(%s_descr_, p_buf, limit, "
-          "top_bit_ord, TRUE);\n"
-          "      if (decoded_length >= 0) {\n", sdef->elements[i].name,
-          sdef->elements[i].typedescrname);
+          "top_bit_ord, TRUE, -1, TRUE, &field_%d_force_omit);\n"
+          "      if (decoded_length >= 0) {\n",
+          (int) i, (int) i, sdef->elements[i].typedescrname,
+          sdef->elements[i].name, sdef->elements[i].typedescrname, (int) i);
         src = mputstr(src, "         return decoded_length + "
           "p_buf.increase_pos_padd(p_td.raw->padding) + prepaddlength;\n"
           "       }\n");
@@ -2257,7 +2274,13 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
       src = mputstr(src,
         "    char* literal_str = mprintf(\"literal (%s)\",\n"
         "      (JSON_TOKEN_LITERAL_TRUE == j_token) ? \"true\" : \"false\");\n"
-        "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, literal_str);\n"
+        "    try {\n"
+        "      JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_AS_VALUE_ERROR, literal_str);\n"
+        "    }\n"
+        "    catch (const TC_Error&) {\n"
+        "      Free(literal_str);\n"
+        "      throw;\n"
+        "    }\n"
         "    Free(literal_str);\n"
         "    clean_up();\n"
         "    return JSON_ERROR_FATAL;\n"
@@ -2345,7 +2368,7 @@ void defUnionClass(struct_def const *sdef, output_struct *output)
             "if (%d == name_len && 0 == strncmp(fld_name, \"%s\", name_len)) {\n"
             "      int ret_val = %s%s().JSON_decode(%s_descr_, p_tok, p_silent);\n"
             "      if (0 > ret_val) {\n"
-            "        if (JSON_ERROR_INVALID_TOKEN) {\n"
+            "        if (JSON_ERROR_INVALID_TOKEN == ret_val) {\n"
             "          JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_FIELD_TOKEN_ERROR, %lu, \"%s\");\n"
             "        }\n"
             "        return JSON_ERROR_FATAL;\n"
@@ -3398,17 +3421,18 @@ void defUnionTemplate(const struct_def *sdef, output_struct *output)
     "    param.type_error(\"union template\", \"%s\");\n"
     "    break;\n"
     "  case Module_Param::MP_Assignment_List: {\n"
-    "    Module_Param* mp_last = m_p->get_elem(m_p->get_size()-1);\n",
+    "    Module_Param* mp_last = m_p->get_elem(m_p->get_size()-1);\n"
+    "    char* last_name = mp_last->get_id()->get_name();\n",
     name, dispname);
   for (i = 0; i < sdef->nElements; i++) {
     src = mputprintf(src, 
-    "    if (!strcmp(mp_last->get_id()->get_name(), \"%s\")) {\n"
+    "    if (!strcmp(last_name, \"%s\")) {\n"
     "      %s%s().set_param(*mp_last);\n"
     "      break;\n"
     "    }\n", sdef->elements[i].dispname, at_field, sdef->elements[i].name);
   }
   src = mputprintf(src,
-    "    mp_last->error(\"Field %%s does not exist in type %s.\", mp_last->get_id()->get_name());\n"
+    "    mp_last->error(\"Field %%s does not exist in type %s.\", last_name);\n"
     "  } break;\n"
     "  default:\n"
     "    param.type_error(\"union template\", \"%s\");\n"

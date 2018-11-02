@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Baji, Laszlo
@@ -207,7 +207,7 @@ char* generate_raw_coding(char* src,
     }
     src = mputprintf(src, "int %s::RAW_decode(const TTCN_Typedescriptor_t& "
       "p_td, TTCN_Buffer& p_buf, int limit, raw_order_t top_bit_ord, "
-      "boolean, int, boolean)\n"
+      "boolean, int, boolean, const RAW_Force_Omit* force_omit)\n"
       "{\n"
         "int prepaddlength = p_buf.increase_pos_padd(p_td.raw->prepadding);\n"
         "limit -= prepaddlength;\n"
@@ -249,8 +249,12 @@ char* generate_raw_coding(char* src,
 	    }
 	    if (has_fixed && has_variable) break;
 	  }
-	  src = mputprintf(src, "if (field_map[%lu] == 0) {\n",
+	  src = mputprintf(src, "if (field_map[%lu] == 0",
             (unsigned long) i);
+    if (sdef->elements[i].isOptional) {
+      src = mputprintf(src, " && (force_omit == NULL || !(*force_omit)(%d))", i);
+    }
+    src = mputstr(src, ") {\n");
 	  if (flag_needed)
 	    src = mputstr(src, "boolean already_failed = FALSE;\n");
 	  if (has_fixed) {
@@ -281,16 +285,19 @@ char* generate_raw_coding(char* src,
 		  "p_buf, limit, temporal_top_order, TRUE);\n"
 		"p_buf.set_pos_bit(fl_start_pos);\n"
 		"if (temporal_decoded_length > 0 && temporal_%lu == %s) {\n"
+    "RAW_Force_Omit field_%d_force_omit(%d, force_omit, "
+    "%s_descr_.raw->forceomit);\n"
 		"int decoded_field_length = field_%s%s.RAW_decode(%s_descr_, "
-		  "p_buf, limit, local_top_order, TRUE);\n"
+		  "p_buf, limit, local_top_order, TRUE, -1, TRUE, &field_%d_force_omit);\n"
 		"if (decoded_field_length %s 0 && (",
 		cur_field_list->fields[cur_field_list->nElements - 1].type,
 		(unsigned long) j, cur_field_list->start_pos, (unsigned long) j,
 		cur_field_list->fields[cur_field_list->nElements - 1].typedescr,
 		(unsigned long) j, cur_field_list->value,
+    i, i, sdef->elements[i].typedescrname,
                 sdef->elements[i].name,
 		sdef->elements[i].isOptional ? "()" : "",
-		sdef->elements[i].typedescrname,
+		sdef->elements[i].typedescrname, i,
 		sdef->elements[i].isOptional ? ">" : ">=");
 	      src = genRawFieldChecker(src, cur_choice, TRUE);
 	      src = mputstr(src, ")) {\n"
@@ -318,12 +325,16 @@ char* generate_raw_coding(char* src,
 	     * than we have to decode it.
 	     */
 	    if (flag_needed) src = mputstr(src, "if (!already_failed) {\n");
-	    src = mputprintf(src, "int decoded_field_length = "
+	    src = mputprintf(src, 
+    "RAW_Force_Omit field_%d_force_omit(%d, force_omit, "
+    "%s_descr_.raw->forceomit);\n"
+    "int decoded_field_length = "
 		"field_%s%s.RAW_decode(%s_descr_, p_buf, limit, "
-		"local_top_order, TRUE);\n"
+		"local_top_order, TRUE, -1, TRUE, &field_%d_force_omit);\n"
 	      "if (decoded_field_length %s 0 && (",
-	      sdef->elements[i].name, sdef->elements[i].isOptional ? "()" : "",
-	      sdef->elements[i].typedescrname,
+	      i, i, sdef->elements[i].typedescrname,
+        sdef->elements[i].name, sdef->elements[i].isOptional ? "()" : "",
+	      sdef->elements[i].typedescrname, i,
 	      sdef->elements[i].isOptional ? ">" : ">=");
 	    src = genRawFieldChecker(src, cur_choice, TRUE);
 	    src = mputstr(src, ")) {\n"
@@ -349,25 +360,40 @@ char* generate_raw_coding(char* src,
 	if (!raw_options[i].tag_type) {
 	  boolean repeatable;
 	  if (sdef->elements[i].of_type && sdef->elements[i].hasRaw &&
-	      sdef->elements[i].raw.repeatable == XDEFYES) repeatable = TRUE;
+	      sdef->elements[i].raw.repeatable == XDEFYES) {
+      repeatable = TRUE;
+      if (sdef->elements[i].isOptional) {
+        src = mputprintf(src, "if (force_omit == NULL || !(*force_omit)(%d)) ", i);
+      }
+    }
 	  else {
 	    repeatable = FALSE;
-	    src = mputprintf(src, "if (field_map[%lu] == 0) ",
-              (unsigned long) i);
+	    src = mputprintf(src, "if (field_map[%lu] == 0",
+            (unsigned long) i);
+      if (sdef->elements[i].isOptional) {
+        src = mputprintf(src, " && (force_omit == NULL || !(*force_omit)(%d))", i);
+      }
+      src = mputstr(src, ") ");
 	  }
 	  src = mputprintf(src, "{\n"
+      "RAW_Force_Omit field_%d_force_omit(%d, force_omit, "
+      "%s_descr_.raw->forceomit);\n"
 	    "int decoded_field_length = field_%s%s.RAW_decode(%s_descr_, "
-	      "p_buf, limit, local_top_order, TRUE",
+	      "p_buf, limit, local_top_order, TRUE, -1, ",
+      i, i, sdef->elements[i].typedescrname,
 	    sdef->elements[i].name, sdef->elements[i].isOptional ? "()" : "",
 	    sdef->elements[i].typedescrname);
 	  if (repeatable)
-            src = mputprintf(src, ", -1, field_map[%lu] == 0",
+            src = mputprintf(src, "field_map[%lu] == 0",
               (unsigned long) i);
-	  src = mputprintf(src, ");\n"
+    else {
+      src = mputstr(src, "TRUE");
+    }
+	  src = mputprintf(src, ", &field_%d_force_omit);\n"
 	    "if (decoded_field_length %s 0) {\n"
 	    "decoded_length += decoded_field_length;\n"
 	    "limit -= decoded_field_length;\n",
-	    sdef->elements[i].isOptional ? ">" : ">=");
+	    i, sdef->elements[i].isOptional ? ">" : ">=");
 	  if (repeatable) {
 	    if (!sdef->elements[i].isOptional) src = mputprintf(src,
 	      "if (field_map[%lu] == 0) nof_mand_fields++;\n",
@@ -396,14 +422,21 @@ char* generate_raw_coding(char* src,
 	/* decoding fields with tag OTHERWISE */
 	if (raw_options[i].tag_type &&
 	    sdef->raw.taglist.list[raw_options[i].tag_type-1].nElements == 0) {
-	  src = mputprintf(src, "if (field_map[%lu] == 0) {\n"
+	  src = mputprintf(src, "if (field_map[%lu] == 0", (unsigned long) i);
+    if (sdef->elements[i].isOptional) {
+      src = mputprintf(src, " && (force_omit == NULL || !(*force_omit)(%d))", i);
+    }
+    src = mputprintf(src, ") {\n"
+      "RAW_Force_Omit field_%d_force_omit(%d, force_omit, "
+      "%s_descr_.raw->forceomit);\n"
 	    "int decoded_field_length = field_%s%s.RAW_decode(%s_descr_, "
-	      "p_buf, limit, local_top_order, TRUE);\n"
+	      "p_buf, limit, local_top_order, TRUE, -1, TRUE, &field_%d_force_omit);\n"
 	    "if (decoded_field_length %s 0) {\n"
 	    "decoded_length += decoded_field_length;\n"
-	    "limit -= decoded_field_length;\n", (unsigned long) i,
+	    "limit -= decoded_field_length;\n",
+      i, i, sdef->elements[i].typedescrname,
 	    sdef->elements[i].name, sdef->elements[i].isOptional ? "()" : "",
-	    sdef->elements[i].typedescrname,
+	    sdef->elements[i].typedescrname, i,
 	    sdef->elements[i].isOptional ? ">" : ">=");
 	  if (!sdef->elements[i].isOptional)
 	    src = mputstr(src, "nof_mand_fields++;\n");
@@ -437,7 +470,7 @@ char* generate_raw_coding(char* src,
     src = mputprintf(src,
       "int %s::RAW_decode(const TTCN_Typedescriptor_t& p_td, "
       "TTCN_Buffer& p_buf, int limit, raw_order_t top_bit_ord, boolean no_err, "
-      "int, boolean)\n"
+      "int, boolean, const RAW_Force_Omit* force_omit)\n"
       "{ (void)no_err;\n"
 	"  int prepaddlength=p_buf.increase_pos_padd(p_td.raw->prepadding);\n"
 	"  limit-=prepaddlength;\n"
@@ -1928,6 +1961,17 @@ void gen_xer(const struct_def *sdef, char **pdef, char **psrc)
     /* The last component with which it can begin is the first non-optional.
      * Does that sentence makes sense to you ? */
   }
+  for (i = 0; i < sdef->nElements; i++) {
+    if (strcmp(sdef->elements[i].type, "UNIVERSAL_CHARSTRING") == 0 &&
+        !sdef->elements[i].xerAttribute) {
+      src = mputprintf(src,
+        "  else if (%s_xer_.xer_bits & ANY_ELEMENT) return TRUE;\n"
+        , sdef->elements[i].typegen);
+    }
+    if (!sdef->elements[i].isOptional && !sdef->elements[i].xerAttribute) {
+      break;
+    }
+  }
   src = mputstr(src, "  return FALSE;\n}\n\n");
 
   /* * * * * * * * * * XER_encode * * * * * * * * * * * * * * */
@@ -3193,7 +3237,8 @@ char* generate_json_decoder(char* src, const struct_def* sdef)
   src = mputprintf(src,
     "int %s::JSON_decode(const TTCN_Typedescriptor_t&%s, JSON_Tokenizer& p_tok, "
     "boolean p_silent, int)\n"
-    "{\n", sdef->name, (sdef->nElements == 1 && !sdef->jsonAsValue) ? " p_td" : "");
+    "{\n", sdef->name,
+    ((sdef->nElements == 1 && !sdef->jsonAsValue) || sdef->jsonAsMapPossible) ? " p_td" : "");
 
   if (sdef->nElements == 1) {
     if (!sdef->jsonAsValue) {
@@ -3206,8 +3251,30 @@ char* generate_json_decoder(char* src, const struct_def* sdef)
     }
   }
   if (!sdef->jsonAsValue) {
+    src = mputstr(src, "  json_token_t j_token = JSON_TOKEN_NONE;\n");
+  }
+  if (sdef->jsonAsMapPossible) {
+    src = mputprintf(src,
+      "  if (p_td.json->as_map) {\n"
+      "    char* fld_name = NULL;\n"
+      "    size_t name_len = 0;\n"
+      "    size_t buf_pos = p_tok.get_buf_pos();\n"
+      "    size_t dec_len = p_tok.get_next_token(&j_token, &fld_name, &name_len);\n"
+      "    if (JSON_TOKEN_ERROR == j_token) {\n"
+      "      JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, \"\");\n"
+      "      return JSON_ERROR_FATAL;\n"
+      "    }\n"
+      "    else if (JSON_TOKEN_NAME != j_token) {\n"
+      "      p_tok.set_buf_pos(buf_pos);\n"
+      "      return JSON_ERROR_INVALID_TOKEN;\n"
+      "    }\n"
+      "    field_%s.decode_utf8(name_len, (unsigned char*) fld_name);\n"
+      "    return field_%s.JSON_decode(%s_descr_, p_tok, p_silent) + dec_len;\n"
+      "  }\n", sdef->elements[0].name,
+      sdef->elements[1].name, sdef->elements[1].typedescrname);
+  }
+  if (!sdef->jsonAsValue) {
     src = mputstr(src,
-      "  json_token_t j_token = JSON_TOKEN_NONE;\n"
       "  size_t dec_len = p_tok.get_next_token(&j_token, NULL, NULL);\n"
       "  if (JSON_TOKEN_ERROR == j_token) {\n"
       "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_BAD_TOKEN_ERROR, \"\");\n"
@@ -3219,7 +3286,16 @@ char* generate_json_decoder(char* src, const struct_def* sdef)
 
     boolean has_metainfo_enabled = FALSE;
     for (int i = 0; i < sdef->nElements; ++i) {
-      src = mputprintf(src, "  boolean %s_found = FALSE;\n", sdef->elements[i].name);
+      if (sdef->elements[i].jsonDefaultValue) {
+        // initialize fields with their default values (they will be overwritten
+        // later, if the JSON document contains data for these fields)
+        src = mputprintf(src,
+          "  field_%s.JSON_decode(%s_descr_, DUMMY_BUFFER, p_silent);\n"
+          , sdef->elements[i].name, sdef->elements[i].typedescrname);
+      }
+      else {
+        src = mputprintf(src, "  boolean %s_found = FALSE;\n", sdef->elements[i].name);
+      }
       if (sdef->elements[i].jsonMetainfoUnbound) {
         // initialize meta info states
         src = mputprintf(src, 
@@ -3259,10 +3335,12 @@ char* generate_json_decoder(char* src, const struct_def* sdef)
       src = mputprintf(src,
         // check field name
         "if (%d == name_len && 0 == strncmp(fld_name, \"%s\", name_len)) {\n"
-        "        %s_found = TRUE;\n"
         , (int)strlen(sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname)
-        , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname
-        , sdef->elements[i].name);
+        , sdef->elements[i].jsonAlias ? sdef->elements[i].jsonAlias : sdef->elements[i].dispname);
+      if (!sdef->elements[i].jsonDefaultValue) {
+        src = mputprintf(src,
+          "        %s_found = TRUE;\n", sdef->elements[i].name);
+      }
       if (has_metainfo_enabled) {
         src = mputstr(src, "        if (is_metainfo) {\n");
         if (sdef->elements[i].jsonMetainfoUnbound) {
@@ -3416,59 +3494,60 @@ char* generate_json_decoder(char* src, const struct_def* sdef)
           , (unsigned long) strlen(sdef->elements[i].dispname)
           , sdef->elements[i].dispname);
       }
-      src = mputprintf(src,
-        "if (!%s_found) {\n"
-        , sdef->elements[i].name);
-      if (sdef->elements[i].jsonDefaultValue) {
+      if (!sdef->elements[i].jsonDefaultValue) {
         src = mputprintf(src,
-          "    field_%s.JSON_decode(%s_descr_, DUMMY_BUFFER, p_silent);\n"
-          , sdef->elements[i].name, sdef->elements[i].typedescrname);
-      }
-      else if (sdef->elements[i].isOptional) {
-        // if the conditions in attribute 'choice' indicate that this field is
-        // mandatory, then display an error
-        if (sdef->elements[i].jsonChosen != NULL) {
-          int j;
-          boolean has_otherwise = FALSE;
-          for (j = 0; j < sdef->elements[i].jsonChosen->nElements; j++) {
-            if (sdef->elements[i].jsonChosen->list[j].nElements == 0) {
-              has_otherwise = TRUE;
-              break;
-            }
-          }
-          boolean first_found = FALSE;
-          for (j = 0; j < sdef->elements[i].jsonChosen->nElements; j++) {
-            if ((!has_otherwise && sdef->elements[i].jsonChosen->list[j].fieldnum != -2) ||
-                 (has_otherwise && sdef->elements[i].jsonChosen->list[j].fieldnum == -2)) {
-              if (!first_found) {
-                src = mputstr(src, "    if (");
-                first_found = TRUE;
-              }
-              else {
-                src = mputstr(src, "\n        || ");
-              }
-              src = genRawFieldChecker(src, sdef->elements[i].jsonChosen->list + j, !has_otherwise);
-            }
-          }
-          if (first_found) {
-            src = mputprintf(src,
-              ") {\n"
-              "      JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_CHOSEN_FIELD_OMITTED, \"%s\");\n"
-              "      return JSON_ERROR_FATAL;\n"
-              "    }\n", sdef->elements[i].dispname);
-          }
-        }
-        src = mputprintf(src,
-          "    field_%s = OMIT_VALUE;\n"
+          "if (!%s_found) {\n"
           , sdef->elements[i].name);
-      } else {
-        src = mputprintf(src,
-          "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_MISSING_FIELD_ERROR, \"%s\");\n"
-          "    return JSON_ERROR_FATAL;\n"
-          , sdef->elements[i].dispname);
-      }
-      src = mputstr(src,
-        "  }\n  ");
+        if (sdef->elements[i].isOptional) {
+          // if the conditions in attribute 'choice' indicate that this field is
+          // mandatory, then display an error
+          if (sdef->elements[i].jsonChosen != NULL) {
+            int j;
+            boolean has_otherwise = FALSE;
+            boolean omit_otherwise = FALSE;
+            for (j = 0; j < sdef->elements[i].jsonChosen->nElements; j++) {
+              if (sdef->elements[i].jsonChosen->list[j].nElements == 0) {
+                has_otherwise = TRUE;
+                if (sdef->elements[i].jsonChosen->list[j].fieldnum == -2) {
+                  omit_otherwise = TRUE;
+                }
+                break;
+              }
+            }
+            boolean first_found = FALSE;
+            for (j = 0; j < sdef->elements[i].jsonChosen->nElements; j++) {
+              if (((!has_otherwise || omit_otherwise) && sdef->elements[i].jsonChosen->list[j].fieldnum != -2) ||
+                   (has_otherwise && !omit_otherwise && sdef->elements[i].jsonChosen->list[j].fieldnum == -2)) {
+                if (!first_found) {
+                  src = mputstr(src, "    if (");
+                  first_found = TRUE;
+                }
+                else {
+                  src = mputstr(src, "\n        || ");
+                }
+                src = genRawFieldChecker(src, sdef->elements[i].jsonChosen->list + j, !has_otherwise || omit_otherwise);
+              }
+            }
+            if (first_found) {
+              src = mputprintf(src,
+                ") {\n"
+                "      JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_CHOSEN_FIELD_OMITTED, \"%s\");\n"
+                "      return JSON_ERROR_FATAL;\n"
+                "    }\n", sdef->elements[i].dispname);
+            }
+          }
+          src = mputprintf(src,
+            "    field_%s = OMIT_VALUE;\n"
+            , sdef->elements[i].name);
+        } else {
+          src = mputprintf(src,
+            "    JSON_ERROR(TTCN_EncDec::ET_INVAL_MSG, JSON_DEC_MISSING_FIELD_ERROR, \"%s\");\n"
+            "    return JSON_ERROR_FATAL;\n"
+            , sdef->elements[i].dispname);
+        }
+        src = mputstr(src,
+          "  }\n  ");
+      } // if there's no default value
     }
     src = mputstr(src,
       "\n  return (int)dec_len;\n");
@@ -3594,6 +3673,11 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
   }
   src = mputstr(src,
       "}\n\n");
+
+  def = mputstr(def, "const TTCN_Typedescriptor_t* get_descriptor() const;\n");
+  src = mputprintf(src,
+    "const TTCN_Typedescriptor_t* %s::get_descriptor() const { return &%s_descr_; }\n",
+    name, name);
 
   /* = operator */
   def = mputprintf(def, "  %s& operator=(const %s& other_value);\n", name, name);
@@ -3787,7 +3871,8 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
   }
   src = mputprintf(src,
       "    for (size_t val_idx=0; val_idx<param.get_size(); val_idx++) if (!value_used[val_idx]) {\n"
-      "      param.get_elem(val_idx)->error(\"Non existent field name in type %s: %%s\", param.get_elem(val_idx)->get_id()->get_name());\n"
+      "      Module_Param* const curr_param = param.get_elem(val_idx);\n"
+      "      curr_param->error(\"Non existent field name in type %s: %%s\", curr_param->get_id()->get_name());\n"
       "      break;\n"
       "    }\n"
       "  } break;\n"
@@ -4688,7 +4773,8 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
       "    TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND,\n"
       "      \"Encoding an unbound value of type %s.\");\n"
       "    return -1;\n"
-      "  }\n\n", name, (sdef->nElements == 1 && !sdef->jsonAsValue) ? " p_td" : "", dispname);
+      "  }\n\n", name, 
+      ((sdef->nElements == 1 && !sdef->jsonAsValue) || sdef->jsonAsMapPossible) ? " p_td" : "", dispname);
     if (sdef->nElements == 1) {
       if (!sdef->jsonAsValue) {
         src = mputstr(src, "  if (NULL != p_td.json && p_td.json->as_value) {\n");
@@ -4698,6 +4784,18 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
       if (!sdef->jsonAsValue) {
         src = mputstr(src, "  }\n");
       }
+    }
+    if (sdef->jsonAsMapPossible) {
+      src = mputprintf(src,
+        "  if (p_td.json->as_map) {\n"
+        "    TTCN_Buffer key_buf;\n"
+        "    field_%s.encode_utf8(key_buf);\n"
+        "    CHARSTRING key_str;\n"
+        "    key_buf.get_string(key_str);\n"
+        "    return p_tok.put_next_token(JSON_TOKEN_NAME, (const char*) key_str) + \n"
+        "      field_%s.JSON_encode(%s_descr_, p_tok);\n"
+        "  }\n", sdef->elements[0].name,
+        sdef->elements[1].name, sdef->elements[1].typedescrname);
     }
     if (!sdef->jsonAsValue) {
       src = mputstr(src, "  int enc_len = p_tok.put_next_token(JSON_TOKEN_OBJECT_START, NULL);\n\n");
@@ -4754,8 +4852,14 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
         "  boolean has_extension = FALSE;\n");
       for (i = sdef->oerNrOrRootcomps; i < sdef->nElements; i++) {
         src = mputprintf(src,
-        "  has_extension = has_extension || (field_%s.is_bound() && field_%s.is_present());\n",
-          sdef->elements[i].name, sdef->elements[sdef->oerP[i]].name);
+        "  has_extension = has_extension || (field_%s.is_bound() && field_%s.is_present()",
+           sdef->elements[sdef->oerP[i]].name, sdef->elements[sdef->oerP[i]].name);
+        if (sdef->elements[sdef->oerP[i]].isDefault) {
+          src = mputprintf(src, " && field_%s != %s",
+            sdef->elements[sdef->oerP[i]].name,
+            sdef->elements[sdef->oerP[i]].defvalname);
+        }
+        src = mputstr(src, ");\n");
       }
     }
     size_t opt_elements = 0;
@@ -4777,7 +4881,7 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
         if (sdef->oerNrOrRootcomps != sdef->nElements) {
           src = mputprintf(src,
             "  if (has_extension) {\n"
-            "    c += %i;\n"
+            "    c |= %i;\n"
             "  }\n", 1 << 7);
         }
       }
@@ -4788,10 +4892,16 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
       if (sdef->elements[sdef->oerP[i]].isOptional || sdef->elements[sdef->oerP[i]].isDefault) {
         pos--;
         src = mputprintf(src,
-          "  if (field_%s.is_present()) {\n"
-          "    c += %i;\n"
+          "  if (field_%s.is_present()", sdef->elements[sdef->oerP[i]].name);
+        if (sdef->elements[sdef->oerP[i]].isDefault) {
+          src = mputprintf(src, " && field_%s != %s",
+            sdef->elements[sdef->oerP[i]].name,
+            sdef->elements[sdef->oerP[i]].defvalname);
+        }
+        src = mputprintf(src,
+          ") {\n"
+          "    c |= %i;\n"
           "  }\n"
-          , sdef->elements[sdef->oerP[i]].name
           , 1 << pos);
         if (pos == 0) {
           pos = 8;
@@ -4811,8 +4921,13 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
     for (i = 0; i < limit; i++) {
       if (sdef->elements[sdef->oerP[i]].isOptional || sdef->elements[sdef->oerP[i]].isDefault) {
         src = mputprintf(src,
-          "  if (field_%s.is_present())\n  "
-          , sdef->elements[sdef->oerP[i]].name);
+          "  if (field_%s.is_present()", sdef->elements[sdef->oerP[i]].name);
+        if (sdef->elements[sdef->oerP[i]].isDefault) {
+          src = mputprintf(src, " && field_%s != %s",
+            sdef->elements[sdef->oerP[i]].name,
+            sdef->elements[sdef->oerP[i]].defvalname);
+        }
+        src = mputstr(src, ")\n  ");
       }
       src = mputprintf(src,
         "  field_%s.OER_encode(%s_descr_, p_buf);\n"
@@ -4854,12 +4969,18 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
               opt_elems++;
             }
             src = mputprintf(src,
-              "    has_present = has_present || field_%s.is_present();\n", sdef->elements[sdef->oerP[j]].name);
+              "    has_present = has_present || (field_%s.is_present()", sdef->elements[sdef->oerP[j]].name);
+            if (sdef->elements[sdef->oerP[j]].isDefault) {
+              src = mputprintf(src, " && field_%s != %s",
+                sdef->elements[sdef->oerP[j]].name,
+                sdef->elements[sdef->oerP[j]].defvalname);
+            }
+            src = mputstr(src, ");\n");
           }
           src = mputprintf(src,
             "    if (has_present) {\n"
             "      has_present = FALSE;\n"
-            "      c += %i;\n", 1 << pos);
+            "      c |= %i;\n", 1 << pos);
           if (opt_elems != 0) {
             src = mputstr(src,
               "      char c2 = 0;\n");
@@ -4869,10 +4990,18 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
               if (sdef->elements[sdef->oerP[j]].isOptional || sdef->elements[sdef->oerP[j]].isDefault) {
                 pos2--;
                 src = mputprintf(src,
-                  "      if (field_%s.is_present()) {\n"
-                  "        c2 += %i;\n"
+                  "      if (field_%s.is_present()",
+                  sdef->elements[sdef->oerP[j]].name);
+                if (sdef->elements[sdef->oerP[j]].isDefault) {
+                  src = mputprintf(src, " && field_%s != %s",
+                    sdef->elements[sdef->oerP[j]].name,
+                    sdef->elements[sdef->oerP[j]].defvalname);
+                }
+                src = mputprintf(src,
+                  ") {\n"
+                  "        c2 |= %i;\n"
                   "      }\n"
-                  , sdef->elements[sdef->oerP[j]].name, 1 << pos2);
+                  , 1 << pos2);
                 if (pos2 == 0) {
                   pos2 = 8;
                   ind2++;
@@ -4901,14 +5030,21 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
           eag_pos++;
         } else {
           src = mputprintf(src,
-            "    if (field_%s.is_present()) {\n"
-            "      c += %i;\n"
+            "    if (field_%s.is_present()", sdef->elements[sdef->oerP[i]].name);
+          if (sdef->elements[sdef->oerP[i]].isDefault) {
+            src = mputprintf(src, " && field_%s != %s",
+              sdef->elements[sdef->oerP[i]].name,
+              sdef->elements[sdef->oerP[i]].defvalname);
+          }
+          src = mputprintf(src,
+            ") {\n"
+            "      c |= %i;\n"
             "      field_%s.OER_encode(%s_descr_, tmp_buf2);\n"
             "      encode_oer_length(tmp_buf2.get_len(), tmp_buf, FALSE);\n"
             "      tmp_buf.put_buf(tmp_buf2);\n"
             "      tmp_buf2.clear();\n"
             "    }\n"
-             , sdef->elements[sdef->oerP[i]].name, 1 << pos
+             , 1 << pos
              , sdef->elements[sdef->oerP[i]].name, sdef->elements[sdef->oerP[i]].typedescrname);
         }
         if (pos == 0) {
@@ -4961,14 +5097,17 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
       if (sdef->elements[sdef->oerP[i]].isOptional || sdef->elements[sdef->oerP[i]].isDefault) {
         pos--;
           src = mputprintf(src,
-            "  if (uc[%i] & (1 << %i))\n"
+            "  if (uc[%i] & %i)\n"
             "    field_%s.OER_decode(%s_descr_, p_buf, p_oer);\n"
-            , ind, pos, sdef->elements[i].name
+            , ind, 1 << pos, sdef->elements[i].name
             , sdef->elements[sdef->oerP[i]].typedescrname);
-          if (sdef->elements[sdef->oerP[i]].isOptional) {
+          if (sdef->elements[sdef->oerP[i]].isOptional ||
+              sdef->elements[sdef->oerP[i]].isDefault) {
             src = mputprintf(src, " else\n"
-              "    field_%s = OMIT_VALUE;\n"
-              , sdef->elements[sdef->oerP[i]].name);
+              "    field_%s = %s;\n"
+              , sdef->elements[sdef->oerP[i]].name
+              , sdef->elements[sdef->oerP[i]].isOptional ? "OMIT_VALUE"
+              : sdef->elements[sdef->oerP[i]].defvalname);
           }
         if (pos == 0) {
           ind++;
@@ -4992,6 +5131,7 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
       int eag_pos = 0;
       pos = 8;
       ind = 0;
+      boolean has_optional_in_extension = FALSE;
       for (i = limit; i < sdef->nElements; i++) {
         pos--;
         src = mputprintf(src,
@@ -5000,18 +5140,26 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
         if (sdef->oerEagNum != 0 && sdef->oerEag[eag_pos] == i - limit) {
           eag_pos++;
           for (int j = i; j < limit + sdef->oerEag[eag_pos]; j++) {
-            if (sdef->elements[sdef->oerP[j]].isOptional) {
+            if (sdef->elements[sdef->oerP[j]].isOptional ||
+                sdef->elements[sdef->oerP[j]].isDefault) {
+              has_optional_in_extension = TRUE;
               src = mputprintf(src,
-                "      field_%s = OMIT_VALUE;\n"
-                , sdef->elements[sdef->oerP[j]].name);
+                "      field_%s = %s;\n"
+                , sdef->elements[sdef->oerP[j]].name
+                , sdef->elements[sdef->oerP[j]].isOptional ? "OMIT_VALUE"
+                : sdef->elements[sdef->oerP[j]].defvalname);
             }
           }
           eag_pos--;
         } else {
-          if (sdef->elements[sdef->oerP[i]].isOptional) {
+          if (sdef->elements[sdef->oerP[i]].isOptional ||
+              sdef->elements[sdef->oerP[i]].isDefault) {
+            has_optional_in_extension = TRUE;
             src = mputprintf(src,
-              "      field_%s = OMIT_VALUE;\n"
-              , sdef->elements[i].name);
+              "      field_%s = %s;\n"
+              , sdef->elements[sdef->oerP[i]].name
+              , sdef->elements[sdef->oerP[i]].isOptional ? "OMIT_VALUE"
+              : sdef->elements[sdef->oerP[i]].defvalname);
           }
         }
         src = mputstr(src,
@@ -5041,12 +5189,15 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
                 "        field_%s.OER_decode(%s_descr_, p_buf, p_oer);\n"
                 "      }\n"
                 , ind2, 1 << pos2, sdef->elements[sdef->oerP[j]].name, sdef->elements[sdef->oerP[j]].typedescrname);
-              if (sdef->elements[sdef->oerP[j]].isOptional) {
+              if (sdef->elements[sdef->oerP[j]].isOptional ||
+                  sdef->elements[sdef->oerP[j]].isDefault) {
                 src = mputprintf(src,
                   "        else {\n"
-                  "          field_%s = OMIT_VALUE;\n"
+                  "          field_%s = %s;\n"
                   "        }\n"
-                  , sdef->elements[sdef->oerP[j]].name);
+                  , sdef->elements[sdef->oerP[j]].name
+                  , sdef->elements[sdef->oerP[j]].isOptional ? "OMIT_VALUE"
+                  : sdef->elements[sdef->oerP[j]].defvalname);
               }
               if (pos2 == 0) {
                 pos2 = 8;
@@ -5069,6 +5220,21 @@ void defRecordClass1(const struct_def *sdef, output_struct *output)
         if (pos == 0) {
           pos = 8;
           ind++;
+        }
+      }
+      if (has_optional_in_extension) {
+        src = mputstr(src,
+          "  }\n"
+          "  else {\n");
+        for (i = limit; i < sdef->nElements; i++) {
+          if (sdef->elements[sdef->oerP[i]].isOptional ||
+              sdef->elements[sdef->oerP[i]].isDefault) {
+            src = mputprintf(src,
+              "    field_%s = %s;\n"
+              , sdef->elements[sdef->oerP[i]].name
+              , sdef->elements[sdef->oerP[i]].isOptional ? "OMIT_VALUE"
+              : sdef->elements[sdef->oerP[i]].defvalname);
+          }
         }
       }
       src = mputstr(src,
@@ -5293,10 +5459,20 @@ static char *genRawDecodeRecordField(char *src, const struct_def *sdef,
     );
   }
   /* decoding of normal field */
-  if (sdef->elements[i].isOptional) src = mputstr(src,
-    "  size_t fl_start_pos = p_buf.get_pos_bit();\n");
+  if (sdef->elements[i].isOptional) {
+    src = mputprintf(src,
+      "  if (force_omit != NULL && (*force_omit)(%d)) {\n"
+      "    field_%s = OMIT_VALUE;\n"
+      "  }\n"
+      "  else {\n"
+      "  size_t fl_start_pos = p_buf.get_pos_bit();\n",
+      i, sdef->elements[i].name);
+  }
   src = mputprintf(src,
+    "  RAW_Force_Omit field_%d_force_omit(%d, force_omit, "
+    "%s_descr_.raw->forceomit);\n"
     "  decoded_field_length = field_%s%s.RAW_decode(%s_descr_, p_buf, ",
+    i, i, sdef->elements[i].typedescrname,
     sdef->elements[i].name, sdef->elements[i].isOptional ? "()" : "",
     sdef->elements[i].typedescrname);
   if (delayed_decode) {
@@ -5310,15 +5486,21 @@ static char *genRawDecodeRecordField(char *src, const struct_def *sdef,
   if (sdef->elements[i].hasRaw &&
       sdef->elements[i].raw.crosstaglist.nElements > 0)
     src = mputstr(src, ", selected_field");
+  else src = mputstr(src, ", -1");
+  boolean lengthof_found = FALSE;
   for (a = 0; a < raw_options[i].lengthof; a++) {
     int field_index = raw_options[i].lengthoffield[a];
     /* number of elements in 'record of' or 'set of' */
     if (sdef->elements[field_index].raw.unit == -1) {
       src = mputprintf(src, ", value_of_length_field%d", field_index);
+      lengthof_found = TRUE;
       break;
     }
   }
-  src = mputstr(src, ");\n");
+  if (!lengthof_found) {
+    src = mputstr(src, ", TRUE");
+  }
+  src = mputprintf(src, ", &field_%d_force_omit);\n", i);
   if (delayed_decode) {
     src = mputprintf(src, "  if (decoded_field_length != %d) return -1;\n",
       sdef->elements[i].raw.length);
@@ -5452,7 +5634,7 @@ static char *genRawDecodeRecordField(char *src, const struct_def *sdef,
   }
   if(sdef->elements[i].isOptional){
     src=mputprintf(src,
-    "  }\n  }\n%s"
+    "  }\n  }\n  }\n%s"
     "  else field_%s=OMIT_VALUE;\n"
     ,raw_options[i].tag_type?"  }\n":"",sdef->elements[i].name
     );
@@ -6229,7 +6411,8 @@ void defRecordTemplate1(const struct_def *sdef, output_struct *output)
   }
   src = mputprintf(src,
     "    for (size_t val_idx=0; val_idx<param.get_size(); val_idx++) if (!value_used[val_idx]) {\n"
-    "      param.get_elem(val_idx)->error(\"Non existent field name in type %s: %%s\", param.get_elem(val_idx)->get_id()->get_name());\n"
+    "      Module_Param* const curr_param = param.get_elem(val_idx);\n"
+    "      curr_param->error(\"Non existent field name in type %s: %%s\", curr_param->get_id()->get_name());\n"
     "      break;\n"
     "    }\n"
     "  } break;\n"
@@ -6542,7 +6725,8 @@ static void defEmptyRecordClass(const struct_def *sdef,
 
 	src = mputprintf(src,
 	    "int %s::RAW_decode(const TTCN_Typedescriptor_t& p_td, "
-		"TTCN_Buffer& p_buf, int, raw_order_t, boolean, int, boolean)\n"
+		"TTCN_Buffer& p_buf, int, raw_order_t, boolean, int, boolean, "
+		"const RAW_Force_Omit*)\n"
 	    "{\n"
 	    "bound_flag = TRUE;\n"
 	    "return p_buf.increase_pos_padd(p_td.raw->prepadding) + "
@@ -6657,25 +6841,39 @@ static void defEmptyRecordClass(const struct_def *sdef,
   if (oer_needed) {
     // OER encode, RT1
     src = mputprintf(src,
-      "int %s::OER_encode(const TTCN_Typedescriptor_t&, TTCN_Buffer&) const\n"
+      "int %s::OER_encode(const TTCN_Typedescriptor_t&, TTCN_Buffer&%s) const\n"
       "{\n"
       "  if (!is_bound()) {\n"
       "    TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_UNBOUND,\n"
       "      \"Encoding an unbound value of type %s.\");\n"
       "    return -1;\n"
       "  }\n\n"
+      "%s"
       "  return 0;\n"
       "}\n\n"
-      , name, dispname);
+      , name, sdef->oerExtendable ? " p_buf" : "", dispname
+      , sdef->oerExtendable ? "  p_buf.put_c(0);\n" : "");
     
     // OER decode, RT1
     src = mputprintf(src,
-      "int %s::OER_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&, OER_struct&)\n"
+      "int %s::OER_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&%s, OER_struct&)\n"
       "{\n"
       "  bound_flag = TRUE;\n"
+      , name, sdef->oerExtendable ? " p_buf" : "");
+    if (sdef->oerExtendable) {
+      src = mputstr(src,
+        "  const unsigned char* uc = p_buf.get_read_data();\n"
+        "  boolean has_extension = (uc[0] & 0x80) != 0;\n"
+        "  p_buf.increase_pos(1);\n"
+        "  if (has_extension) {\n"
+        "    size_t bytes = decode_oer_length(p_buf, FALSE);\n"
+        "    p_buf.increase_pos(bytes);\n"
+        // TODO: handle extension fields
+        "  }\n");
+    }
+    src = mputstr(src,
       "  return 0;\n"
-      "}\n\n"
-      , name);
+      "}\n\n");      
   }
 
     /* closing class definition */
@@ -7497,7 +7695,7 @@ check_generate_end:
          "virtual int RAW_encode_negtest(const Erroneous_descriptor_t *, const TTCN_Typedescriptor_t&, RAW_enc_tree&) const;\n"
          "int RAW_decode(const TTCN_Typedescriptor_t&, TTCN_Buffer&, "
          "int, raw_order_t, boolean no_err = FALSE, "
-         "int sel_field = -1, boolean first_call = TRUE);\n");
+         "int sel_field = -1, boolean first_call = TRUE, const RAW_Force_Omit* force_omit = NULL);\n");
         src = generate_raw_coding(src, sdef, raw_options, haspointer,
                                   hascrosstag, has_ext_bit);
       } else { /* generate helper functions for the default RAW enc/dec */
@@ -7546,6 +7744,20 @@ check_generate_end:
         src = mputprintf(src,
           "  else if (%s::can_start(p_name, p_uri, %s_xer_, p_flavor, p_flavor2)) return TRUE;\n"
           , sdef->elements[i].type, sdef->elements[i].typegen);
+        if (!sdef->elements[i].isOptional) {
+          break;
+        }
+      }
+      for (i = 0; i < sdef->nElements; i++) {
+        if (strcmp(sdef->elements[i].type, "UNIVERSAL_CHARSTRING") == 0 &&
+            !sdef->elements[i].xerAttribute) {
+          src = mputprintf(src,
+            "  else if (%s_xer_.xer_bits & ANY_ELEMENT) return TRUE;\n"
+            , sdef->elements[i].typegen);
+        }
+        if (!sdef->elements[i].isOptional && !sdef->elements[i].xerAttribute) {
+          break;
+        }
       }
       src = mputstr(src,
         "  return FALSE;\n"

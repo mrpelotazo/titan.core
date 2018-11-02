@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -22,6 +22,7 @@
 #include "TTCN3ModuleInventory.hh"
 #include "Annotation.hh"
 #include "Constant.hh"
+#include "converter.hh"
 
 #include <assert.h>
 
@@ -234,6 +235,9 @@ void ComplexType::loadWithValues() {
   }
   
   const XMLParser::TagAttributes & atts = parser->getActualTagAttributes();
+  
+  Mstring xsdPrefix = module->getxmlSchemaPrefixes().size() != 0 ?
+    (module->getxmlSchemaPrefixes().front() + ':') : empty_string;
   
   switch (parser->getActualTagName()) {
     case n_sequence:
@@ -468,7 +472,7 @@ void ComplexType::loadWithValues() {
     {
       ComplexType * any = new ComplexType(this);
       any->name.upload(Mstring("elem"));
-      any->type.upload(Mstring("string"), false);
+      any->type.upload(xsdPrefix + Mstring("string"), false);
       any->applyNamespaceAttribute(V_anyElement, atts.namespace_);
       any->setMinMaxOccurs(atts.minOccurs, atts.maxOccurs);
       any->setXsdtype(n_any);
@@ -480,7 +484,7 @@ void ComplexType::loadWithValues() {
       AttributeType * anyattr = new AttributeType(this);
       anyattr->setXsdtype(n_anyAttribute);
       anyattr->setNameOfField(Mstring("attr"));
-      anyattr->setTypeValue(Mstring("string"));
+      anyattr->setTypeValue(xsdPrefix + Mstring("string"));
       anyattr->setToAnyAttribute();
       anyattr->applyMinMaxOccursAttribute(0, ULLONG_MAX);
       anyattr->addNameSpaceAttribute(atts.namespace_);
@@ -597,7 +601,7 @@ void ComplexType::loadWithValues() {
       if (atts.mixed) {
         ComplexType * mixed = new ComplexType(this);
         mixed->name.upload(Mstring("embed_values"));
-        mixed->type.upload(Mstring("string"), false);
+        mixed->type.upload(xsdPrefix + Mstring("string"), false);
         mixed->setMinMaxOccurs(0, ULLONG_MAX, false);
         mixed->embed = true;
         complexfields.push_back(mixed);
@@ -844,7 +848,7 @@ void ComplexType::nameConversion(NameConversionMode conversion_mode, const List<
 
 void ComplexType::nameConversion_names(const List<NamespaceType> &) {
   Mstring res, var(module->getTargetNamespace());
-  XSDName2TTCN3Name(name.convertedValue, TTCN3ModuleInventory::getInstance().getTypenames(), type_name, res, var);
+  XSDName2TTCN3Name(name.convertedValue, empty_string, TTCN3ModuleInventory::getInstance().getTypenames(), type_name, res, var);
   name.convertedValue = res;
   bool found = false;
   for (List<Mstring>::iterator vari = variant.begin(); vari; vari = vari->Next) {
@@ -858,7 +862,7 @@ void ComplexType::nameConversion_names(const List<NamespaceType> &) {
     addVariant(V_onlyValue, var);
   }
   for (List<RootType*>::iterator dep = nameDepList.begin(); dep; dep = dep->Next) {
-    dep->Data->setTypeValue(res);
+    dep->Data->setTypeValueWoPrefix(res);
   }
 }
 
@@ -909,7 +913,7 @@ void ComplexType::nameConversion_types(const List<NamespaceType> & ns) {
     setTypeValue(origTN->Data.name);
   } else {
     Mstring res, var;
-    XSDName2TTCN3Name(typeValue, TTCN3ModuleInventory::getInstance().getTypenames(), type_reference_name, res, var, type.no_replace);
+    XSDName2TTCN3Name(typeValue, uri, TTCN3ModuleInventory::getInstance().getTypenames(), type_reference_name, res, var, type.no_replace);
     setTypeValue(res);
   }
 }
@@ -936,14 +940,21 @@ void ComplexType::nameConversion_fields(const List<NamespaceType> & ns) {
 
     Mstring res, var;
     var = getModule()->getTargetNamespace();
-    XSDName2TTCN3Name(typeValue, TTCN3ModuleInventory::getInstance().getTypenames(), type_reference_name, res, var);
+    List<NamespaceType>::iterator declNS;
+    for (declNS = module->getDeclaredNamespaces().begin(); declNS; declNS = declNS->Next) {
+      if (prefix == declNS->Data.prefix) {
+        break;
+      }
+    }
+    XSDName2TTCN3Name(typeValue, declNS ? declNS->Data.uri : empty_string,
+      TTCN3ModuleInventory::getInstance().getTypenames(), type_reference_name, res, var);
 
     field->Data->addVariant(V_onlyValue, var);
     var = getModule()->getTargetNamespace();
 
     if (field->Data->getName().list_extension) {
       field->Data->useNameListProperty();
-      XSDName2TTCN3Name(field->Data->getName().convertedValue,
+      XSDName2TTCN3Name(field->Data->getName().convertedValue, empty_string,
         used_field_names, field_name, res, var);
       field->Data->setNameValue(res);
       bool found_in_variant = false;
@@ -966,7 +977,7 @@ void ComplexType::nameConversion_fields(const List<NamespaceType> & ns) {
         field->Data->addVariant(V_untagged, empty_string, true);
       }
     } else {
-      XSDName2TTCN3Name(field->Data->getName().convertedValue,
+      XSDName2TTCN3Name(field->Data->getName().convertedValue, empty_string,
         used_field_names, field_name, res, var);
       field->Data->setNameValue(res);
       field->Data->addVariant(V_onlyValue, var);
@@ -2347,6 +2358,31 @@ void ComplexType::addSubstitution(SimpleType * st){
         element->addVariant(V_block);
       }
     }
+    if (st->getModule()->getTargetNamespace() != module->getTargetNamespace() &&
+        st->getModule()->getTargetNamespace() != "NoTargetNamespace") {
+      element->addVariant(V_namespaceAs, st->getModule()->getTargetNamespace());
+    }
+    if (!o_flag_used && st->getModule() != module &&
+        !isBuiltInType(st->getType().convertedValue)) {
+      bool import_found = false;
+      for (List<const TTCN3Module*>::iterator imp = module->getImportedModules().begin();
+           imp != module->getImportedModules().end(); ++imp) {
+        if (imp->Data == st->getModule()) {
+          import_found = true;
+          break;
+        }
+      }
+      if (!import_found) {
+        printWarning(st->getModule()->getSchemaname(), st->getName().convertedValue,
+          Mstring("Type `") + st->getName().convertedValue + Mstring("' is used "
+          "in a substitution group in module `") + module->getModulename() +
+          Mstring("', which does not import the type's module. This may lead to "
+          "errors in the generated code. For a safe solution, please use the "
+          "single module command line option (-o) or disable element "
+          "substitution (-g)."));
+        TTCN3ModuleInventory::incrNumWarnings();
+      }
+    }
   }
 
   element->setNameValue(st->getName().convertedValue);
@@ -2392,7 +2428,7 @@ void ComplexType::addTypeSubstitution(SimpleType * st){
   }
   element->top = false;
   complexfields.push_back(element);
-  element->setTypeValue(st->getName().convertedValue.getValueWithoutPrefix(':'));
+  element->setTypeValue(st->getName().convertedValue);
   element->setNameValue(st->getName().convertedValue.getValueWithoutPrefix(':'));
 }
 

@@ -1,9 +1,9 @@
 /******************************************************************************
- * Copyright (c) 2000-2017 Ericsson Telecom AB
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
  *
  * Contributors:
  *   Balasko, Jeno
@@ -33,6 +33,8 @@ RootType::RootType(XMLParser * a_parser, TTCN3Module * a_module, const Construct
 , maxOccurs(1)
 , min_mod(false)
 , max_mod(false){
+  Mstring xsdPrefix = module->getxmlSchemaPrefixes().size() != 0 ?
+    (module->getxmlSchemaPrefixes().front() + ':') : empty_string;
   switch (a_construct) {
     case c_schema:
     case c_annotation:
@@ -43,16 +45,16 @@ RootType::RootType(XMLParser * a_parser, TTCN3Module * a_module, const Construct
     case c_unknown: // because when using fields in complextypes we set construct to c_unknown
     case c_simpleType:
       origin = from_simpleType;
-      type.upload(Mstring("anySimpleType"), false);
+      type.upload(xsdPrefix + Mstring("anySimpleType"), false);
       break;
     case c_element:
       origin = from_element;
-      type.upload(Mstring("anyType"), false);
+      type.upload(xsdPrefix + Mstring("anyType"), false);
       addVariant(V_element);
       break;
     case c_attribute:
       origin = from_attribute;
-      type.upload(Mstring("anySimpleType"), false);
+      type.upload(xsdPrefix + Mstring("anySimpleType"), false);
       addVariant(V_attribute);
       break;
     case c_complexType:
