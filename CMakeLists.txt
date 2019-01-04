@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.6)
 
-project(titan VERSION 6.3.1)
+project(titan VERSION 6.4.1)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
