@@ -77,6 +77,8 @@ add_library(ttcn3_compiler
     ${BISON_rawAST.tab_OUTPUT_SOURCE}
 )
 
+add_dependencies(ttcn3_compiler common_obj)
+
 target_include_directories(ttcn3_compiler PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}

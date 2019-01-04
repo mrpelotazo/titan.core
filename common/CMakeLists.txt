@@ -56,6 +56,8 @@ add_library(common_obj OBJECT
     ${BISON_config_preproc_p_OUTPUT_SOURCE}
 )
 
+add_dependencies(common_obj cversionHeader)
+
 set_target_properties(common_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 
 target_include_directories(common_obj PUBLIC

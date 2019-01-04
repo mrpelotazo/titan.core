@@ -58,31 +58,62 @@ set(RT2_DIR ${CMAKE_CURRENT_BINARY_DIR}/RT2)
 #---------------------------------------------------------------------------------------
 # File generation commands
 #---------------------------------------------------------------------------------------
-add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
-                          ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
-    COMMAND mkdir ${RT1_DIR}
-    COMMAND mkdir ${RT2_DIR}
-    COMMAND ${PROJECT_BINARY_DIR}/xsdconvert/xsd2ttcn ${CMAKE_CURRENT_SOURCE_DIR}/${SCHEMA}
-    COMMAND ${SED} -i -e 's/XSD.String/charstring/g' -e 's/XSD.AnySimpleType/charstring/g' -e 's/XSD.Integer/integer/g' -e 's/XSD.Float/float/g' -e 's/XSD.Double/float/g' -e 's/XSD.Boolean/boolean/g' -e 's/import\ from\ XSD\ all\;//g' ${GENERATED_MODULE}
-    COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -o ${RT1_DIR} ${GENERATED_MODULE}
-    COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -R -o ${RT2_DIR} ${GENERATED_MODULE}
+add_custom_target(generateSources
+    DEPENDS ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
+            ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
+            ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT2_DIR}/TitanLoggerApiSimple.hh
+            ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc
+            ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc
+            ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
+            ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
 )
 
-add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT2_DIR}/TitanLoggerApiSimple.hh
+add_custom_command(
+    OUTPUT ${RT1_DIR} ${RT2_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${RT1_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${RT2_DIR}
+)
+
+add_custom_command(
+    DEPENDS xsd2ttcn compiler
+            ${RT1_DIR} ${RT2_DIR}
+    OUTPUT  ${GENERATED_MODULE}
+            ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
+            ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
+    COMMAND ${PROJECT_BINARY_DIR}/xsdconvert/xsd2ttcn ${CMAKE_CURRENT_SOURCE_DIR}/${SCHEMA} &&
+            ${SED} -i -e 's/XSD.String/charstring/g' -e 's/XSD.AnySimpleType/charstring/g' -e 's/XSD.Integer/integer/g' -e 's/XSD.Float/float/g' -e 's/XSD.Double/float/g' -e 's/XSD.Boolean/boolean/g' -e 's/import\ from\ XSD\ all\;//g' ${GENERATED_MODULE} &&
+            ${PROJECT_BINARY_DIR}/compiler2/compiler -o ${RT1_DIR} ${GENERATED_MODULE} &&
+            ${PROJECT_BINARY_DIR}/compiler2/compiler -R -o ${RT2_DIR} ${GENERATED_MODULE}
+    COMMENT "Generating logger API sources"
+)
+
+add_custom_command(
+    DEPENDS ${RT1_DIR}/TitanLoggerApi.hh
+            ${RT2_DIR}/TitanLoggerApi.hh
+    OUTPUT  ${RT1_DIR}/TitanLoggerApiSimple.hh ${RT2_DIR}/TitanLoggerApiSimple.hh
     COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simplify.pl ${RT1_DIR}/TitanLoggerApi.hh > ${RT1_DIR}/TitanLoggerApiSimple.hh
     COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/simplify.pl ${RT2_DIR}/TitanLoggerApi.hh > ${RT2_DIR}/TitanLoggerApiSimple.hh
+    COMMENT "Generating simple logger API sources"
 )
 
-add_custom_command(OUTPUT ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
-                          ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
+add_custom_command(
+    DEPENDS compiler
+            ${RT1_DIR} ${RT2_DIR}
+    OUTPUT  ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
+            ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -o ${RT1_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${PREGENERATOR_MODULES}
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -R -o ${RT2_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${PREGENERATOR_MODULES}
+    COMMENT "Generating pregenerator sources"
 )
 
-add_custom_command(OUTPUT ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc
-                          ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc
+add_custom_command(
+    DEPENDS compiler
+            ${RT1_DIR} ${RT2_DIR}
+    OUTPUT  ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc
+            ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -o ${RT1_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/TitanLoggerControl.ttcn
     COMMAND ${PROJECT_BINARY_DIR}/compiler2/compiler -F -R -o ${RT2_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/TitanLoggerControl.ttcn
+    COMMENT "Generating logger control sources"
 )
 
 #---------------------------------------------------------------------------------------
@@ -104,8 +135,10 @@ ADD_FLEX_BISON_DEPENDENCY(config_process.lex config_process)
 #---------------------------------------------------------------------------------------
 add_executable(gccversion gccversion.c)
 
-add_custom_command(OUTPUT cversion.h
-    COMMAND gccversion > cversion.h
+add_custom_target(cversionHeader
+    COMMAND gccversion > ${CMAKE_BINARY_DIR}/cversion.h
+    DEPENDS gccversion
+    BYPRODUCTS ${CMAKE_BINARY_DIR}/cversion.h
 )
 
 #---------------------------------------------------------------------------------------
@@ -115,14 +148,25 @@ add_library(logger-plugin_obj OBJECT
     LoggerPlugin_static.cc
 )
 
+add_dependencies(logger-plugin_obj
+    cversionHeader
+    generateSources
+)
+
 target_include_directories(logger-plugin_obj PRIVATE
     ${PROJECT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_BINARY_DIR}
 )
 
 add_library(logger-plugin-dynamic_obj OBJECT
     LoggerPlugin_dynamic.cc
+)
+
+add_dependencies(logger-plugin-dynamic_obj
+    cversionHeader
+    generateSources
 )
 
 set_target_properties(logger-plugin-dynamic_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
@@ -131,6 +175,7 @@ target_include_directories(logger-plugin-dynamic_obj PRIVATE
     ${PROJECT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_BINARY_DIR}
 )
 
 #---------------------------------------------------------------------------------------
@@ -138,21 +183,24 @@ target_include_directories(logger-plugin-dynamic_obj PRIVATE
 #---------------------------------------------------------------------------------------
 add_library(ttcn3_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     Single_main.cc
-    ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
-    ${RT1_DIR}/TitanLoggerApiSimple.hh
-    ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
-    ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
 )
 
+add_dependencies(ttcn3_obj
+    cversionHeader
+    generateSources
+)
+
 set_target_properties(ttcn3_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
 target_include_directories(ttcn3_obj PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/common
     ${CMAKE_CURRENT_BINARY_DIR}
     ${RT1_DIR}
     ${LIBXML2_INCLUDE_DIR}
+    ${CMAKE_BINARY_DIR}
 )
 
 add_library(ttcn3 STATIC
@@ -200,12 +248,13 @@ target_include_directories(ttcn3-dynamic INTERFACE
 #---------------------------------------------------------------------------------------
 add_library(ttcn3-parallel_obj OBJECT ${CORE_STATIC_SOURCES_NO_MAIN}
     Parallel_main.cc
-    ${RT1_DIR}/TitanLoggerApi.hh ${RT1_DIR}/TitanLoggerApi.cc
-    ${RT1_DIR}/TitanLoggerApiSimple.hh
-    ${RT1_DIR}/PreGenRecordOf.hh ${RT1_DIR}/PreGenRecordOf.cc
-    ${RT1_DIR}/TitanLoggerControl.hh ${RT1_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
+)
+
+add_dependencies(ttcn3-parallel_obj
+    cversionHeader
+    generateSources
 )
 
 target_include_directories(ttcn3-parallel_obj PUBLIC
@@ -214,6 +263,7 @@ target_include_directories(ttcn3-parallel_obj PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${RT1_DIR}
+    ${CMAKE_BINARY_DIR}
 
 )
 
@@ -264,12 +314,13 @@ target_include_directories(ttcn3-parallel-dynamic INTERFACE
 #---------------------------------------------------------------------------------------
 add_library(ttcn3-rt2_obj OBJECT ${CORE2_STATIC_SOURCES}
     Single_main.cc
-    ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
-    ${RT2_DIR}/TitanLoggerApiSimple.hh
-    ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
-    ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
+)
+
+add_dependencies(ttcn3-rt2_obj
+    cversionHeader
+    generateSources
 )
 
 set_target_properties(ttcn3-rt2_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
@@ -281,6 +332,7 @@ target_include_directories(ttcn3-rt2_obj PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${RT2_DIR}
+    ${CMAKE_BINARY_DIR}
 )
 
 add_library(ttcn3-rt2 STATIC
@@ -328,12 +380,13 @@ target_include_directories(ttcn3-rt2-dynamic INTERFACE
 #---------------------------------------------------------------------------------------
 add_library(ttcn3-rt2-parallel_obj OBJECT ${CORE2_STATIC_SOURCES}
     Parallel_main.cc
-    ${RT2_DIR}/TitanLoggerApi.hh ${RT2_DIR}/TitanLoggerApi.cc
-    ${RT2_DIR}/TitanLoggerApiSimple.hh
-    ${RT2_DIR}/PreGenRecordOf.hh ${RT2_DIR}/PreGenRecordOf.cc
-    ${RT2_DIR}/TitanLoggerControl.hh ${RT2_DIR}/TitanLoggerControl.cc cversion.h
     ${FLEX_config_process.lex_OUTPUTS}
     ${BISON_config_process_OUTPUT_SOURCE}
+)
+
+add_dependencies(ttcn3-rt2-parallel_obj
+    cversionHeader
+    generateSources
 )
 
 set_target_properties(ttcn3-rt2-parallel_obj PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
@@ -345,6 +398,7 @@ target_include_directories(ttcn3-rt2-parallel_obj PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${RT2_DIR}
+    ${CMAKE_BINARY_DIR}
 )
 
 add_library(ttcn3-rt2-parallel STATIC
@@ -436,6 +490,6 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/RT1
     PATTERN "TitanLoggerControl.hh" EXCLUDE
 )
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cversion.h
+install(FILES ${CMAKE_BINARY_DIR}/cversion.h
 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )

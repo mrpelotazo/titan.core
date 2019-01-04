@@ -11,10 +11,17 @@ set(TSTLOGGER_VERSION ${TSTLOGGER_VERSION_MAJOR}.${TSTLOGGER_VERSION_MINOR})
 # Target tstlogger
 #---------------------------------------------------------------------------------------
 add_library(tstlogger SHARED TSTLogger.cc)
+
+add_dependencies(tstlogger
+    cversionHeader
+    generateSources
+)
+
 target_include_directories(tstlogger PUBLIC
     ${PROJECT_SOURCE_DIR}/core
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_BINARY_DIR}/core
+    ${CMAKE_BINARY_DIR}
 )
 
 set_target_properties(tstlogger PROPERTIES VERSION ${TSTLOGGER_VERSION})
@@ -23,10 +30,17 @@ set_target_properties(tstlogger PROPERTIES VERSION ${TSTLOGGER_VERSION})
 # Target tstlogger-rt2
 #---------------------------------------------------------------------------------------
 add_library(tstlogger-rt2 SHARED TSTLogger.cc)
+
+add_dependencies(tstlogger-rt2
+    cversionHeader
+    generateSources
+)
+
 target_include_directories(tstlogger-rt2 PUBLIC
     ${PROJECT_SOURCE_DIR}/core
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_BINARY_DIR}/core
+    ${CMAKE_BINARY_DIR}
 )
 
 target_compile_definitions(tstlogger-rt2 PUBLIC -DTITAN_RUNTIME_2)
@@ -36,10 +50,16 @@ set_target_properties(tstlogger-rt2 PROPERTIES VERSION ${TSTLOGGER_VERSION})
 # Target tstlogger-parallel
 #---------------------------------------------------------------------------------------
 add_library(tstlogger-parallel SHARED TSTLogger.cc)
+
+add_dependencies(tstlogger-parallel
+    cversionHeader
+    generateSources
+)
 target_include_directories(tstlogger-parallel PUBLIC
     ${PROJECT_SOURCE_DIR}/core
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_BINARY_DIR}/core
+    ${CMAKE_BINARY_DIR}
 )
 
 set_target_properties(tstlogger-parallel PROPERTIES VERSION ${TSTLOGGER_VERSION})
@@ -48,10 +68,17 @@ set_target_properties(tstlogger-parallel PROPERTIES VERSION ${TSTLOGGER_VERSION}
 # Target tstlogger-parallel-rt2
 #---------------------------------------------------------------------------------------
 add_library(tstlogger-parallel-rt2 SHARED TSTLogger.cc)
+
+add_dependencies(tstlogger-parallel-rt2
+    cversionHeader
+    generateSources
+)
+
 target_include_directories(tstlogger-parallel-rt2 PUBLIC
     ${PROJECT_SOURCE_DIR}/core
     ${PROJECT_SOURCE_DIR}/common
     ${PROJECT_BINARY_DIR}/core
+    ${CMAKE_BINARY_DIR}
 )
 
 target_compile_definitions(tstlogger-parallel-rt2 PUBLIC -DTITAN_RUNTIME_2)

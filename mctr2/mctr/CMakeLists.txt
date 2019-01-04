@@ -30,10 +30,18 @@ add_custom_command(OUTPUT Cli_main.cc
 #---------------------------------------------------------------------------------------
 add_library(rint OBJECT ${PROJECT_SOURCE_DIR}/core/RInt.cc)
 
+add_dependencies(rint
+    generateSources
+)
+
 #---------------------------------------------------------------------------------------
 # Target textbuf
 #---------------------------------------------------------------------------------------
 add_library(textbuf OBJECT ${PROJECT_SOURCE_DIR}/core/Textbuf.cc)
+
+add_dependencies(textbuf
+    generateSources
+)
 
 #---------------------------------------------------------------------------------------
 # Target mctr_cli
