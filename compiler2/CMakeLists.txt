@@ -4,8 +4,6 @@
 ## @brief      Integrated (TTCN-3 and ASN.1) compiler and the makefile generator
 ##
 
-cmake_minimum_required(VERSION 3.6)
-
 #---------------------------------------------------------------------------------------
 # Compiler not generated sources
 #---------------------------------------------------------------------------------------

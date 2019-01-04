@@ -4,8 +4,6 @@
 ## @brief      Common directory of the TTCN-3 Test Executor
 ##
 
-cmake_minimum_required(VERSION 3.6)
-
 #---------------------------------------------------------------------------------------
 # Common not generated sources
 #---------------------------------------------------------------------------------------

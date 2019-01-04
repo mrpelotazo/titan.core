@@ -4,8 +4,6 @@
 ## @brief      TTCN-3 log formatter, log merger and HTML report generator
 ##
 
-cmake_minimum_required(VERSION 3.6)
-
 #---------------------------------------------------------------------------------------
 # Bison / Flex targets
 #---------------------------------------------------------------------------------------

@@ -4,8 +4,6 @@
 ## @brief   Base Library of TTCN-3 Test Executor
 ##
 
-cmake_minimum_required(VERSION 3.6)
-
 set(SCHEMA TitanLoggerApi.xsd)
 set(GENERATED_MODULE TitanLoggerApi.ttcn)
 set(GENERATED_LOGGERAPI_SOURCES TitanLoggerApi.cc)

@@ -4,8 +4,6 @@
 ## @brief	Command Line Interface of the TTCN-3 Main Controller
 ##
 
-cmake_minimum_required(VERSION 3.6)
-
 #---------------------------------------------------------------------------------------
 # Cli not generated sources
 #---------------------------------------------------------------------------------------
