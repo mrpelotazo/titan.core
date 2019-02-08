@@ -130,10 +130,6 @@ if(UNIX)
         execute_process(COMMAND lsb_release -sr OUTPUT_VARIABLE LINUX_DISTRO_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
         execute_process(COMMAND lsb_release -si OUTPUT_VARIABLE LINUX_DISTRO OUTPUT_STRIP_TRAILING_WHITESPACE)
         string(TOLOWER ${LINUX_DISTRO} LINUX_DISTRO)
-
-        if(LINUX_DISTRO STREQUAL "opensuse project")
-            set(LINUX_DISTRO "opensuse")
-        endif()
     endif()
 
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/cpack/postinst.in
