@@ -53,6 +53,11 @@ if(UNIX)
 endif()
 
 #---------------------------------------------------------------------------------------
+# Options
+#---------------------------------------------------------------------------------------
+option(BUILD_DOCS "Build documentation" OFF)
+
+#---------------------------------------------------------------------------------------
 # CMake package variables
 #---------------------------------------------------------------------------------------
 set(CONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}")
@@ -76,6 +81,10 @@ add_subdirectory(loggerplugins/JUnitLogger)
 add_subdirectory(loggerplugins/JUnitLogger2)
 add_subdirectory(loggerplugins/TSTLogger)
 add_subdirectory(etc)
+
+if(BUILD_DOCS)
+    add_subdirectory(usrguide)
+endif()
 
 #---------------------------------------------------------------------------------------
 # CMake package
