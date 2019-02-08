@@ -7447,28 +7447,19 @@ namespace Ttcn {
       // checking for remaining data in the buffer if decoding was successful
       str = mputprintf(str, "if (TTCN_EncDec::get_last_error_type() == "
           "TTCN_EncDec::ET_NONE) {\n"
-        "if (ttcn_buffer.get_pos() < ttcn_buffer.get_len() && "
-          "TTCN_Logger::log_this_event(TTCN_WARNING)) {\n"
+        "if (ttcn_buffer.get_pos() < ttcn_buffer.get_len()) {\n"
         "ttcn_buffer.cut();\n"
-        "%s remaining_stream;\n",
-        input_type->get_genname_value(my_scope).c_str());
-      if (input_type->get_type_refd_last()->get_typetype_ttcn3() ==
-          Common::Type::T_BSTR) {
-        str = mputstr(str,
-          "OCTETSTRING tmp_os;\n"
-          "ttcn_buffer.get_string(tmp_os);\n"
-          "remaining_stream = oct2bit(tmp_os);\n");
-      }
-      else {
-        str = mputstr(str, "ttcn_buffer.get_string(remaining_stream);\n");
-      }
-      str = mputprintf(str,
-        "TTCN_Logger::begin_event(TTCN_WARNING);\n"
-        "TTCN_Logger::log_event_str(\"%s(): Warning: Data remained at the end "
-          "of the stream after successful decoding: \");\n"
-        "remaining_stream.log();\n"
-        "TTCN_Logger::end_event();\n"
-        "}\n", function_name);
+        "OCTETSTRING tmp_os;\n"
+        "ttcn_buffer.get_string(tmp_os);\n"
+        "TTCN_Logger::begin_event_log2str();\n"
+        "%s.log();\n"
+        "CHARSTRING remaining_stream = TTCN_Logger::end_event_log2str();\n"
+        "TTCN_EncDec_ErrorContext::error(TTCN_EncDec::ET_EXTRA_DATA, "
+        "\"%s(): Data remained at the end of the stream after successful "
+        "decoding: %%s\", (const char*) remaining_stream);\n"
+        "}\n",
+        (input_type->get_type_refd_last()->get_typetype_ttcn3() ==
+        Common::Type::T_BSTR) ? "oct2bit(tmp_os)" : "tmp_os", function_name);
       // closing the block and returning the appropriate result or status code
       if (prototype == PROTOTYPE_BACKTRACK) {
         if (debugger_active) {
@@ -8246,26 +8237,43 @@ namespace Ttcn {
         for (size_t i = 0; i < fp_list->get_nof_fps(); ++i) {
           FormalPar *fp = fp_list->get_fp_byIndex(i);
           ActualPar *ap = fp->get_defval();
+          param_eval_t param_eval = fp != NULL ? fp->get_eval_type() : NORMAL_EVAL;
           switch (ap->get_selection()) {
           case ActualPar::AP_VALUE:
-            expr.expr = mputstr(expr.expr,
-              ap->get_Value()->get_genname_own(my_scope).c_str());
-            break;
-          case ActualPar::AP_TEMPLATE:
-            if (use_runtime_2) {
-              string tmp_id = my_scope->get_scope_mod_gen()->get_temporary_id();
-              expr.preamble = mputprintf(expr.preamble, "%s %s;\n",
-                fp->get_Type()->get_genname_template(my_scope).c_str(), tmp_id.c_str());
-              // use the actual parameter's scope, not the formal parameter's, when
-              // generating the template's initialization code
-              ap->get_TemplateInstance()->set_my_scope(my_scope);
-              expr.preamble = FormalPar::generate_code_defval_template(expr.preamble,
-                ap->get_TemplateInstance(), tmp_id, ap->get_gen_restriction_check());
-              expr.expr = mputstr(expr.expr, tmp_id.c_str());
+            if (param_eval != NORMAL_EVAL) {
+              LazyFuzzyParamData::init(false);
+              LazyFuzzyParamData::generate_code(&expr, ap->get_Value(), my_scope,
+                param_eval == LAZY_EVAL);
+              LazyFuzzyParamData::clean();
             }
             else {
               expr.expr = mputstr(expr.expr,
-                ap->get_TemplateInstance()->get_Template()->get_genname_own(my_scope).c_str());
+                ap->get_Value()->get_genname_own(my_scope).c_str());
+            }
+            break;
+          case ActualPar::AP_TEMPLATE:
+            if (param_eval != NORMAL_EVAL) {
+              LazyFuzzyParamData::init(false);
+              LazyFuzzyParamData::generate_code(&expr, ap->get_TemplateInstance(),
+                 ap->get_gen_restriction_check(), my_scope, param_eval == LAZY_EVAL);
+              LazyFuzzyParamData::clean();
+            }
+            else {
+              if (use_runtime_2) {
+                string tmp_id = my_scope->get_scope_mod_gen()->get_temporary_id();
+                expr.preamble = mputprintf(expr.preamble, "%s %s;\n",
+                  fp->get_Type()->get_genname_template(my_scope).c_str(), tmp_id.c_str());
+                // use the actual parameter's scope, not the formal parameter's, when
+                // generating the template's initialization code
+                ap->get_TemplateInstance()->set_my_scope(my_scope);
+                expr.preamble = FormalPar::generate_code_defval_template(expr.preamble,
+                  ap->get_TemplateInstance(), tmp_id, ap->get_gen_restriction_check());
+                expr.expr = mputstr(expr.expr, tmp_id.c_str());
+              }
+              else {
+                expr.expr = mputstr(expr.expr,
+                  ap->get_TemplateInstance()->get_Template()->get_genname_own(my_scope).c_str());
+              }
             }
             break;
           case ActualPar::AP_REF:
@@ -9906,8 +9914,12 @@ namespace Ttcn {
     bool ret_val = true;
     for(size_t i = 0; i < p_aplist->get_nof_pars(); i++) {
       ActualPar *t_ap = p_aplist->get_par(i);
-      if(t_ap->get_selection() != ActualPar::AP_REF) continue;
       FormalPar *t_fp = pars_v[i];
+      if (t_fp->get_eval_type() != NORMAL_EVAL) {
+        t_ap->get_location()->error("Activating a default altstep with @lazy or "
+          "@fuzzy parameters is not supported");
+      }
+      if(t_ap->get_selection() != ActualPar::AP_REF) continue;
       switch(t_fp->get_asstype()) {
       case Common::Assignment::A_PAR_VAL_OUT:
       case Common::Assignment::A_PAR_VAL_INOUT:
@@ -10622,6 +10634,22 @@ namespace Ttcn {
       break;
     default:
       DEBUG(level, "actual parameter: erroneous");
+    }
+  }
+  
+  Location* ActualPar::get_location() const
+  {
+    switch (selection) {
+    case AP_VALUE:
+      return val;
+    case AP_TEMPLATE:
+      return temp;
+    case AP_REF:
+      return ref;
+    case AP_DEFAULT:
+      return act->get_location();
+    default:
+      FATAL_ERROR("ActualPar::get_location()");
     }
   }
 

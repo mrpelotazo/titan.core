@@ -132,7 +132,8 @@ namespace Ttcn {
           "INVAL_MSG", "REPR", "CONSTRAINT", "TAG", "SUPERFL", "EXTENSION",
           "DEC_ENUM", "DEC_DUPFLD", "DEC_MISSFLD", "DEC_OPENTYPE", "DEC_UCSTR",
           "LEN_ERR", "SIGN_ERR", "INCOMP_ORDER", "TOKEN_ERR", "LOG_MATCHING",
-          "FLOAT_TR", "FLOAT_NAN", "OMITTED_TAG", "NEGTEST_CONFL", NULL };
+          "FLOAT_TR", "FLOAT_NAN", "OMITTED_TAG", "NEGTEST_CONFL", "EXTRA_DATA",
+          NULL };
         bool type_found = false;
         for (const char * const *str = valid_types; *str; str++) {
           if (error_type == *str) {
@@ -1034,15 +1035,16 @@ namespace Ttcn {
 
   PortTypeBody::PortTypeBody(PortOperationMode_t p_operation_mode,
     Types *p_in_list, Types *p_out_list, Types *p_inout_list,
-    bool p_in_all, bool p_out_all, bool p_inout_all, Definitions *defs)
+    bool p_in_all, bool p_out_all, bool p_inout_all, Definitions *defs,
+    bool p_realtime)
     : Node(), Location(), my_type(0), operation_mode(p_operation_mode),
     in_list(p_in_list), out_list(p_out_list), inout_list(p_inout_list),
     in_all(p_in_all), out_all(p_out_all), inout_all(p_inout_all),
     checked(false), attributes_checked(false), legacy(true),
     in_msgs(0), out_msgs(0), in_sigs(0), out_sigs(0),
     testport_type(TP_REGULAR), port_type(PT_REGULAR),
-    provider_refs(), provider_types(), mapper_types(),
-    in_mappings(0), out_mappings(0), vardefs(defs)
+    provider_refs(), provider_types(),
+    in_mappings(0), out_mappings(0), vardefs(defs), realtime(p_realtime)
   {
   }
 
@@ -1060,7 +1062,6 @@ namespace Ttcn {
     }
     provider_refs.clear();
     provider_types.clear();
-    mapper_types.clear();
     delete in_mappings;
     delete out_mappings;
     delete vardefs;
@@ -1502,9 +1503,6 @@ namespace Ttcn {
               provider_types.add(t);
               n_prov_t++;
               provider_body = t->get_PortBody();
-              if (!legacy) {
-                provider_body->add_mapper_type(my_type);
-              }
             }
           } else {
             provider_refs[p]->error("Type reference `%s' does not refer to a port "
@@ -2121,6 +2119,7 @@ namespace Ttcn {
     port_def pdef;
     memset(&pdef, 0, sizeof(pdef));
     pdef.legacy = legacy;
+    pdef.realtime = realtime;
     const string& t_genname = my_type->get_genname_own();
     pdef.name = t_genname.c_str();
     pdef.dispname = my_type->get_fullname().c_str();
@@ -2258,6 +2257,7 @@ namespace Ttcn {
         pdef.provider_msg_outlist.elements[0].n_out_msg_type_names = 0;
         pdef.provider_msg_outlist.elements[0].out_msg_type_names = NULL;
         PortTypeBody *provider_body = provider_types[0]->get_PortBody();
+        pdef.provider_msg_outlist.elements[0].realtime = provider_body->realtime;
         if (provider_body->in_msgs) {
           if (!in_mappings) // !this->in_msgs OK for an all-discard mapping
             FATAL_ERROR("PortTypeBody::generate_code()");
@@ -2307,6 +2307,7 @@ namespace Ttcn {
           port_msg_prov * msg_prov = pdef.provider_msg_outlist.elements + i;
           msg_prov->name = pool.add(provider_types[i]->get_genname_value(my_scope));
           PortTypeBody * ptb = provider_types[i]->get_PortBody();
+          msg_prov->realtime = ptb->realtime;
           if (ptb->out_msgs) {
             // Collect out message list type names
             msg_prov->n_out_msg_type_names = ptb->out_msgs->get_nof_types();
@@ -2488,35 +2489,9 @@ namespace Ttcn {
       pdef.provider_msg_in.elements = NULL;
     }
     
-    if (port_type == PT_PROVIDER) {
-      pdef.mapper_name = (const char**)Malloc(mapper_types.size() * sizeof(const char*));
-      pdef.n_mapper_name = mapper_types.size();
-      for (size_t i = 0; i < mapper_types.size(); i++) {
-        pdef.mapper_name[i] = pool.add(mapper_types[i]->get_genname_value(my_scope));
-      }
-    }
-    
     defPortClass(&pdef, target);
     if (generate_skeleton && testport_type != TP_INTERNAL &&
         (port_type != PT_USER || !legacy)) generateTestPortSkeleton(&pdef);
-    
-    
-    // Add includes for the mapped types if necessary
-    if (port_type == PT_PROVIDER) {
-      for (size_t i = 0; i < mapper_types.size(); i++) {
-        const Identifier& port_mod_name = mapper_types[i]->get_my_scope()->get_scope_mod()->get_modid();
-        const string& my_mod_name = my_type->get_my_scope()->get_scope_mod()->get_modid().get_ttcnname();
-        if (my_mod_name == port_mod_name.get_ttcnname()) {
-          continue;
-        }
-        char * incl = mprintf("#include \"%s.hh\"\n",
-          duplicate_underscores ? port_mod_name.get_name().c_str() : port_mod_name.get_ttcnname().c_str());
-        if (strstr(target->header.includes, incl) == NULL) {
-          target->header.includes = mputstr(target->header.includes, incl);
-        }
-        Free(incl);
-      }
-    }
 
     Free(pdef.msg_in.elements);
     for (size_t i = 0; i < pdef.msg_out.nElements; i++)
@@ -2530,7 +2505,6 @@ namespace Ttcn {
     for (size_t i = 0; i < pdef.provider_msg_outlist.nElements; i++)
       Free(pdef.provider_msg_outlist.elements[i].out_msg_type_names);
     Free(pdef.provider_msg_outlist.elements);
-    Free(pdef.mapper_name);
     Free(pdef.var_decls);
     Free(pdef.var_defs);
     Free(pdef.mapping_func_decls);

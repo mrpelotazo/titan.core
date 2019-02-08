@@ -94,6 +94,7 @@ typedef struct port_msg_provider {
   const char *name; // provider type's name
   size_t n_out_msg_type_names;
   const char **out_msg_type_names; // provider's out message list
+  boolean realtime;
 } port_msg_prov;
 
 typedef struct port_msg_provider_list {
@@ -115,8 +116,6 @@ typedef struct port_def_tag {
   testport_type_t testport_type;
   port_type_t port_type;
   port_msg_prov_list provider_msg_outlist;
-  const char **mapper_name;
-  size_t n_mapper_name;
   port_msg_mapped_type_list provider_msg_in;
   boolean has_sliding;
   boolean legacy; // true if the old user port is used false if translation ports used
@@ -124,6 +123,7 @@ typedef struct port_def_tag {
   char *var_defs;
   char *mapping_func_decls;
   char *mapping_func_defs;
+  boolean realtime;
 } port_def;
 
 #ifdef __cplusplus

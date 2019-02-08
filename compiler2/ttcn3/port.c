@@ -180,15 +180,17 @@ static char *generate_send_mapping(char *src, const port_def *pdef,
       " mapped_par.log(), TTCN_Logger::end_event_log2str()), 0);\n"
       "}\n", target->target_dispname);
     if (has_address) {
-      src = mputstr(src,
-        "outgoing_send(mapped_par, &destination_address);\n");
+      src = mputprintf(src,
+        "outgoing_send(mapped_par, &destination_address%s);\n",
+        pdef->realtime ? ", timestamp_redirect" : "");
     } else {
       if (pdef->testport_type != INTERNAL || !pdef->legacy) {
         src = mputprintf(src, "if (destination_component == "
-          "SYSTEM_COMPREF) outgoing_%ssend(mapped_par%s);\n"
+          "SYSTEM_COMPREF) outgoing_%ssend(mapped_par%s%s);\n"
           "else {\n",
           pdef->port_type == USER && !pdef->legacy ? "mapped_" : "",
-          pdef->testport_type == ADDRESS ? ", NULL" : "");
+          pdef->testport_type == ADDRESS ? ", NULL" : "",
+          pdef->realtime ? ", timestamp_redirect" : "");
       }
       src = mputprintf(src, "Text_Buf text_buf;\n"
         "prepare_message(text_buf, \"%s\");\n"
@@ -390,13 +392,16 @@ static char *generate_incoming_mapping(char *src, const port_def *pdef,
       "msg_queue_item *new_item = new msg_queue_item;\n"
       "new_item->item_selection = MESSAGE_%lu;\n"
       "new_item->message_%lu = mapped_par;\n"
-      "new_item->sender_component = sender_component;\n",
+      "new_item->sender_component = sender_component;\n"
+      "%s",
       !pdef->legacy && pdef->port_type == USER ?
         "TTCN_Runtime::set_translation_mode(FALSE, NULL);\n"
         "if (port_state == TRANSLATED || port_state == PARTIALLY_TRANSLATED) {\n" : "",
       target->target_dispname,
       (unsigned long) target->target_index,
-      (unsigned long) target->target_index);
+      (unsigned long) target->target_index,
+      pdef->realtime ? "if (timestamp.is_bound()) "
+        "new_item->timestamp = timestamp;\n" : "");
     if (pdef->testport_type == ADDRESS) {
       src = mputprintf(src, "if (sender_address != NULL) "
         "new_item->sender_address = new %s(*sender_address);\n"
@@ -495,10 +500,12 @@ static void generate_generic_receive(char **def_ptr, char **src_ptr,
   }
 
   def = mputprintf(def, "alt_status %s(const %s_template& "
-    "sender_template, %s *sender_ptr, Index_Redirect*);\n", function_name,
+    "sender_template, %s *sender_ptr, FLOAT* timestamp_redirect, "
+    "Index_Redirect*);\n", function_name,
     sender_type, sender_type);
   src = mputprintf(src, "alt_status %s::%s(const %s_template& "
-    "sender_template, %s *sender_ptr, Index_Redirect*)\n"
+    "sender_template, %s *sender_ptr, FLOAT* timestamp_redirect, "
+    "Index_Redirect*)\n"
     "{\n"
     "msg_queue_item *my_head = (msg_queue_item*)msg_queue_head;\n"
     "if (msg_queue_head == NULL) {\n"
@@ -558,10 +565,16 @@ static void generate_generic_receive(char **def_ptr, char **src_ptr,
   }
   if (is_trigger) src = mputstr(src, "remove_msg_queue_head();\n");
   src = mputprintf(src, "return %s;\n"
-    "} else {\n"
+    "} else {\n", failed_status);
+  if (pdef->realtime) {
+    src = mputstr(src,
+      "if (timestamp_redirect != NULL && my_head->timestamp.is_bound()) {\n"
+      "*timestamp_redirect = my_head->timestamp;\n"
+      "}\n");
+  }
+  src = mputprintf(src,
     "if (sender_ptr != NULL) *sender_ptr = %smy_head->%s;\n",
-    failed_status, is_address ? "*" : "",
-      is_address ? "sender_address" : "sender_component");
+    is_address ? "*" : "", is_address ? "sender_address" : "sender_component");
 
   if (is_address) {
     src = mputprintf(src, "TTCN_Logger::log(TTCN_Logger::MATCHING_MMSUCCESS"
@@ -644,13 +657,15 @@ static void generate_receive(char **def_ptr, char **src_ptr,
 
   def = mputprintf(def, "alt_status %s(const %s_template& value_template, "
     "%s *value_redirect, const %s_template& sender_template, %s "
-    "*sender_ptr, Index_Redirect*);\n", function_name, message_type->name,
+    "*sender_ptr, FLOAT* timestamp_redirect, Index_Redirect*);\n",
+    function_name, message_type->name,
     use_runtime_2 ? "Value_Redirect_Interface" : message_type->name,
     sender_type, sender_type);
 
   src = mputprintf(src, "alt_status %s::%s(const %s_template& "
     "value_template, %s *value_redirect, const %s_template& "
-    "sender_template, %s *sender_ptr, Index_Redirect*)\n"
+    "sender_template, %s *sender_ptr, FLOAT* timestamp_redirect, "
+    "Index_Redirect*)\n"
     "{\n"
     "if (value_template.get_selection() == ANY_OR_OMIT) "
     "TTCN_error(\"%s operation using '*' as matching template\");\n"
@@ -750,8 +765,14 @@ static void generate_receive(char **def_ptr, char **src_ptr,
     src = mputprintf(src,
       "*value_redirect = *my_head->message_%lu;\n", (unsigned long) message_index);
   }
+  src = mputstr(src, "}\n");
+  if (pdef->realtime) {
+    src = mputstr(src,
+      "if (timestamp_redirect != NULL && my_head->timestamp.is_bound()) {\n"
+      "*timestamp_redirect = my_head->timestamp;\n"
+      "}\n");
+  }
   src = mputprintf(src,
-    "}\n"
     "if (sender_ptr != NULL) *sender_ptr = %smy_head->%s;\n",
     is_address ? "*" : "", is_address ? "sender_address" : "sender_component");
 
@@ -860,10 +881,11 @@ static void generate_generic_getop(getop_t getop,
   }
 
   def = mputprintf(def, "alt_status %s(const %s_template& "
-    "sender_template, %s *sender_ptr, Index_Redirect*);\n", function_name, sender_type,
-    sender_type);
+    "sender_template, %s *sender_ptr, FLOAT* timestamp_redirect, "
+    "Index_Redirect*);\n", function_name, sender_type, sender_type);
   src = mputprintf(src, "alt_status %s::%s(const %s_template& "
-    "sender_template, %s *sender_ptr, Index_Redirect*)\n"
+    "sender_template, %s *sender_ptr, FLOAT* timestamp_redirect, "
+    "Index_Redirect*)\n"
     "{\n"
     "if (proc_queue_head == NULL) {\n"
     "if (is_started) return ALT_MAYBE;\n"
@@ -933,8 +955,14 @@ static void generate_generic_getop(getop_t getop,
           (unsigned long) i);
     }
   }
-  src = mputstr(src, "{\n"
-    "if (sender_ptr != NULL) *sender_ptr = ");
+  src = mputstr(src, "{\n");
+  if (pdef->realtime) {
+    src = mputstr(src,
+      "if (timestamp_redirect != NULL && proc_queue_head->timestamp.is_bound()) {\n"
+      "*timestamp_redirect = proc_queue_head->timestamp;\n"
+      "}\n");
+  }
+  src = mputstr(src, "if (sender_ptr != NULL) *sender_ptr = ");
   if (is_address) src = mputstr(src, "*proc_queue_head->sender_address;\n");
   else src = mputstr(src, "proc_queue_head->sender_component;\n");
 
@@ -1058,13 +1086,15 @@ static void generate_getcall(char **def_ptr, char **src_ptr,
 
   def = mputprintf(def, "alt_status %s(const %s_template& "
     "getcall_template, const %s_template& sender_template, "
-    "const %s_call_redirect& param_ref, %s *sender_ptr, Index_Redirect*);\n",
+    "const %s_call_redirect& param_ref, %s *sender_ptr, "
+    "FLOAT* timestamp_redirect, Index_Redirect*);\n",
     function_name, signature->name, sender_type, signature->name,
     sender_type);
 
   src = mputprintf(src, "alt_status %s::%s(const %s_template& "
     "getcall_template, const %s_template& sender_template, "
-    "const %s_call_redirect& param_ref, %s *sender_ptr, Index_Redirect*)\n"
+    "const %s_call_redirect& param_ref, %s *sender_ptr, "
+    "FLOAT* timestamp_redirect, Index_Redirect*)\n"
     "{\n"
     "if (proc_queue_head == NULL) {\n"
     "if (is_started) return ALT_MAYBE;\n"
@@ -1143,8 +1173,7 @@ static void generate_getcall(char **def_ptr, char **src_ptr,
     "}\n"
     "return ALT_NO;\n"
     "} else {\n"
-    "param_ref.set_parameters(*proc_queue_head->call_%lu);\n"
-    "if (sender_ptr != NULL) *sender_ptr = ",
+    "param_ref.set_parameters(*proc_queue_head->call_%lu);\n",
     (is_address ?
       "TTCN_Logger::MATCHING_PMUNSUCC" :
       "proc_queue_head->sender_component==SYSTEM_COMPREF ? "
@@ -1152,6 +1181,13 @@ static void generate_getcall(char **def_ptr, char **src_ptr,
     (unsigned long) signature_index,
     (omit_in_value_list ? ", TRUE" : ""),
     (unsigned long) signature_index);
+  if (pdef->realtime) {
+    src = mputstr(src,
+      "if (timestamp_redirect != NULL && proc_queue_head->timestamp.is_bound()) {\n"
+      "*timestamp_redirect = proc_queue_head->timestamp;\n"
+      "}\n");
+  }
+  src = mputstr(src, "if (sender_ptr != NULL) *sender_ptr = ");
   if (is_address) src = mputstr(src, "*proc_queue_head->sender_address;\n");
   else src = mputstr(src, "proc_queue_head->sender_component;\n");
 
@@ -1181,13 +1217,15 @@ static void generate_getreply(char **def_ptr, char **src_ptr,
 
   def = mputprintf(def, "alt_status %s(const %s_template& "
     "getreply_template, const %s_template& sender_template, "
-    "const %s_reply_redirect& param_ref, %s *sender_ptr, Index_Redirect*);\n",
+    "const %s_reply_redirect& param_ref, %s *sender_ptr, "
+    "FLOAT* timestamp_redirect, Index_Redirect*);\n",
     function_name, signature->name, sender_type, signature->name,
     sender_type);
 
   src = mputprintf(src, "alt_status %s::%s(const %s_template& "
     "getreply_template, const %s_template& sender_template, "
-    "const %s_reply_redirect& param_ref, %s *sender_ptr, Index_Redirect*)\n"
+    "const %s_reply_redirect& param_ref, %s *sender_ptr, "
+    "FLOAT* timestamp_redirect, Index_Redirect*)\n"
     "{\n", class_name, function_name, signature->name, sender_type,
     signature->name, sender_type);
   if (signature->has_return_value) {
@@ -1272,8 +1310,7 @@ static void generate_getreply(char **def_ptr, char **src_ptr,
     "}\n"
     "return ALT_NO;\n"
     "} else {\n"
-    "param_ref.set_parameters(*proc_queue_head->reply_%lu);\n"
-    "if (sender_ptr != NULL) *sender_ptr = ",
+    "param_ref.set_parameters(*proc_queue_head->reply_%lu);\n",
     (is_address ?
       "TTCN_Logger::MATCHING_PMUNSUCC" :
       "proc_queue_head->sender_component==SYSTEM_COMPREF ? "
@@ -1281,6 +1318,13 @@ static void generate_getreply(char **def_ptr, char **src_ptr,
       (unsigned long) signature_index,
       (omit_in_value_list ? ", TRUE" : ""),
       (unsigned long) signature_index);
+  if (pdef->realtime) {
+    src = mputstr(src,
+      "if (timestamp_redirect != NULL && proc_queue_head->timestamp.is_bound()) {\n"
+      "*timestamp_redirect = proc_queue_head->timestamp;\n"
+      "}\n");
+  }
+  src = mputstr(src, "if (sender_ptr != NULL) *sender_ptr = ");
   if (is_address) src = mputstr(src, "*proc_queue_head->sender_address;\n");
   else src = mputstr(src, "proc_queue_head->sender_component;\n");
 
@@ -1310,12 +1354,12 @@ static void generate_catch(char **def_ptr, char **src_ptr,
 
   def = mputprintf(def, "alt_status %s(const %s_exception_template& "
     "catch_template, const %s_template& sender_template, "
-    "%s *sender_ptr, Index_Redirect*);\n",
+    "%s *sender_ptr, FLOAT* timestamp_redirect, Index_Redirect*);\n",
     function_name, signature->name, sender_type, sender_type);
 
   src = mputprintf(src, "alt_status %s::%s(const %s_exception_template& "
     "catch_template, const %s_template& sender_template, "
-    "%s *sender_ptr, Index_Redirect*)\n"
+    "%s *sender_ptr, FLOAT* timestamp_redirect, Index_Redirect*)\n"
     "{\n"
     "if (catch_template.is_any_or_omit()) TTCN_error(\"%s operation using '*' "
     "as matching template\");\n"
@@ -1403,12 +1447,18 @@ static void generate_catch(char **def_ptr, char **src_ptr,
     "}\n"
     "return ALT_NO;\n"
     "} else {\n"
-    "catch_template.set_value(*proc_queue_head->exception_%lu);\n"
-    "if (sender_ptr != NULL) *sender_ptr = ",
+    "catch_template.set_value(*proc_queue_head->exception_%lu);\n",
     (is_address ? "TTCN_Logger::MATCHING_PMUNSUCC" : "log_sev"),
     (unsigned long) signature_index,
     (omit_in_value_list ? ", TRUE" : ""),
     (unsigned long) signature_index);
+  if (pdef->realtime) {
+    src = mputstr(src,
+      "if (timestamp_redirect != NULL && proc_queue_head->timestamp.is_bound()) {\n"
+      "*timestamp_redirect = proc_queue_head->timestamp;\n"
+      "}\n");
+  }
+  src = mputstr(src, "if (sender_ptr != NULL) *sender_ptr = ");
   if (is_address) src = mputstr(src, "*proc_queue_head->sender_address;\n");
   else src = mputstr(src, "proc_queue_head->sender_component;\n");
 
@@ -1516,6 +1566,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
     if (pdef->testport_type == ADDRESS) {
       def = mputprintf(def, "%s *sender_address;\n", pdef->address_name);
     }
+    if (pdef->realtime) {
+      def = mputstr(def, "FLOAT timestamp;\n");
+    }
     def = mputstr(def, "};\n\n");
     if (pdef->has_sliding) {
       def = mputprintf(def, "OCTETSTRING sliding_buffer;\n");
@@ -1594,6 +1647,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       "component sender_component;\n");
     if (pdef->testport_type == ADDRESS) {
       def = mputprintf(def, "%s *sender_address;\n", pdef->address_name);
+    }
+    if (pdef->realtime) {
+      def = mputstr(def, "FLOAT timestamp;\n");
     }
     def = mputstr(def, "proc_queue_item *next_item;\n"
       "} *proc_queue_head, *proc_queue_tail;\n");
@@ -1696,13 +1752,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
   }
   
   // Port type variables in the provider types.
-  if (pdef->n_mapper_name > 0) {
-    def = mputstr(def, "private:\n");
-    for (i = 0; i < pdef->n_mapper_name; i++) {
-      def = mputprintf(def,
-        "%s** p_%i;\n"
-        "size_t n_%i;\n", pdef->mapper_name[i], (int)i, (int)i);
-    }
+  if (pdef->port_type == PROVIDER) {
+    def = mputstr(def,
+      "private:\n"
+      "PORT** mapped_ports;\n"
+      "size_t n_mapped_ports;\n");
   }
   
   def = mputstr(def, "public:\n");
@@ -1733,10 +1787,10 @@ void defPortClass(const port_def* pdef, output_struct* output)
     src = mputprintf(src, "port_state = UNSET;\n");
   }
   // Port type variables in the provider types.
-  for (i = 0; i < pdef->n_mapper_name; i++) {
-    src = mputprintf(src,
-      "p_%i = NULL;\n"
-      "n_%i = 0;\n", (int)i, (int)i);
+  if (pdef->port_type == PROVIDER) {
+    src = mputstr(src,
+      "mapped_ports = NULL;\n"
+      "n_mapped_ports = 0;\n");
   }
   src = mputstr(src, "}\n\n");
 
@@ -1754,10 +1808,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
     const port_msg_mapped_type *msg = pdef->msg_out.elements + i;
 
     def = mputprintf(def, "void send(const %s& send_par, "
-      "const COMPONENT& destination_component);\n", msg->name);
+      "const COMPONENT& destination_component, FLOAT* timestamp_redirect = NULL);\n",
+      msg->name);
 
     src = mputprintf(src, "void %s::send(const %s& send_par, "
-      "const COMPONENT& destination_component)\n"
+      "const COMPONENT& destination_component, FLOAT* timestamp_redirect)\n"
       "{\n"
       "if (!is_started) TTCN_error(\"Sending a message on port %%s, which "
       "is not started.\", port_name);\n"
@@ -1789,10 +1844,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
           "{\n"
           // To generate DTE-s if not mapped or connected.
           "(void)get_default_destination();\n"
-          "outgoing_%ssend(send_par%s);\n"
+          "outgoing_%ssend(send_par%s%s);\n"
           "}\n",
           pdef->port_type == USER && !pdef->legacy ? "mapped_" : "",
-          pdef->testport_type == ADDRESS ? ", NULL" : "");
+          pdef->testport_type == ADDRESS ? ", NULL" : "",
+          pdef->realtime ? ", timestamp_redirect" : "");
       }
       src = mputprintf(src, "else {\n"
         "Text_Buf text_buf;\n"
@@ -1817,11 +1873,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
 
     if (pdef->testport_type == ADDRESS) {
       def = mputprintf(def, "void send(const %s& send_par, "
-        "const %s& destination_address);\n", msg->name,
-        pdef->address_name);
+        "const %s& destination_address, FLOAT* timestamp_redirect = NULL);\n",
+        msg->name, pdef->address_name);
 
       src = mputprintf(src, "void %s::send(const %s& send_par, "
-        "const %s& destination_address)\n"
+        "const %s& destination_address, FLOAT* timestamp_redirect)\n"
         "{\n"
         "if (!is_started) TTCN_error(\"Sending a message on port %%s, "
         "which is not started.\", port_name);\n"
@@ -1839,45 +1895,51 @@ void defPortClass(const port_def* pdef, output_struct* output)
       src = mputstr(src, "(void)get_default_destination();\n");
       if (pdef->port_type != USER || (msg->nTargets == 1 &&
         msg->targets[0].mapping_type == M_SIMPLE)) {
-        src = mputstr(src, "outgoing_send(send_par, "
-          "&destination_address);\n");
+        src = mputprintf(src, "outgoing_send(send_par, "
+          "&destination_address%s);\n",
+          pdef->realtime ? ", timestamp_redirect" : "");
       } else src = generate_send_mapping(src, pdef, msg, TRUE);
       src = mputstr(src, "}\n\n");
     }
 
-    def = mputprintf(def, "void send(const %s& send_par);\n", msg->name);
-    src = mputprintf(src, "void %s::send(const %s& send_par)\n"
+    def = mputprintf(def, "void send(const %s& send_par, "
+      "FLOAT* timestamp_redirect = NULL);\n", msg->name);
+    src = mputprintf(src, "void %s::send(const %s& send_par, "
+      "FLOAT* timestamp_redirect)\n"
       "{\n"
-      "send(send_par, COMPONENT(get_default_destination()));\n"
+      "send(send_par, COMPONENT(get_default_destination()), timestamp_redirect);\n"
       "}\n\n", class_name, msg->name);
 
     def = mputprintf(def, "void send(const %s_template& send_par, "
-      "const COMPONENT& destination_component);\n", msg->name);
+      "const COMPONENT& destination_component, FLOAT* timestamp_redirect = NULL);\n",
+      msg->name);
     src = mputprintf(src, "void %s::send(const %s_template& send_par, "
-      "const COMPONENT& destination_component)\n"
+      "const COMPONENT& destination_component, FLOAT* timestamp_redirect)\n"
       "{\n"
       "const %s& send_par_value = %s(send_par.valueof());\n"
-      "send(send_par_value, destination_component);\n"
+      "send(send_par_value, destination_component, timestamp_redirect);\n"
       "}\n\n", class_name, msg->name, msg->name, msg->name);
 
     if (pdef->testport_type == ADDRESS) {
       def = mputprintf(def, "void send(const %s_template& send_par, "
-        "const %s& destination_address);\n", msg->name,
+        "const %s& destination_address, FLOAT* timestamp_redirect = NULL);\n", msg->name,
         pdef->address_name);
       src = mputprintf(src, "void %s::send(const %s_template& send_par, "
-        "const %s& destination_address)\n"
+        "const %s& destination_address, FLOAT* timestamp_redirect)\n"
         "{\n"
         "const %s& send_par_value = %s(send_par.valueof());\n"
-        "send(send_par_value, destination_address);\n"
+        "send(send_par_value, destination_address, timestamp_redirect);\n"
         "}\n\n", class_name, msg->name, pdef->address_name, msg->name, msg->name);
     }
 
-    def = mputprintf(def, "void send(const %s_template& send_par);\n",
-      msg->name);
-    src = mputprintf(src, "void %s::send(const %s_template& send_par)\n"
+    def = mputprintf(def, "void send(const %s_template& send_par, "
+      "FLOAT* timestamp_redirect = NULL);\n", msg->name);
+    src = mputprintf(src, "void %s::send(const %s_template& send_par, "
+      "FLOAT* timestamp_redirect)\n"
       "{\n"
       "const %s& send_par_value = %s(send_par.valueof());\n"
-      "send(send_par_value, COMPONENT(get_default_destination()));\n"
+      "send(send_par_value, COMPONENT(get_default_destination()), "
+      "timestamp_redirect);\n"
       "}\n\n", class_name, msg->name, msg->name, msg->name);
   }
 
@@ -1885,9 +1947,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
   for (i = 0; i < pdef->proc_out.nElements; i++) {
     const port_proc_signature *sig = pdef->proc_out.elements + i;
     def = mputprintf(def, "void call(const %s_template& call_template, "
-      "const COMPONENT& destination_component);\n", sig->name);
+      "const COMPONENT& destination_component, FLOAT* timestamp_redirect = NULL);\n",
+      sig->name);
     src = mputprintf(src, "void %s::call(const %s_template& "
-      "call_template, const COMPONENT& destination_component)\n"
+      "call_template, const COMPONENT& destination_component, "
+      "FLOAT* timestamp_redirect)\n"
       "{\n"
       "if (!is_started) TTCN_error(\"Calling a signature on port %%s, "
       "which is not started.\", port_name);\n"
@@ -1912,8 +1976,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       src = mputstr(src, "TTCN_error(\"Internal port %s cannot send "
         "call to system.\", port_name);\n");
     } else {
-      src = mputprintf(src, "outgoing_call(call_tmp%s);\n",
-        pdef->testport_type == ADDRESS ? ", NULL" : "");
+      src = mputprintf(src, "outgoing_call(call_tmp%s%s);\n",
+        pdef->testport_type == ADDRESS ? ", NULL" : "",
+        pdef->realtime ? ", timestamp_redirect" : "");
     }
     src = mputprintf(src, "else {\n"
       "Text_Buf text_buf;\n"
@@ -1925,10 +1990,12 @@ void defPortClass(const port_def* pdef, output_struct* output)
 
     if (pdef->testport_type == ADDRESS) {
       def = mputprintf(def, "void call(const %s_template& "
-        "call_template, const %s& destination_address);\n",
+        "call_template, const %s& destination_address, "
+        "FLOAT* timestamp_redirect = NULL);\n",
         sig->name, pdef->address_name);
       src = mputprintf(src, "void %s::call(const %s_template& "
-        "call_template, const %s& destination_address)\n"
+        "call_template, const %s& destination_address, "
+        "FLOAT* timestamp_redirect)\n"
         "{\n"
         "if (!is_started) TTCN_error(\"Calling a signature on port "
         "%%s, which is not started.\", port_name);\n"
@@ -1944,17 +2011,19 @@ void defPortClass(const port_def* pdef, output_struct* output)
         " call_tmp.log(),"
         " TTCN_Logger::end_event_log2str()));\n"
         "}\n"
-        "outgoing_call(call_tmp, &destination_address);\n"
+        "outgoing_call(call_tmp, &destination_address%s);\n"
         "}\n\n",
-        class_name, sig->name, pdef->address_name, sig->name);
+        class_name, sig->name, pdef->address_name, sig->name,
+        pdef->realtime ? ", timestamp_redirect" : "");
     }
 
     def = mputprintf(def, "void call(const %s_template& "
-      "call_template);\n", sig->name);
+      "call_template, FLOAT* timestamp_redirect = NULL);\n", sig->name);
     src = mputprintf(src, "void %s::call(const %s_template& "
-      "call_template)\n"
+      "call_template, FLOAT* timestamp_redirect)\n"
       "{\n"
-      "call(call_template, COMPONENT(get_default_destination()));\n"
+      "call(call_template, COMPONENT(get_default_destination()), "
+      "timestamp_redirect);\n"
       "}\n\n", class_name, sig->name);
   }
 
@@ -1963,10 +2032,12 @@ void defPortClass(const port_def* pdef, output_struct* output)
     const port_proc_signature *sig = pdef->proc_in.elements + i;
     if (sig->is_noblock) continue;
     def = mputprintf(def,"void reply(const %s_template& "
-      "reply_template, const COMPONENT& destination_component);\n",
+      "reply_template, const COMPONENT& destination_component, "
+      "FLOAT* timestamp_redirect = NULL);\n",
       sig->name);
     src = mputprintf(src, "void %s::reply(const %s_template& "
-      "reply_template, const COMPONENT& destination_component)\n"
+      "reply_template, const COMPONENT& destination_component, "
+      "FLOAT* timestamp_redirect)\n"
       "{\n"
       "if (!is_started) TTCN_error(\"Replying to a signature on port "
       "%%s, which is not started.\", port_name);\n"
@@ -1990,8 +2061,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       src = mputstr(src, "TTCN_error(\"Internal port %s cannot send "
         "reply to system.\", port_name);\n");
     } else {
-      src = mputprintf(src, "outgoing_reply(reply_tmp%s);\n",
-        pdef->testport_type == ADDRESS ? ", NULL" : "");
+      src = mputprintf(src, "outgoing_reply(reply_tmp%s%s);\n",
+        pdef->testport_type == ADDRESS ? ", NULL" : "",
+        pdef->realtime ? ", timestamp_redirect" : "");
     }
     src = mputprintf(src, "else {\n"
       "Text_Buf text_buf;\n"
@@ -2003,10 +2075,12 @@ void defPortClass(const port_def* pdef, output_struct* output)
 
     if (pdef->testport_type == ADDRESS) {
       def = mputprintf(def, "void reply(const %s_template& "
-        "reply_template, const %s& destination_address);\n",
+        "reply_template, const %s& destination_address, "
+        "FLOAT* timestamp_redirect = NULL);\n",
         sig->name, pdef->address_name);
       src = mputprintf(src, "void %s::reply(const %s_template& "
-        "reply_template, const %s& destination_address)\n"
+        "reply_template, const %s& destination_address, "
+        "FLOAT* timestamp_redirect)\n"
         "{\n"
         "if (!is_started) TTCN_error(\"Replying to a call on port "
         "%%s, which is not started.\", port_name);\n"
@@ -2022,17 +2096,19 @@ void defPortClass(const port_def* pdef, output_struct* output)
         " reply_tmp.log(),"
         " TTCN_Logger::end_event_log2str()));\n"
         "}\n"
-        "outgoing_reply(reply_tmp, &destination_address);\n"
+        "outgoing_reply(reply_tmp, &destination_address%s);\n"
         "}\n\n",
-        class_name, sig->name, pdef->address_name, sig->name);
+        class_name, sig->name, pdef->address_name, sig->name,
+        pdef->realtime ? ", timestamp_redirect" : "");
     }
 
     def = mputprintf(def, "void reply(const %s_template& "
-      "reply_template);\n", sig->name);
+      "reply_template, FLOAT* timestamp_redirect = NULL);\n", sig->name);
     src = mputprintf(src, "void %s::reply(const %s_template& "
-      "reply_template)\n"
+      "reply_template, FLOAT* timestamp_redirect)\n"
       "{\n"
-      "reply(reply_template, COMPONENT(get_default_destination()));\n"
+      "reply(reply_template, COMPONENT(get_default_destination()), "
+      "timestamp_redirect);\n"
       "}\n\n", class_name, sig->name);
   }
 
@@ -2041,10 +2117,12 @@ void defPortClass(const port_def* pdef, output_struct* output)
     const port_proc_signature *sig = pdef->proc_in.elements + i;
     if (!sig->has_exceptions) continue;
     def = mputprintf(def, "void raise(const %s_exception& "
-      "raise_exception, const COMPONENT& destination_component);\n",
+      "raise_exception, const COMPONENT& destination_component, "
+      "FLOAT* timestamp_redirect = NULL);\n",
       sig->name);
     src = mputprintf(src, "void %s::raise(const %s_exception& "
-      "raise_exception, const COMPONENT& destination_component)\n"
+      "raise_exception, const COMPONENT& destination_component, "
+      "FLOAT* timestamp_redirect)\n"
       "{\n"
       "if (!is_started) TTCN_error(\"Raising an exception on port %%s, "
       "which is not started.\", port_name);\n"
@@ -2067,8 +2145,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       src = mputstr(src, "TTCN_error(\"Internal port %s cannot raise an "
         "exception to system.\", port_name);\n");
     } else {
-      src = mputprintf(src, "outgoing_raise(raise_exception%s);\n",
-        pdef->testport_type == ADDRESS ? ", NULL" : "");
+      src = mputprintf(src, "outgoing_raise(raise_exception%s%s);\n",
+        pdef->testport_type == ADDRESS ? ", NULL" : "",
+        pdef->realtime ? ", timestamp_redirect" : "");
     }
     src = mputprintf(src, "else {\n"
       "Text_Buf text_buf;\n"
@@ -2080,10 +2159,12 @@ void defPortClass(const port_def* pdef, output_struct* output)
 
     if (pdef->testport_type == ADDRESS) {
       def = mputprintf(def, "void raise(const %s_exception& "
-        "raise_exception, const %s& destination_address);\n",
+        "raise_exception, const %s& destination_address, "
+        "FLOAT* timestamp_redirect = NULL);\n",
         sig->name, pdef->address_name);
       src = mputprintf(src, "void %s::raise(const %s_exception& "
-        "raise_exception, const %s& destination_address)\n"
+        "raise_exception, const %s& destination_address, "
+        "FLOAT* timestamp_redirect)\n"
         "{\n"
         "if (!is_started) TTCN_error(\"Raising an exception on port "
         "%%s, which is not started.\", port_name);\n"
@@ -2098,17 +2179,19 @@ void defPortClass(const port_def* pdef, output_struct* output)
         " raise_exception.log(),"
         " TTCN_Logger::end_event_log2str()));\n"
         "}\n"
-        "outgoing_raise(raise_exception, &destination_address);\n"
+        "outgoing_raise(raise_exception, &destination_address%s);\n"
         "}\n\n",
-        class_name, sig->name, pdef->address_name);
+        class_name, sig->name, pdef->address_name,
+        pdef->realtime ? ", timestamp_redirect" : "");
     }
 
     def = mputprintf(def, "void raise(const %s_exception& "
-      "raise_exception);\n", sig->name);
+      "raise_exception, FLOAT* timestamp_redirect = NULL);\n", sig->name);
     src = mputprintf(src, "void %s::raise(const %s_exception& "
-      "raise_exception)\n"
+      "raise_exception, FLOAT* timestamp_redirect)\n"
       "{\n"
-      "raise(raise_exception, COMPONENT(get_default_destination()));\n"
+      "raise(raise_exception, COMPONENT(get_default_destination()), "
+      "timestamp_redirect);\n"
       "}\n\n", class_name, sig->name);
   }
 
@@ -2226,76 +2309,54 @@ void defPortClass(const port_def* pdef, output_struct* output)
     
   }
   // Port type variables in the provider types.
-  if (pdef->n_mapper_name > 0) {
+  if (pdef->port_type == PROVIDER) {
     def = mputstr(def, "public:\n");
     // add_port and remove_port is called after the map and unmap statements.
     def = mputstr(def, "void add_port(PORT* p);\n");
-    src = mputprintf(src, "void %s::add_port(PORT* p)\n{\n", class_name);
-    for (i = 0; i < pdef->n_mapper_name; i++) {
-      src = mputprintf(src,
-        "%s* x_%i = dynamic_cast<%s*>(p);\n"
-        "if (x_%i != NULL) {\n"
-        "n_%i++;\n"
-        "p_%i = static_cast<%s**>(Realloc(p_%i, n_%i * sizeof(%s*)));\n"
-        "p_%i[n_%i-1] = x_%i;\n"
-        "return;\n"
-        "}\n",
-        pdef->mapper_name[i], (int)i,
-        pdef->mapper_name[i], (int)i, (int)i,
-        (int)i, pdef->mapper_name[i], (int)i, (int)i,
-        pdef->mapper_name[i], (int)i, (int)i, (int)i);
-    }
-    src = mputstr(src,
-      "TTCN_error(\"Internal error: Adding invalid port type.\");\n"
-      "}\n\n");
+    src = mputprintf(src,
+      "void %s::add_port(PORT* p)\n"
+      "{\n"
+      "++n_mapped_ports;\n"
+      "mapped_ports = static_cast<PORT**>(Realloc(mapped_ports, "
+      "n_mapped_ports * sizeof(PORT*)));\n"
+      "mapped_ports[n_mapped_ports - 1] = p;\n"
+      "}\n\n", class_name);
     
     def = mputstr(def, "void remove_port(PORT* p);\n");
-    src = mputprintf(src, "void %s::remove_port(PORT* p)\n{\n", class_name);
-      
-    for (i = 0; i < pdef->n_mapper_name; i++) {
-      src = mputprintf(src,
-        "%s* x_%i = dynamic_cast<%s*>(p);\n"
-        "if (x_%i != NULL) {\n"
-        "for (size_t i = 0; i < n_%i; i++) {\n"
-        "if (p_%i[i] == x_%i) {\n"
-        "p_%i[i] = NULL;\n"
-        "}\n"
-        "}\n"
-        "size_t size = 0;\n"
-        "%s** port_list = NULL;\n"
-        "for (size_t i = 0; i < n_%i; i++) {\n"
-        "if (p_%i[i] != NULL) {\n"
-        "size++;\n"
-        "port_list = static_cast<%s**>(Realloc(port_list, size * sizeof(%s*)));\n"
-        "port_list[size-1] = p_%i[i];\n"
-        "}\n"
-        "}\n"
-        "Free(p_%i);\n"
-        "p_%i = port_list;\n"
-        "n_%i = size;\n"
-        "return;\n"
-        "}\n",
-        pdef->mapper_name[i], (int)i, pdef->mapper_name[i], (int)i,
-        (int)i, (int)i, (int)i, (int)i, pdef->mapper_name[i], (int)i, (int)i,
-        pdef->mapper_name[i], pdef->mapper_name[i],
-        (int)i, (int)i, (int)i, (int)i);
-    }
-    
-    src = mputstr(src,
-      "TTCN_error(\"Internal error: Removing invalid port type.\");\n"
-      "}\n\n");
+    src = mputprintf(src,
+      "void %s::remove_port(PORT* p)\n"
+      "{\n"
+      "size_t new_size = n_mapped_ports;\n"
+      "for (size_t i = 0; i < n_mapped_ports; ++i) {\n"
+      "if (mapped_ports[i] == p) {\n"
+      "mapped_ports[i] = NULL;\n"
+      "--new_size;\n"
+      "}\n"
+      "}\n"
+      "if (new_size != n_mapped_ports) {\n"
+      "PORT** new_list = static_cast<PORT**>(Malloc(new_size * sizeof(PORT*)));\n"
+      "for (size_t i = 0, j = 0; i < n_mapped_ports; ++i) {\n"
+      "if (mapped_ports[i] != NULL) {\n"
+      "new_list[j] = mapped_ports[i];\n"
+      "++j;\n"
+      "}\n"
+      "}\n"
+      "Free(mapped_ports);\n"
+      "mapped_ports = new_list;\n"
+      "n_mapped_ports = new_size;\n"
+      "}\n"
+      "}\n\n", class_name);
     
     def = mputstr(def, "private:\n");
     // Resets all port type variables to NULL
     def = mputstr(def, "void reset_port_variables();\n");
-    src = mputprintf(src, "void %s::reset_port_variables() {\n", class_name);
-    for (i = 0; i < pdef->n_mapper_name; i++) {
-      src = mputprintf(src,
-        "Free(p_%i);\n"
-        "p_%i = NULL;\n"
-        "n_%i = 0;\n", (int)i, (int)i, (int)i);
-    }
-    src = mputstr(src, "}\n\n");
+    src = mputprintf(src,
+      "void %s::reset_port_variables()\n"
+      "{\n"
+      "Free(mapped_ports);\n"
+      "mapped_ports = NULL;\n"
+      "n_mapped_ports = 0;\n"
+      "}\n\n", class_name);
   }
   
   if ((pdef->testport_type != INTERNAL || !pdef->legacy) &&
@@ -2333,6 +2394,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
             def = mputprintf(def, ", const %s *destination_address",
               pdef->address_name);
           }
+          if (pdef->realtime) {
+            def = mputstr(def, ", FLOAT* timestamp_redirect");
+          }
           def = mputstr(def, ") = 0;\n");
         }
         // When port translation is enabled
@@ -2342,13 +2406,17 @@ void defPortClass(const port_def* pdef, output_struct* output)
         // This is for the types that are present in the out message list of the port
         if (pdef->port_type == USER && !pdef->legacy) {
           def = mputprintf(def, "void outgoing_mapped_send("
-          "const %s& send_par);\n", pdef->msg_out.elements[i].name);
+          "const %s& send_par%s);\n", pdef->msg_out.elements[i].name,
+            pdef->realtime ? ", FLOAT* timestamp_redirect" : "");
         
           src = mputprintf(src, "void %s::outgoing_mapped_send("
             "const %s& send_par", class_name, pdef->msg_out.elements[i].name);
           if (pdef->testport_type == ADDRESS) {
-            def = mputprintf(def, ", const %s *destination_address",
-              pdef->address_name);
+            src = mputprintf(src, ", const %s *destination_address",
+              pdef->address_name); // TODO: add parameter to function declaration and usage
+          }
+          if (pdef->realtime) {
+            src = mputstr(src, ", FLOAT* timestamp_redirect");
           }
           src = mputstr(src, ") {\n");
           for (size_t j = 0; j < pdef->provider_msg_outlist.nElements; j++) {
@@ -2365,9 +2433,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
               src = mputprintf(src,
                 "for (size_t i = 0; i < n_%i; i++) {\n"
                 "if (p_%i[i] != NULL) {\n"
-                "p_%i[i]->outgoing_public_send(send_par);\n"
+                "p_%i[i]->outgoing_public_send(send_par%s);\n"
                 "return;\n}\n"
-                "}\n", (int)j, (int)j, (int)j);
+                "}\n", (int)j, (int)j, (int)j,
+                pdef->provider_msg_outlist.elements[j].realtime ?
+                  (pdef->realtime ? ", timestamp_redirect" : ", NULL") : "");
             }
           }
           found = FALSE;
@@ -2378,7 +2448,7 @@ void defPortClass(const port_def* pdef, output_struct* output)
             }
           }
           if (found && (pdef->testport_type != INTERNAL || pdef->legacy)) {
-            src = mputprintf(src, "outgoing_send(send_par);\n");
+            src = mputprintf(src, "outgoing_send(send_par%s);\n", pdef->realtime ? ", timestamp_redirect" : "");
           } else if (pdef->testport_type == INTERNAL && !pdef->legacy) {
             src = mputprintf(src, "TTCN_error(\"Cannot send message without successful mapping on a internal port with translation capability.\");\n");
           } else {
@@ -2409,13 +2479,17 @@ void defPortClass(const port_def* pdef, output_struct* output)
             // functions, or its own outgoing_send function.
             // This is for the mapping target types.
             def = mputprintf(def, "void outgoing_mapped_send("
-            "const %s& send_par);\n", pdef->msg_out.elements[i].targets[j].target_name);
+            "const %s& send_par%s);\n", pdef->msg_out.elements[i].targets[j].target_name,
+            pdef->realtime ? ", FLOAT* timestamp_redirect" : "");
 
             src = mputprintf(src, "void %s::outgoing_mapped_send("
               "const %s& send_par", class_name, pdef->msg_out.elements[i].targets[j].target_name);
             if (pdef->testport_type == ADDRESS) {
-              def = mputprintf(def, ", const %s *destination_address",
-                pdef->address_name);
+              src = mputprintf(src, ", const %s *destination_address",
+                pdef->address_name); // TODO: add parameter to function declaration and usage
+            }
+            if (pdef->realtime) {
+              src = mputstr(src, ", FLOAT* timestamp_redirect");
             }
             src = mputstr(src, ") {\n");
             for (size_t k = 0; k < pdef->provider_msg_outlist.nElements; k++) {
@@ -2432,9 +2506,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
                 src = mputprintf(src,
                   "for (size_t i = 0; i < n_%i; i++) {\n"
                   "if (p_%i[i] != NULL) {\n"
-                  "p_%i[i]->outgoing_public_send(send_par);\n"
+                  "p_%i[i]->outgoing_public_send(send_par%s);\n"
                   "return;\n}\n"
-                  "}\n", (int)k, (int)k, (int)k);
+                  "}\n", (int)k, (int)k, (int)k,
+                  pdef->provider_msg_outlist.elements[k].realtime ?
+                    (pdef->realtime ? ", timestamp_redirect" : ", NULL") : "");
               }
             }
             found = FALSE;
@@ -2445,7 +2521,7 @@ void defPortClass(const port_def* pdef, output_struct* output)
               }
             }
             if (found) {
-              src = mputprintf(src, "outgoing_send(send_par);\n");
+              src = mputprintf(src, "outgoing_send(send_par%s);\n", pdef->realtime ? ", timestamp_redirect" : "");
             } else {
               // This should never happen
               src = mputprintf(src, "TTCN_error(\"Cannot send message correctly %s\");\n", pdef->msg_out.elements[i].targets[j].target_name);
@@ -2469,6 +2545,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
         def = mputprintf(def, ", const %s *destination_address",
           pdef->address_name);
       }
+      if (pdef->realtime) {
+        def = mputstr(def, ", FLOAT* timestamp_redirect");
+      }
       def = mputstr(def, ") = 0;\n");
     }
     /* outgoing_reply functions */
@@ -2479,6 +2558,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       if (pdef->testport_type == ADDRESS) {
         def = mputprintf(def, ", const %s *destination_address",
           pdef->address_name);
+      }
+      if (pdef->realtime) {
+        def = mputstr(def, ", FLOAT* timestamp_redirect");
       }
       def = mputstr(def, ") = 0;\n");
     }
@@ -2492,6 +2574,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
         def = mputprintf(def, ", const %s *destination_address",
           pdef->address_name);
       }
+      if (pdef->realtime) {
+        def = mputstr(def, ", FLOAT* timestamp_redirect");
+      }
       def = mputstr(def, ") = 0;\n");
     }
   }
@@ -2499,14 +2584,17 @@ void defPortClass(const port_def* pdef, output_struct* output)
   def = mputstr(def, "public:\n");
   
   // Generate new functions for provider types to avoid changing the visibility of outgoing_send
-  if (pdef->n_mapper_name > 0) {
+  if (pdef->port_type == PROVIDER) {
     for (i = 0; i < pdef->msg_out.nElements; i++) {
       def = mputprintf(def, "void outgoing_public_send("
-        "const %s& send_par);\n", pdef->msg_out.elements[i].name);
+        "const %s& send_par%s);\n", pdef->msg_out.elements[i].name,
+        pdef->realtime ? ", FLOAT* timestamp_redirect" : "");
       src = mputprintf(src,
-        "void %s::outgoing_public_send(const %s& send_par) {\n"
-        "outgoing_send(send_par);\n"
-        "}\n\n", class_name, pdef->msg_out.elements[i].name);
+        "void %s::outgoing_public_send(const %s& send_par%s) {\n"
+        "outgoing_send(send_par%s);\n"
+        "}\n\n", class_name, pdef->msg_out.elements[i].name,
+        pdef->realtime ? ", FLOAT* timestamp_redirect" : "",
+        pdef->realtime ? ", timestamp_redirect" : "");
     }
   }
   
@@ -2655,9 +2743,6 @@ void defPortClass(const port_def* pdef, output_struct* output)
   if (pdef->port_type == USER) {
     /* incoming_message() functions for the incoming types of the provider
      * port type */
-    if (!pdef->legacy) {
-      def = mputstr(def, "public:\n");
-    }
     for (i = 0; i < pdef->provider_msg_in.nElements; i++) {
       const port_msg_mapped_type *mapped_type =
         pdef->provider_msg_in.elements + i;
@@ -2671,6 +2756,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
         def = mputprintf(def, ", const %s *sender_address",
           pdef->address_name);
       }
+      if (pdef->realtime) {
+        def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+      }
       def = mputstr(def, ");\n");
 
       src = mputprintf(src, "void %s::incoming_message(const %s& "
@@ -2680,6 +2768,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       if (pdef->testport_type == ADDRESS) {
         src = mputprintf(src, ", const %s *sender_address",
           pdef->address_name);
+      }
+      if (pdef->realtime) {
+        src = mputstr(src, ", const FLOAT& timestamp");
       }
       src = mputstr(src, ")\n"
         "{\n"
@@ -2731,10 +2822,13 @@ void defPortClass(const port_def* pdef, output_struct* output)
           "msg_queue_item *new_item = new msg_queue_item;\n"
           "new_item->item_selection = MESSAGE_%lu;\n"
           "new_item->message_%lu = new %s(incoming_par);\n"
-          "new_item->sender_component = sender_component;\n",
+          "new_item->sender_component = sender_component;\n"
+          "%s",
           (unsigned long) mapped_type->targets[0].target_index,
           (unsigned long) mapped_type->targets[0].target_index,
-          mapped_type->name);
+          mapped_type->name,
+          pdef->realtime ? "if (timestamp.is_bound()) "
+          "new_item->timestamp = timestamp;\n" : "");
         if (pdef->testport_type == ADDRESS) {
           src = mputprintf(src, "if (sender_address != NULL) "
             "new_item->sender_address = new %s(*sender_address);\n"
@@ -2745,11 +2839,43 @@ void defPortClass(const port_def* pdef, output_struct* output)
       }
       src = mputstr(src, "}\n\n");
     }
+    
+    if (!pdef->legacy && pdef->provider_msg_in.nElements) {
+      /* virtual incoming_message_handler function */
+      def = mputprintf(def,
+        "boolean incoming_message_handler(const void* message_ptr, "
+        "const char* message_type, component sender_component, "
+        "const FLOAT& timestamp);\n"); /* TODO: address? */
+
+      src = mputprintf(src,
+        "boolean %s::incoming_message_handler(const void* message_ptr, "
+        "const char* message_type, component sender_component, "
+        "const FLOAT&%s)\n"
+        "{\n", class_name, pdef->realtime ? " timestamp" : "");
+      for (i = 0; i < pdef->provider_msg_in.nElements; i++) {
+        const port_msg_mapped_type* mapped_type = 
+          pdef->provider_msg_in.elements + i;
+        if (i > 0) {
+          src = mputstr(src, "else ");
+        }
+        src = mputprintf(src,
+          "if (strcmp(message_type, \"%s\") == 0) {\n"
+          "const %s* typed_ptr = reinterpret_cast<const %s*>(message_ptr);\n"
+          "if (typed_ptr == NULL) {\n"
+          "TTCN_error(\"Internal error: Type of message in incoming message "
+          "handler function is not the indicated `%s'\");\n"
+          "}\n"
+          "incoming_message(*typed_ptr, sender_component%s);\n"
+          "return TRUE;\n"
+          "}\n", mapped_type->dispname, mapped_type->name, mapped_type->name,
+          mapped_type->dispname, pdef->realtime ? ", timestamp" : "");
+      }
+      src = mputstr(src,
+        "return FALSE;\n"
+        "}\n\n");
+    }
   } else { /* not user */
     /* incoming_message functions */
-    if (pdef->port_type == PROVIDER && pdef->n_mapper_name > 0) {
-      def = mputstr(def, "public:\n");
-    }
     for (i = 0; i < pdef->msg_in.nElements; i++) {
       def = mputprintf(def, "void incoming_message(const %s& "
         "incoming_par, component sender_component",
@@ -2757,6 +2883,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       if (pdef->testport_type == ADDRESS) {
         def = mputprintf(def, ", const %s *sender_address",
           pdef->address_name);
+      }
+      if (pdef->realtime) {
+        def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
       }
       def = mputstr(def, ");\n");
 
@@ -2767,18 +2896,21 @@ void defPortClass(const port_def* pdef, output_struct* output)
         src = mputprintf(src, ", const %s *sender_address",
           pdef->address_name);
       }
+      if (pdef->realtime) {
+        src = mputstr(src, ", const FLOAT& timestamp");
+      }
       src = mputstr(src, ")\n{\n");
-      if (pdef->port_type == PROVIDER && pdef->n_mapper_name > 0) {
+      if (pdef->port_type == PROVIDER) {
         // We forward the incoming_message to the mapped port
-        for (size_t j = 0; j < pdef->n_mapper_name; j++) {
-          src = mputprintf(src,
-            "for (size_t i = 0; i < n_%i; i++) {\n"
-            "if (p_%i[i] != NULL) {\n"
-            "p_%i[i]->incoming_message(incoming_par, sender_component);\n"
-            "return;\n}"
-            "}\n",
-            (int)j, (int)j, (int)j);
-        }
+        src = mputprintf(src,
+          "for (size_t i = 0; i < n_mapped_ports; i++) {\n"
+          "if (mapped_ports[i] != NULL && mapped_ports[i]->"
+          "incoming_message_handler(&incoming_par, \"%s\", sender_component, %s)) {\n"
+          "return;\n"
+          "}\n"
+          "}\n",
+          pdef->msg_in.elements[i].dispname,
+          pdef->realtime ? "timestamp" : "FLOAT()");
       }
       src = mputstr(src,
         "if (!is_started) TTCN_error(\"Port %s is not started but a "
@@ -2810,10 +2942,13 @@ void defPortClass(const port_def* pdef, output_struct* output)
         "msg_queue_item *new_item = new msg_queue_item;\n"
         "new_item->item_selection = MESSAGE_%lu;\n"
         "new_item->message_%lu = new %s(incoming_par);\n"
-        "new_item->sender_component = sender_component;\n",
+        "new_item->sender_component = sender_component;\n"
+        "%s",
         pdef->msg_in.elements[i].dispname,
         (unsigned long) i, (unsigned long) i,
-        pdef->msg_in.elements[i].name);
+        pdef->msg_in.elements[i].name,
+        pdef->realtime ? "if (timestamp.is_bound()) "
+          "new_item->timestamp = timestamp;\n" : "");
       if (pdef->testport_type == ADDRESS) {
         src = mputprintf(src, "if (sender_address != NULL) "
           "new_item->sender_address = new %s(*sender_address);\n"
@@ -2825,8 +2960,7 @@ void defPortClass(const port_def* pdef, output_struct* output)
     }
   }
   
-  if ((pdef->port_type == PROVIDER && pdef->n_mapper_name > 0) ||
-      (pdef->port_type == USER && !pdef->legacy)) {
+  if (pdef->port_type == PROVIDER || (pdef->port_type == USER && !pdef->legacy)) {
     def = mputstr(def, "private:\n");
   }
 
@@ -2839,12 +2973,18 @@ void defPortClass(const port_def* pdef, output_struct* output)
       def = mputprintf(def, ", const %s *sender_address",
         pdef->address_name);
     }
+    if (pdef->realtime) {
+      def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+    }
     def = mputstr(def, ");\n");
     src = mputprintf(src, "void %s::incoming_call(const %s_call& "
       "incoming_par, component sender_component", class_name, sig->name);
     if (pdef->testport_type == ADDRESS) {
       src = mputprintf(src, ", const %s *sender_address",
         pdef->address_name);
+    }
+    if (pdef->realtime) {
+      src = mputstr(src, ", const FLOAT& timestamp");
     }
     src = mputstr(src, ")\n"
       "{\n"
@@ -2877,8 +3017,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
       "proc_queue_item *new_item = new proc_queue_item;\n"
       "new_item->item_selection = CALL_%lu;\n"
       "new_item->call_%lu = new %s_call(incoming_par);\n"
-      "new_item->sender_component = sender_component;\n",
-      (unsigned long) i, (unsigned long) i, sig->name);
+      "new_item->sender_component = sender_component;\n"
+      "%s",
+      (unsigned long) i, (unsigned long) i, sig->name,
+      pdef->realtime ? "if (timestamp.is_bound()) "
+        "new_item->timestamp = timestamp;\n" : "");
     if (pdef->testport_type == ADDRESS) {
       src = mputprintf(src, "if (sender_address != NULL) "
         "new_item->sender_address = new %s(*sender_address);\n"
@@ -2898,6 +3041,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       def = mputprintf(def, ", const %s *sender_address",
         pdef->address_name);
     }
+    if (pdef->realtime) {
+      def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+    }
     def = mputstr(def, ");\n");
     src = mputprintf(src, "void %s::incoming_reply(const %s_reply& "
       "incoming_par, component sender_component", class_name,
@@ -2905,6 +3051,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
     if (pdef->testport_type == ADDRESS) {
       src = mputprintf(src, ", const %s *sender_address",
         pdef->address_name);
+    }
+    if (pdef->realtime) {
+      src = mputstr(src, ", const FLOAT& timestamp");
     }
     src = mputstr(src, ")\n"
       "{\n"
@@ -2933,8 +3082,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
       "proc_queue_item *new_item = new proc_queue_item;\n"
       "new_item->item_selection = REPLY_%lu;\n"
       "new_item->reply_%lu = new %s_reply(incoming_par);\n"
-      "new_item->sender_component = sender_component;\n",
-      (unsigned long) i, (unsigned long) i, sig->name);
+      "new_item->sender_component = sender_component;\n"
+      "%s",
+      (unsigned long) i, (unsigned long) i, sig->name,
+      pdef->realtime ? "if (timestamp.is_bound()) "
+        "new_item->timestamp = timestamp;\n" : "");
     if (pdef->testport_type == ADDRESS) {
       src = mputprintf(src, "if (sender_address != NULL) "
         "new_item->sender_address = new %s(*sender_address);\n"
@@ -2955,6 +3107,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
       def = mputprintf(def, ", const %s *sender_address",
         pdef->address_name);
     }
+    if (pdef->realtime) {
+      def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+    }
     def = mputstr(def, ");\n");
     src = mputprintf(src,
       "void %s::incoming_exception(const %s_exception& incoming_par, "
@@ -2962,6 +3117,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
     if (pdef->testport_type == ADDRESS) {
       src = mputprintf(src, ", const %s *sender_address",
         pdef->address_name);
+    }
+    if (pdef->realtime) {
+      src = mputstr(src, ", const FLOAT& timestamp");
     }
     src = mputstr(src, ")\n"
       "{\n"
@@ -2992,8 +3150,11 @@ void defPortClass(const port_def* pdef, output_struct* output)
       "proc_queue_item *new_item = new proc_queue_item;\n"
       "new_item->item_selection = EXCEPTION_%lu;\n"
       "new_item->exception_%lu = new %s_exception(incoming_par);\n"
-      "new_item->sender_component = sender_component;\n",
-      (unsigned long) i, (unsigned long) i, sig->name);
+      "new_item->sender_component = sender_component;\n"
+      "%s",
+      (unsigned long) i, (unsigned long) i, sig->name,
+      pdef->realtime ? "if (timestamp.is_bound()) "
+        "new_item->timestamp = timestamp;\n" : "");
     if (pdef->testport_type == ADDRESS) {
       src = mputprintf(src, "if (sender_address != NULL) "
         "new_item->sender_address = new %s(*sender_address);\n"
@@ -3018,9 +3179,13 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address = NULL",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputprintf(def, ") { incoming_message(incoming_par, "
-          "SYSTEM_COMPREF%s); }\n",
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          "SYSTEM_COMPREF%s%s); }\n",
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
       for (i = 0; i < pdef->proc_in.nElements; i++) {
         /* wrapper for incoming_call */
@@ -3031,9 +3196,13 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address = NULL",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputprintf(def, ") { incoming_call(incoming_par, "
-          "SYSTEM_COMPREF%s); }\n",
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          "SYSTEM_COMPREF%s%s); }\n",
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
       for (i = 0; i < pdef->proc_out.nElements; i++) {
         /* wrapper for incoming_reply */
@@ -3045,9 +3214,13 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address = NULL",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputprintf(def, ") { incoming_reply(incoming_par, "
-          "SYSTEM_COMPREF%s); }\n",
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          "SYSTEM_COMPREF%s%s); }\n",
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
       for (i = 0; i < pdef->proc_out.nElements; i++) {
         /* wrapper for incoming_exception */
@@ -3059,9 +3232,13 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address = NULL",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputprintf(def, ") { incoming_exception(incoming_par, "
-          "SYSTEM_COMPREF%s); }\n",
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          "SYSTEM_COMPREF%s%s); }\n",
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
     } else {
       /** implementation of pure virtual functions that are defined in
@@ -3082,6 +3259,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputstr(def, ");\n");
         src = mputprintf(src, "void %s::incoming_message("
           "const %s& incoming_par", class_name, message_type);
@@ -3089,12 +3269,16 @@ void defPortClass(const port_def* pdef, output_struct* output)
           src = mputprintf(src, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          src = mputstr(src, ", const FLOAT& timestamp");
+        }
         src = mputprintf(src, ")\n"
           "{\n"
-          "incoming_message(incoming_par, SYSTEM_COMPREF%s%s);\n"
+          "incoming_message(incoming_par, SYSTEM_COMPREF%s%s%s);\n"
           "}\n\n",
           (pdef->has_sliding ? ", sliding_buffer": ""),
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
       for (i = 0; i < pdef->proc_in.nElements; i++) {
         /* incoming_call */
@@ -3104,6 +3288,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputstr(def, ");\n");
         src = mputprintf(src, "void %s::incoming_call(const %s_call& "
           "incoming_par", class_name, pdef->proc_in.elements[i].name);
@@ -3111,11 +3298,15 @@ void defPortClass(const port_def* pdef, output_struct* output)
           src = mputprintf(src, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          src = mputstr(src, ", const FLOAT& timestamp");
+        }
         src = mputprintf(src, ")\n"
           "{\n"
-          "incoming_call(incoming_par, SYSTEM_COMPREF%s);\n"
+          "incoming_call(incoming_par, SYSTEM_COMPREF%s%s);\n"
           "}\n\n",
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
       for (i = 0; i < pdef->proc_out.nElements; i++) {
         /* incoming_reply */
@@ -3126,6 +3317,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputstr(def, ");\n");
         src = mputprintf(src, "void %s::incoming_reply(const %s_reply& "
           "incoming_par", class_name,
@@ -3134,11 +3328,15 @@ void defPortClass(const port_def* pdef, output_struct* output)
           src = mputprintf(src, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          src = mputstr(src, ", const FLOAT& timestamp");
+        }
         src = mputprintf(src, ")\n"
           "{\n"
-          "incoming_reply(incoming_par, SYSTEM_COMPREF%s);\n"
+          "incoming_reply(incoming_par, SYSTEM_COMPREF%s%s);\n"
           "}\n\n",
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
       for (i = 0; i < pdef->proc_out.nElements; i++) {
         /* incoming_exception */
@@ -3150,6 +3348,9 @@ void defPortClass(const port_def* pdef, output_struct* output)
           def = mputprintf(def, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          def = mputstr(def, ", const FLOAT& timestamp = FLOAT()");
+        }
         def = mputstr(def, ");\n");
         src = mputprintf(src, "void %s::incoming_exception("
           "const %s_exception& incoming_par", class_name,
@@ -3158,11 +3359,15 @@ void defPortClass(const port_def* pdef, output_struct* output)
           src = mputprintf(src, ", const %s *sender_address",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          src = mputstr(src, ", const FLOAT& timestamp");
+        }
         src = mputprintf(src, ")\n"
           "{\n"
-          "incoming_exception(incoming_par, SYSTEM_COMPREF%s);\n"
+          "incoming_exception(incoming_par, SYSTEM_COMPREF%s%s);\n"
           "}\n\n",
-          pdef->testport_type == ADDRESS ? ", sender_address" : "");
+          pdef->testport_type == ADDRESS ? ", sender_address" : "",
+          pdef->realtime ? ", timestamp" : "");
       }
     }
   }
@@ -3410,6 +3615,9 @@ void generateTestPortSkeleton(const port_def *pdef)
         fprintf(fp, ",\n"
           "\t\tconst %s *destination_address", pdef->address_name);
       }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* timestamp_redirect");
+      }
       fputs(");\n", fp);
     }
     for (i = 0; i < pdef->proc_out.nElements; i++) {
@@ -3418,6 +3626,9 @@ void generateTestPortSkeleton(const port_def *pdef)
       if (pdef->testport_type == ADDRESS) {
         fprintf(fp, ",\n"
           "\t\tconst %s *destination_address", pdef->address_name);
+      }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* timestamp_redirect");
       }
       fputs(");\n" , fp);
     }
@@ -3429,6 +3640,9 @@ void generateTestPortSkeleton(const port_def *pdef)
         fprintf(fp, ",\n"
           "\t\tconst %s *destination_address", pdef->address_name);
       }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* timestamp_redirect");
+      }
       fputs(");\n", fp);
     }
     for (i = 0; i < pdef->proc_in.nElements; i++) {
@@ -3438,6 +3652,9 @@ void generateTestPortSkeleton(const port_def *pdef)
       if (pdef->testport_type == ADDRESS) {
         fprintf(fp, ",\n"
           "\t\tconst %s *destination_address", pdef->address_name);
+      }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* timestamp_redirect");
       }
       fputs(");\n", fp);
     }
@@ -3451,6 +3668,9 @@ void generateTestPortSkeleton(const port_def *pdef)
             "\t\tconst %s *sender_address = NULL",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          fprintf(fp, ", const FLOAT& timestamp = FLOAT()");
+        }
         fputs(") = 0;\n", fp);
       }
       for (i = 0; i < pdef->proc_in.nElements; i++) {
@@ -3460,6 +3680,9 @@ void generateTestPortSkeleton(const port_def *pdef)
           fprintf(fp, ",\n"
             "\t\tconst %s *sender_address = NULL",
             pdef->address_name);
+        }
+        if (pdef->realtime) {
+          fprintf(fp, ", const FLOAT& timestamp = FLOAT()");
         }
         fputs(") = 0;\n", fp);
       }
@@ -3472,6 +3695,9 @@ void generateTestPortSkeleton(const port_def *pdef)
             "\t\tconst %s *sender_address = NULL",
             pdef->address_name);
         }
+        if (pdef->realtime) {
+          fprintf(fp, ", const FLOAT& timestamp = FLOAT()");
+        }
         fputs(") = 0;\n", fp);
       }
       for (i = 0; i < pdef->proc_out.nElements; i++) {
@@ -3483,6 +3709,9 @@ void generateTestPortSkeleton(const port_def *pdef)
           fprintf(fp, ",\n"
             "\t\tconst %s *sender_address = NULL",
             pdef->address_name);
+        }
+        if (pdef->realtime) {
+          fprintf(fp, ", const FLOAT& timestamp = FLOAT()");
         }
         fputs(") = 0;\n", fp);
       }
@@ -3575,6 +3804,9 @@ void generateTestPortSkeleton(const port_def *pdef)
         fprintf(fp, ",\n"
           "\tconst %s * /*destination_address*/", pdef->address_name);
       }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* /*timestamp_redirect*/");
+      }
       fputs(")\n"
         "{\n\n"
         "}\n\n", fp);
@@ -3585,6 +3817,9 @@ void generateTestPortSkeleton(const port_def *pdef)
       if (pdef->testport_type == ADDRESS) {
         fprintf(fp, ",\n"
           "\tconst %s * /*destination_address*/", pdef->address_name);
+      }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* /*timestamp_redirect*/");
       }
       fputs(")\n"
         "{\n\n"
@@ -3598,6 +3833,9 @@ void generateTestPortSkeleton(const port_def *pdef)
         fprintf(fp, ",\n"
           "\tconst %s * /*destination_address*/", pdef->address_name);
       }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* /*timestamp_redirect*/");
+      }
       fputs(")\n"
         "{\n\n"
         "}\n\n", fp);
@@ -3610,6 +3848,9 @@ void generateTestPortSkeleton(const port_def *pdef)
       if (pdef->testport_type == ADDRESS) {
         fprintf(fp, ",\n"
           "\tconst %s * /*destination_address*/", pdef->address_name);
+      }
+      if (pdef->realtime) {
+        fprintf(fp, ", FLOAT* /*timestamp_redirect*/");
       }
       fputs(")\n"
         "{\n\n"

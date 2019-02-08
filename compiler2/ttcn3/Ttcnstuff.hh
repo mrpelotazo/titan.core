@@ -402,10 +402,9 @@ private:
   PortType_t port_type; // regular|provider|user
   vector<Ttcn::Reference>provider_refs; ///< references to provider ports, for PT_USER
   vector<Common::Type> provider_types; ///< the types that provider_refs refers to, for PT_USER
-  vector<Common::Type> mapper_types; ///< the types that map this port.
-                                     ///< only for PT_USER && !legacy
   TypeMappings *in_mappings, *out_mappings; ///< mappings for PT_USER
   Definitions *vardefs; ///< variable definitions inside the port
+  bool realtime;
   /** Copy constructor not implemented */
   PortTypeBody(const PortTypeBody& p);
   /** Assignment disabled */
@@ -413,7 +412,8 @@ private:
 public:
   PortTypeBody(PortOperationMode_t p_operation_mode,
     Types *p_in_list, Types *p_out_list, Types *p_inout_list,
-    bool p_in_all, bool p_out_all, bool p_inout_all, Definitions *defs);
+    bool p_in_all, bool p_out_all, bool p_inout_all, Definitions *defs,
+    bool p_realtime);
   ~PortTypeBody();
   virtual PortTypeBody *clone() const;
   virtual void set_fullname(const string& p_fullname);
@@ -425,6 +425,7 @@ public:
   TypeSet *get_in_sigs() const;
   TypeSet *get_out_sigs() const;
   Definitions *get_vardefs() const;
+  bool is_realtime() const { return realtime; }
   bool has_queue() const;
   bool getreply_allowed() const;
   bool catch_allowed() const;
@@ -477,7 +478,7 @@ public:
   bool connect_can_receive_or_send(PortTypeBody *p_other) const;
   Type* get_my_type() const { return my_type; }
   bool is_legacy() const { return legacy; }
-  void add_mapper_type(Type* t) { mapper_types.add(t); }
+  //void add_mapper_type(Type* t) { mapper_types.add(t); }
   void generate_code(output_struct *target);
   virtual void dump(unsigned level) const;
 };

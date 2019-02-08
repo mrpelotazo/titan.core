@@ -1,0 +1,881 @@
+/******************************************************************************
+ * Copyright (c) 2000-2018 Ericsson Telecom AB
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/org/documents/epl-2.0/EPL-2.0.html
+ *
+ * Contributors:
+ *   Baranyi, Botond
+ *
+ ******************************************************************************/
+
+// This module tests timestamp redirects for real-time port operations
+module realtimeTimestamp {
+
+signature Sig(inout integer p) return charstring exception(boolean);
+
+type port PortMsg message realtime {
+  inout integer
+}
+
+type port PortProc procedure realtime {
+  inout Sig
+}
+
+type component CT {
+  port PortMsg ptMsg;
+  port PortProc ptProc;
+  var boolean set_timestamp;
+}
+
+type enumerated IncomingOperation {
+  Receive, CheckReceive, Trigger,
+  Getcall, CheckGetcall, Getreply, CheckGetreply,
+  Catch, CheckCatch, Check }
+
+type enumerated OutgoingOperation {
+  Send, Call, Reply, Raise }
+
+external function ef_incoming_message(PortMsg p_pt, in integer p_msg, in boolean p_set_timestamp);
+external function ef_incoming_call(PortProc p_pt, in integer p_par, in boolean p_set_timestamp);
+external function ef_incoming_reply(PortProc p_pt, in integer p_par, in charstring p_ret, in boolean p_set_timestamp);
+external function ef_incoming_exception(PortProc p_pt, in boolean p_ex, in boolean p_set_timestamp);
+
+external function ef_test_send(in integer p_msg);
+external function ef_test_call(in template Sig p_sig);
+external function ef_test_reply(in template Sig p_sig, in charstring p_ret);
+external function ef_test_raise(in boolean p_ex);
+
+/////////////////////////////////////////////////////////////////////////
+///////////// Test function for all incoming operations /////////////////
+/////////////////////////////////////////////////////////////////////////
+
+function f_test_timestamp_inc_op(in IncomingOperation p_operation, in boolean p_any_port, in boolean p_set_timestamp) runs on CT {
+  var float time_before := now, time_operation, time_after;
+  
+  // initiate the specified operation through an external function
+  // (these simulate the arrival of a message/call/reply/exception from the system component,
+  // and either set or don't set the timestamp)
+  select (p_operation) {
+    case (Receive, CheckReceive, Trigger, Check) {
+      ef_incoming_message(ptMsg, 5, p_set_timestamp);
+    }
+    case (Getcall, CheckGetcall) {
+      ef_incoming_call(ptProc, 5, p_set_timestamp);
+    }
+    case (Getreply, CheckGetreply) {
+      ef_incoming_reply(ptProc, 5, "x", p_set_timestamp);
+    }
+    case (Catch, CheckCatch) {
+      ef_incoming_exception(ptProc, true, p_set_timestamp);
+    }
+  }
+  
+  // start a timer (just in case)
+  timer t := 0.5;
+  t.start;
+  
+  if (p_any_port) {
+    alt { // operations on 'any port'
+      [p_operation == Receive      ] any port.receive -> timestamp time_operation { }
+      [p_operation == CheckReceive ] any port.check(receive -> timestamp time_operation) { }
+      [p_operation == Trigger      ] any port.trigger -> timestamp time_operation { }
+      [p_operation == Getcall      ] any port.getcall -> timestamp time_operation { }
+      [p_operation == CheckGetcall ] any port.check(getcall -> timestamp time_operation) { }
+      [p_operation == Getreply     ] any port.getreply -> timestamp time_operation { }
+      [p_operation == CheckGetreply] any port.check(getreply -> timestamp time_operation) { }
+      [p_operation == Catch        ] any port.catch -> timestamp time_operation { }
+      [p_operation == CheckCatch   ] any port.check(catch -> timestamp time_operation) { }
+      [p_operation == Check        ] any port.check(-> timestamp time_operation) { }
+      [] t.timeout { setverdict(fail, "Operation timed out."); }
+    }
+  }
+  else {
+    alt { // operations on specific ports
+      [p_operation == Receive      ] ptMsg.receive(integer: ?) -> timestamp time_operation { }
+      [p_operation == CheckReceive ] ptMsg.check(receive(integer: ?) -> timestamp time_operation) { }
+      [p_operation == Trigger      ] ptMsg.trigger(integer: ?) -> timestamp time_operation { }
+      [p_operation == Getcall      ] ptProc.getcall(Sig: { ? }) -> timestamp time_operation { }
+      [p_operation == CheckGetcall ] ptProc.check(getcall(Sig: { ? }) -> timestamp time_operation) { }
+      [p_operation == Getreply     ] ptProc.getreply(Sig: { ? } value charstring: ?) -> timestamp time_operation { }
+      [p_operation == CheckGetreply] ptProc.check(getreply(Sig: { ? } value charstring: ?) -> timestamp time_operation) { }
+      [p_operation == Catch        ] ptProc.catch(Sig, boolean: ?) -> timestamp time_operation { }
+      [p_operation == CheckCatch   ] ptProc.check(catch(Sig, boolean: ?) -> timestamp time_operation) { }
+      [p_operation == Check        ] ptMsg.check(-> timestamp time_operation) { }
+      [] t.timeout { setverdict(fail, "Operation timed out."); }
+    }
+  }
+  
+  // check results
+  time_after := now;
+  if (p_set_timestamp) {
+    if (time_before > time_operation or time_operation > time_after) {
+      setverdict(fail, "Incorrect times measured. Before: ", time_before, ", operation: ", time_operation, ", after: ", time_after, ".");
+    }
+  }
+  else if (isbound(time_operation)) {
+    setverdict(fail, "Timestamp was supposed to be unset.");
+  }
+  setverdict(pass);
+}
+
+/////////////////////////////////////////////////////////////////////////
+///////////// Test function for all outgoing operations /////////////////
+/////////////////////////////////////////////////////////////////////////
+
+function f_test_timestamp_outg_op(in OutgoingOperation p_operation, in boolean p_set_timestamp) runs on CT {
+  var float time_before := now, time_operation, time_after;
+  
+  // tell outgoing port operations to set or not set the timestamp
+  // through a component variable
+  set_timestamp := p_set_timestamp;
+  
+  select (p_operation) {
+    case (Send) {
+      ptMsg.send(3) -> timestamp time_operation;
+    }
+    case (Call) {
+      ptProc.call(Sig: { 7 }, 0.001) -> timestamp time_operation {
+        [] ptProc.catch(timeout) { }
+      }
+    }
+    case (Reply) {
+      ptProc.reply(Sig: { 10 } value "abc") -> timestamp time_operation;
+    }
+    case (Raise) {
+      ptProc.raise(Sig, false) -> timestamp time_operation;
+    }
+  }
+  
+  // check results
+  time_after := now;
+  if (p_set_timestamp) {
+    if (time_before > time_operation or time_operation > time_after) {
+      setverdict(fail, "Incorrect times measured. Before: ", time_before, ", operation: ", time_operation, ", after: ", time_after, ".");
+    }
+  }
+  else if (isbound(time_operation)) {
+    setverdict(fail, "Timestamp was supposed to be unset.");
+  }
+  setverdict(pass);
+}
+
+/////////////////////////////////////////////////////////////////////////
+////////////////////////// Test cases ///////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
+
+testcase tc_timestamp_receive_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Receive, false, true);
+}
+
+testcase tc_timestamp_receive_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Receive, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_receive_any_port_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Receive, true, true);
+}
+
+testcase tc_timestamp_receive_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Receive, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_receive_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(CheckReceive, false, true);
+}
+
+testcase tc_timestamp_check_receive_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(CheckReceive, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_receive_any_port_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(CheckReceive, true, true);
+}
+
+testcase tc_timestamp_check_receive_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(CheckReceive, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_trigger_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Trigger, false, true);
+}
+
+testcase tc_timestamp_trigger_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Trigger, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_trigger_any_port_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Trigger, true, true);
+}
+
+testcase tc_timestamp_trigger_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Trigger, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_getcall_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getcall, false, true);
+}
+
+testcase tc_timestamp_getcall_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getcall, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_getcall_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getcall, true, true);
+}
+
+testcase tc_timestamp_getcall_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getcall, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_getcall_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetcall, false, true);
+}
+
+testcase tc_timestamp_check_getcall_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetcall, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_getcall_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetcall, true, true);
+}
+
+testcase tc_timestamp_check_getcall_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetcall, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_getreply_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getreply, false, true);
+}
+
+testcase tc_timestamp_getreply_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getreply, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_getreply_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getreply, true, true);
+}
+
+testcase tc_timestamp_getreply_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getreply, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_getreply_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetreply, false, true);
+}
+
+testcase tc_timestamp_check_getreply_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetreply, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_getreply_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetreply, true, true);
+}
+
+testcase tc_timestamp_check_getreply_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetreply, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_catch_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Catch, false, true);
+}
+
+testcase tc_timestamp_catch_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Catch, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_catch_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Catch, true, true);
+}
+
+testcase tc_timestamp_catch_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Catch, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_catch_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckCatch, false, true);
+}
+
+testcase tc_timestamp_check_catch_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckCatch, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_catch_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckCatch, true, true);
+}
+
+testcase tc_timestamp_check_catch_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckCatch, true, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Check, false, true);
+}
+
+testcase tc_timestamp_check_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Check, false, true));
+  ct.done;
+}
+
+testcase tc_timestamp_check_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Check, true, true);
+}
+
+testcase tc_timestamp_check_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Check, true, true));
+  ct.done;
+}
+
+testcase tc_no_timestamp_receive_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Receive, false, false);
+}
+
+testcase tc_no_timestamp_receive_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Receive, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_receive_any_port_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Receive, true, false);
+}
+
+testcase tc_no_timestamp_receive_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Receive, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_receive_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(CheckReceive, false, false);
+}
+
+testcase tc_no_timestamp_check_receive_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(CheckReceive, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_receive_any_port_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(CheckReceive, true, false);
+}
+
+testcase tc_no_timestamp_check_receive_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(CheckReceive, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_trigger_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Trigger, false, false);
+}
+
+testcase tc_no_timestamp_trigger_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Trigger, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_trigger_any_port_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_inc_op(Trigger, true, false);
+}
+
+testcase tc_no_timestamp_trigger_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_inc_op(Trigger, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_getcall_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getcall, false, false);
+}
+
+testcase tc_no_timestamp_getcall_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getcall, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_getcall_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getcall, true, false);
+}
+
+testcase tc_no_timestamp_getcall_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getcall, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_getcall_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetcall, false, false);
+}
+
+testcase tc_no_timestamp_check_getcall_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetcall, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_getcall_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetcall, true, false);
+}
+
+testcase tc_no_timestamp_check_getcall_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetcall, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_getreply_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getreply, false, false);
+}
+
+testcase tc_no_timestamp_getreply_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getreply, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_getreply_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Getreply, true, false);
+}
+
+testcase tc_no_timestamp_getreply_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Getreply, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_getreply_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetreply, false, false);
+}
+
+testcase tc_no_timestamp_check_getreply_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetreply, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_getreply_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckGetreply, true, false);
+}
+
+testcase tc_no_timestamp_check_getreply_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckGetreply, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_catch_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Catch, false, false);
+}
+
+testcase tc_no_timestamp_catch_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Catch, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_catch_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Catch, true, false);
+}
+
+testcase tc_no_timestamp_catch_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Catch, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_catch_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckCatch, false, false);
+}
+
+testcase tc_no_timestamp_check_catch_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckCatch, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_catch_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(CheckCatch, true, false);
+}
+
+testcase tc_no_timestamp_check_catch_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(CheckCatch, true, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Check, false, false);
+}
+
+testcase tc_no_timestamp_check_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Check, false, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_check_any_port_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_inc_op(Check, true, false);
+}
+
+testcase tc_no_timestamp_check_any_port_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_inc_op(Check, true, false));
+  ct.done;
+}
+
+//////////////////////////////////////////////////////////
+
+testcase tc_timestamp_send_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_outg_op(Send, true);
+}
+
+testcase tc_timestamp_send_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_outg_op(Send, true));
+  ct.done;
+}
+
+testcase tc_timestamp_call_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_outg_op(Call, true);
+}
+
+testcase tc_timestamp_call_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_outg_op(Call, true));
+  ct.done;
+}
+
+testcase tc_timestamp_reply_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_outg_op(Reply, true);
+}
+
+testcase tc_timestamp_reply_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_outg_op(Reply, true));
+  ct.done;
+}
+
+testcase tc_timestamp_raise_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_outg_op(Raise, true);
+}
+
+testcase tc_timestamp_raise_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_outg_op(Raise, true));
+  ct.done;
+}
+
+testcase tc_no_timestamp_send_mtc() runs on CT {
+  map(self:ptMsg, system:ptMsg);
+  f_test_timestamp_outg_op(Send, false);
+}
+
+testcase tc_no_timestamp_send_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptMsg, system:ptMsg);
+  ct.start(f_test_timestamp_outg_op(Send, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_call_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_outg_op(Call, false);
+}
+
+testcase tc_no_timestamp_call_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_outg_op(Call, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_reply_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_outg_op(Reply, false);
+}
+
+testcase tc_no_timestamp_reply_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_outg_op(Reply, false));
+  ct.done;
+}
+
+testcase tc_no_timestamp_raise_mtc() runs on CT {
+  map(self:ptProc, system:ptProc);
+  f_test_timestamp_outg_op(Raise, false);
+}
+
+testcase tc_no_timestamp_raise_ptc() runs on CT {
+  var CT ct := CT.create;
+  map(ct:ptProc, system:ptProc);
+  ct.start(f_test_timestamp_outg_op(Raise, false));
+  ct.done;
+}
+
+testcase tc_send_in_ext_func_backward_compat() runs on CT {
+  // testing backward compatibility for calling 'send' from an external function (compile only test)
+  map(self:ptMsg, system:ptMsg);
+  set_timestamp := true; // so it doesn't remain unbound
+  ef_test_send(1);
+  setverdict(pass);
+}
+
+testcase tc_call_in_ext_func_backward_compat() runs on CT {
+  // testing backward compatibility for calling 'call' from an external function (compile only test)
+  map(self:ptProc, system:ptProc);
+  set_timestamp := true; // so it doesn't remain unbound
+  ef_test_call(Sig: { 2 });
+  setverdict(pass);
+}
+
+testcase tc_reply_in_ext_func_backward_compat() runs on CT {
+  // testing backward compatibility for calling 'reply' from an external function (compile only test)
+  map(self:ptProc, system:ptProc);
+  set_timestamp := true; // so it doesn't remain unbound
+  ef_test_reply(Sig: { 2 }, "a");
+  setverdict(pass);
+}
+
+testcase tc_raise_in_ext_func_backward_compat() runs on CT {
+  // testing backward compatibility for calling 'raise' from an external function (compile only test)
+  map(self:ptProc, system:ptProc);
+  set_timestamp := true; // so it doesn't remain unbound
+  ef_test_raise(false);
+  setverdict(pass);
+}
+
+control {
+  execute(tc_timestamp_receive_mtc());
+  execute(tc_timestamp_receive_ptc());
+  execute(tc_timestamp_receive_any_port_mtc());
+  execute(tc_timestamp_receive_any_port_ptc());
+  execute(tc_timestamp_check_receive_mtc());
+  execute(tc_timestamp_check_receive_ptc());
+  execute(tc_timestamp_check_receive_any_port_mtc());
+  execute(tc_timestamp_check_receive_any_port_ptc());
+  execute(tc_timestamp_trigger_mtc());
+  execute(tc_timestamp_trigger_ptc());
+  execute(tc_timestamp_trigger_any_port_mtc());
+  execute(tc_timestamp_trigger_any_port_ptc());
+  execute(tc_timestamp_getcall_mtc());
+  execute(tc_timestamp_getcall_ptc());
+  execute(tc_timestamp_getcall_any_port_mtc());
+  execute(tc_timestamp_getcall_any_port_ptc());
+  execute(tc_timestamp_check_getcall_mtc());
+  execute(tc_timestamp_check_getcall_ptc());
+  execute(tc_timestamp_check_getcall_any_port_mtc());
+  execute(tc_timestamp_check_getcall_any_port_ptc());
+  execute(tc_timestamp_getreply_mtc());
+  execute(tc_timestamp_getreply_ptc());
+  execute(tc_timestamp_getreply_any_port_mtc());
+  execute(tc_timestamp_getreply_any_port_ptc());
+  execute(tc_timestamp_check_getreply_mtc());
+  execute(tc_timestamp_check_getreply_ptc());
+  execute(tc_timestamp_check_getreply_any_port_mtc());
+  execute(tc_timestamp_check_getreply_any_port_ptc());
+  execute(tc_timestamp_catch_mtc());
+  execute(tc_timestamp_catch_ptc());
+  execute(tc_timestamp_catch_any_port_mtc());
+  execute(tc_timestamp_catch_any_port_ptc());
+  execute(tc_timestamp_check_catch_mtc());
+  execute(tc_timestamp_check_catch_ptc());
+  execute(tc_timestamp_check_catch_any_port_mtc());
+  execute(tc_timestamp_check_catch_any_port_ptc());
+  execute(tc_timestamp_check_mtc());
+  execute(tc_timestamp_check_ptc());
+  execute(tc_timestamp_check_any_port_mtc());
+  execute(tc_timestamp_check_any_port_ptc());
+  execute(tc_no_timestamp_receive_mtc());
+  execute(tc_no_timestamp_receive_ptc());
+  execute(tc_no_timestamp_receive_any_port_mtc());
+  execute(tc_no_timestamp_receive_any_port_ptc());
+  execute(tc_no_timestamp_check_receive_mtc());
+  execute(tc_no_timestamp_check_receive_ptc());
+  execute(tc_no_timestamp_check_receive_any_port_mtc());
+  execute(tc_no_timestamp_check_receive_any_port_ptc());
+  execute(tc_no_timestamp_trigger_mtc());
+  execute(tc_no_timestamp_trigger_ptc());
+  execute(tc_no_timestamp_trigger_any_port_mtc());
+  execute(tc_no_timestamp_trigger_any_port_ptc());
+  execute(tc_no_timestamp_getcall_mtc());
+  execute(tc_no_timestamp_getcall_ptc());
+  execute(tc_no_timestamp_getcall_any_port_mtc());
+  execute(tc_no_timestamp_getcall_any_port_ptc());
+  execute(tc_no_timestamp_check_getcall_mtc());
+  execute(tc_no_timestamp_check_getcall_ptc());
+  execute(tc_no_timestamp_check_getcall_any_port_mtc());
+  execute(tc_no_timestamp_check_getcall_any_port_ptc());
+  execute(tc_no_timestamp_getreply_mtc());
+  execute(tc_no_timestamp_getreply_ptc());
+  execute(tc_no_timestamp_getreply_any_port_mtc());
+  execute(tc_no_timestamp_getreply_any_port_ptc());
+  execute(tc_no_timestamp_check_getreply_mtc());
+  execute(tc_no_timestamp_check_getreply_ptc());
+  execute(tc_no_timestamp_check_getreply_any_port_mtc());
+  execute(tc_no_timestamp_check_getreply_any_port_ptc());
+  execute(tc_no_timestamp_catch_mtc());
+  execute(tc_no_timestamp_catch_ptc());
+  execute(tc_no_timestamp_catch_any_port_mtc());
+  execute(tc_no_timestamp_catch_any_port_ptc());
+  execute(tc_no_timestamp_check_catch_mtc());
+  execute(tc_no_timestamp_check_catch_ptc());
+  execute(tc_no_timestamp_check_catch_any_port_mtc());
+  execute(tc_no_timestamp_check_catch_any_port_ptc());
+  execute(tc_no_timestamp_check_mtc());
+  execute(tc_no_timestamp_check_ptc());
+  execute(tc_no_timestamp_check_any_port_mtc());
+  execute(tc_no_timestamp_check_any_port_ptc());
+  execute(tc_timestamp_send_mtc());
+  execute(tc_timestamp_send_ptc());
+  execute(tc_timestamp_call_mtc());
+  execute(tc_timestamp_call_ptc());
+  execute(tc_timestamp_reply_mtc());
+  execute(tc_timestamp_reply_ptc());
+  execute(tc_timestamp_raise_mtc());
+  execute(tc_timestamp_raise_ptc());
+  execute(tc_no_timestamp_send_mtc());
+  execute(tc_no_timestamp_send_ptc());
+  execute(tc_no_timestamp_call_mtc());
+  execute(tc_no_timestamp_call_ptc());
+  execute(tc_no_timestamp_reply_mtc());
+  execute(tc_no_timestamp_reply_ptc());
+  execute(tc_no_timestamp_raise_mtc());
+  execute(tc_no_timestamp_raise_ptc());
+  execute(tc_send_in_ext_func_backward_compat());
+  execute(tc_call_in_ext_func_backward_compat());
+  execute(tc_reply_in_ext_func_backward_compat());
+  execute(tc_raise_in_ext_func_backward_compat());
+}
+
+}

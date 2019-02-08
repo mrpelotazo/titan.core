@@ -296,6 +296,7 @@ namespace Ttcn {
 	  struct {
 	    TemplateInstance *sendpar;
 	    Value *toclause;
+	    Reference* timestampredirect;
 	    union {
 	      struct {
 		Value *timer;
@@ -317,6 +318,7 @@ namespace Ttcn {
 	      ParamRedirect *param;
 	      Reference *sender;
 	      Reference* index;
+	      Reference* timestamp;
 	    } redirect;
 	    union {
 	      TemplateInstance *getreply_valuematch;
@@ -549,49 +551,53 @@ namespace Ttcn {
     Statement(statementtype_t p_st, Value *p_val, LogArguments *p_logargs);
     /** Constructor used by S_SEND */
     Statement(statementtype_t p_st, Reference *p_ref,
-              TemplateInstance *p_templinst, Value *p_val, bool p_translate);
+              TemplateInstance *p_templinst, Value *p_val,
+              Reference* p_timestampredirect, bool p_translate);
     /** Constructor used by S_CALL */
     Statement(statementtype_t p_st, Reference *p_ref,
               TemplateInstance *p_templinst, Value *p_timerval,
-              bool p_nowait, Value *p_toclause, AltGuards *p_callbody);
+              bool p_nowait, Value *p_toclause, Reference* p_timestampredirect,
+              AltGuards *p_callbody);
     /** Constructor used by S_REPLY */
     Statement(statementtype_t p_st, Reference *p_ref,
               TemplateInstance *p_templinst, Value *p_replyval,
-              Value *p_toclause);
+              Value *p_toclause, Reference* p_timestampredirect);
     /** Constructor used by S_RAISE */
     Statement(statementtype_t p_st, Reference *p_ref,
               Reference *p_sig, TemplateInstance *p_templinst,
-              Value *p_toclause);
+              Value *p_toclause, Reference* p_timestampredirect);
     /** Constructor used by S_RECEIVE, S_CHECK_RECEIVE and
      *  S_TRIGGER. p_ref==0 means any port. */
     Statement(statementtype_t p_st, Reference *p_ref, bool p_anyfrom,
               TemplateInstance *p_templinst, TemplateInstance *p_fromclause,
               ValueRedirect *p_redirectval, Reference *p_redirectsender,
-              Reference* p_redirectindex, bool p_translate);
+              Reference* p_redirectindex, Reference* p_timestamp_redirect,
+              bool p_translate);
     /** Constructor used by S_GETCALL and S_CHECK_GETCALL. p_ref==0
      *  means any port. */
     Statement(statementtype_t p_st, Reference *p_ref, bool p_anyfrom,
               TemplateInstance *p_templinst, TemplateInstance *p_fromclause,
               ParamRedirect *p_redirectparam, Reference *p_redirectsender,
-              Reference* p_redirectindex);
+              Reference* p_redirectindex, Reference* p_timestamp_redirect);
     /** Constructor used by S_GETREPLY and S_CHECK_GETREPLY. p_ref==0
      *  means any port. */
     Statement(statementtype_t p_st, Reference *p_ref, bool p_anyfrom,
               TemplateInstance *p_templinst, TemplateInstance *p_valuematch,
               TemplateInstance *p_fromclause,
               ValueRedirect *p_redirectval, ParamRedirect *p_redirectparam,
-              Reference *p_redirectsender, Reference* p_redirectindex);
+              Reference *p_redirectsender, Reference* p_redirectindex,
+              Reference* p_timestamp_redirect);
     /** Constructor used by S_CATCH and S_CHECK_CATCH. p_ref==0 means
      *  any port. */
     Statement(statementtype_t p_st, Reference *p_ref,  bool p_anyfrom,
               Reference *p_sig, TemplateInstance *p_templinst,
               bool p_timeout, TemplateInstance *p_fromclause,
               ValueRedirect *p_redirectval, Reference *p_redirectsender,
-              Reference* p_redirectindex);
+              Reference* p_redirectindex, Reference* p_timestamp_redirect);
     /** Constructor used by S_CHECK. p_ref==0 means any port. */
     Statement(statementtype_t p_st, Reference *p_ref, bool p_anyfrom,
               TemplateInstance *p_fromclause, Reference *p_redirectsender,
-              Reference* p_redirectindex);
+              Reference* p_redirectindex, Reference* p_timestamp_redirect);
     /** Constructor used by S_CLEAR, S_START_PORT and S_STOP_PORT.
      *  p_ref==0 means all port. S_STOP_TIMER (p_ref==0: all timer). */
     Statement(statementtype_t p_st, Reference *p_ref);
@@ -778,6 +784,7 @@ namespace Ttcn {
      *  checked: it shall be a component type or \a address_type (if
      *  it is not NULL). */
     Type *chk_sender_redirect(Type *address_type);
+    void chk_timestamp_redirect(Type* port_type, bool outgoing);
     /** Checks whether \a p_ref points to a signature. The type
      *  describing the respective signature is returned or NULL in
      *  case of error. */
@@ -902,6 +909,8 @@ namespace Ttcn {
     void generate_code_expr_sendpar(expression_struct *expr);
     void generate_code_expr_fromclause(expression_struct *expr);
     void generate_code_expr_senderredirect(expression_struct *expr);
+    void generate_code_expr_timestamp_redirect(expression_struct* expr,
+      bool outgoing);
     /** Creates the string equivalent of port reference \a p_ref and
      *  appends it to \a expr->expr. Used in configuration operations
      *  when the component type cannot be determined from the

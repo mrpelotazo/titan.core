@@ -525,7 +525,13 @@ PORT* PORT::get_provider_port() {
   return NULL;
 }
 
-alt_status PORT::receive(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+boolean PORT::incoming_message_handler(const void* message_ptr, const char* message_type,
+                                       component sender_component, const FLOAT& timestamp)
+{
+  return FALSE;
+}
+
+alt_status PORT::receive(const COMPONENT_template&, COMPONENT *, FLOAT*, Index_Redirect*)
 {
   TTCN_Logger::log_matching_problem(
     TitanLoggerApi::MatchingProblemType_reason::no__incoming__types,
@@ -535,12 +541,12 @@ alt_status PORT::receive(const COMPONENT_template&, COMPONENT *, Index_Redirect*
 }
 
 alt_status PORT::any_receive(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->receive(sender_template, sender_ptr)) {
+      switch (port->receive(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -564,7 +570,8 @@ alt_status PORT::any_receive(const COMPONENT_template& sender_template,
   }
 }
 
-alt_status PORT::check_receive(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+alt_status PORT::check_receive(const COMPONENT_template&, COMPONENT *, FLOAT*,
+  Index_Redirect*)
 {
   TTCN_Logger::log_matching_problem(
     TitanLoggerApi::MatchingProblemType_reason::no__incoming__types,
@@ -574,12 +581,12 @@ alt_status PORT::check_receive(const COMPONENT_template&, COMPONENT *, Index_Red
 }
 
 alt_status PORT::any_check_receive(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->check_receive(sender_template, sender_ptr)) {
+      switch (port->check_receive(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -603,7 +610,8 @@ alt_status PORT::any_check_receive(const COMPONENT_template& sender_template,
   }
 }
 
-alt_status PORT::trigger(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+alt_status PORT::trigger(const COMPONENT_template&, COMPONENT *, FLOAT*,
+  Index_Redirect*)
 {
   TTCN_Logger::log_matching_problem(
     TitanLoggerApi::MatchingProblemType_reason::no__incoming__types,
@@ -613,12 +621,12 @@ alt_status PORT::trigger(const COMPONENT_template&, COMPONENT *, Index_Redirect*
 }
 
 alt_status PORT::any_trigger(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->trigger(sender_template, sender_ptr)) {
+      switch (port->trigger(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -644,7 +652,7 @@ alt_status PORT::any_trigger(const COMPONENT_template& sender_template,
   }
 }
 
-alt_status PORT::getcall(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+alt_status PORT::getcall(const COMPONENT_template&, COMPONENT *, FLOAT*, Index_Redirect*)
 {
 //  ToDo:Unnecessary log matching problem warning removed.
 //  Question: does it unnecessary?
@@ -656,12 +664,12 @@ alt_status PORT::getcall(const COMPONENT_template&, COMPONENT *, Index_Redirect*
 }
 
 alt_status PORT::any_getcall(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->getcall(sender_template, sender_ptr)) {
+      switch (port->getcall(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -685,7 +693,7 @@ alt_status PORT::any_getcall(const COMPONENT_template& sender_template,
   }
 }
 
-alt_status PORT::check_getcall(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+alt_status PORT::check_getcall(const COMPONENT_template&, COMPONENT *, FLOAT*, Index_Redirect*)
 {
 //  ToDo:Unnecessary log matching problem warning removed.
 //  Question: does it unnecessary
@@ -697,12 +705,12 @@ alt_status PORT::check_getcall(const COMPONENT_template&, COMPONENT *, Index_Red
 }
 
 alt_status PORT::any_check_getcall(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->check_getcall(sender_template, sender_ptr)) {
+      switch (port->check_getcall(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -726,7 +734,7 @@ alt_status PORT::any_check_getcall(const COMPONENT_template& sender_template,
   }
 }
 
-alt_status PORT::getreply(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+alt_status PORT::getreply(const COMPONENT_template&, COMPONENT *, FLOAT*, Index_Redirect*)
 {
 //  ToDo:Unnecessary log matching problem warning removed.
 //  Question: does it unnecessary
@@ -738,12 +746,12 @@ alt_status PORT::getreply(const COMPONENT_template&, COMPONENT *, Index_Redirect
 }
 
 alt_status PORT::any_getreply(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->getreply(sender_template, sender_ptr)) {
+      switch (port->getreply(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -767,7 +775,7 @@ alt_status PORT::any_getreply(const COMPONENT_template& sender_template,
   }
 }
 
-alt_status PORT::check_getreply(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+alt_status PORT::check_getreply(const COMPONENT_template&, COMPONENT *, FLOAT*, Index_Redirect*)
 {
 //  ToDo:Unnecessary log matching problem warning removed.
 //  Question: does it unnecessary
@@ -779,12 +787,12 @@ alt_status PORT::check_getreply(const COMPONENT_template&, COMPONENT *, Index_Re
 }
 
 alt_status PORT::any_check_getreply(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->check_getreply(sender_template, sender_ptr)) {
+      switch (port->check_getreply(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -808,7 +816,7 @@ alt_status PORT::any_check_getreply(const COMPONENT_template& sender_template,
   }
 }
 
-alt_status PORT::get_exception(const COMPONENT_template&, COMPONENT *, Index_Redirect*)
+alt_status PORT::get_exception(const COMPONENT_template&, COMPONENT *, FLOAT*, Index_Redirect*)
 {
 //  ToDo:Unnecessary log matching problem warning removed.
 //  Question: does it unnecessary
@@ -820,12 +828,12 @@ alt_status PORT::get_exception(const COMPONENT_template&, COMPONENT *, Index_Red
 }
 
 alt_status PORT::any_catch(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->get_exception(sender_template, sender_ptr)) {
+      switch (port->get_exception(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -850,7 +858,7 @@ alt_status PORT::any_catch(const COMPONENT_template& sender_template,
 }
 
 alt_status PORT::check_catch(const COMPONENT_template& ,
-  COMPONENT *, Index_Redirect*)
+  COMPONENT *, FLOAT*, Index_Redirect*)
 {
 //  ToDo:Unnecessary log matching problem warning removed.
 //  Question: does it unnecessary
@@ -862,12 +870,12 @@ alt_status PORT::check_catch(const COMPONENT_template& ,
 }
 
 alt_status PORT::any_check_catch(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->check_catch(sender_template, sender_ptr)) {
+      switch (port->check_catch(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:
@@ -892,11 +900,11 @@ alt_status PORT::any_check_catch(const COMPONENT_template& sender_template,
 }
 
 alt_status PORT::check(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr, Index_Redirect*)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect, Index_Redirect*)
 {
   alt_status ret_val = ALT_NO;
   // the procedure-based queue must have the higher priority
-  switch (check_getcall(sender_template, sender_ptr)) {
+  switch (check_getcall(sender_template, sender_ptr, timestamp_redirect)) {
   case ALT_YES:
     return ALT_YES;
   case ALT_MAYBE:
@@ -911,7 +919,7 @@ alt_status PORT::check(const COMPONENT_template& sender_template,
   if (ret_val != ALT_MAYBE) {
     // don't try getreply if the procedure-based queue is empty
     // (i.e. check_getcall() returned ALT_MAYBE)
-    switch (check_getreply(sender_template, sender_ptr)) {
+    switch (check_getreply(sender_template, sender_ptr, timestamp_redirect)) {
     case ALT_YES:
       return ALT_YES;
     case ALT_MAYBE:
@@ -927,7 +935,7 @@ alt_status PORT::check(const COMPONENT_template& sender_template,
   if (ret_val != ALT_MAYBE) {
     // don't try catch if the procedure-based queue is empty
     // (i.e. check_getcall() or check_getreply() returned ALT_MAYBE)
-    switch (check_catch(sender_template, sender_ptr)) {
+    switch (check_catch(sender_template, sender_ptr, timestamp_redirect)) {
     case ALT_YES:
       return ALT_YES;
     case ALT_MAYBE:
@@ -940,7 +948,7 @@ alt_status PORT::check(const COMPONENT_template& sender_template,
         "unexpected status code on port %s.", port_name);
     }
   }
-  switch (check_receive(sender_template, sender_ptr)) {
+  switch (check_receive(sender_template, sender_ptr, timestamp_redirect)) {
   case ALT_YES:
     return ALT_YES;
   case ALT_MAYBE:
@@ -956,12 +964,12 @@ alt_status PORT::check(const COMPONENT_template& sender_template,
 }
 
 alt_status PORT::any_check(const COMPONENT_template& sender_template,
-  COMPONENT *sender_ptr)
+  COMPONENT *sender_ptr, FLOAT* timestamp_redirect)
 {
   if (list_head != NULL) {
     alt_status ret_val = ALT_NO;
     for (PORT *port = list_head; port != NULL; port = port->list_next) {
-      switch (port->check(sender_template, sender_ptr)) {
+      switch (port->check(sender_template, sender_ptr, timestamp_redirect)) {
       case ALT_YES:
         return ALT_YES;
       case ALT_MAYBE:

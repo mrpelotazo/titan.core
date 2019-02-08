@@ -22,6 +22,7 @@
 #include <ctype.h>
 #include "Setting.hh"
 #include "CompilerError.hh"
+#include "main.hh"
 
 namespace Common {
 
@@ -96,6 +97,7 @@ namespace Common {
   private:
     static internal_data_t *instance;
     static const char* const keywords[][3];
+    static const char* const realtime_keywords[][3];
     size_t identifier_counter;
   public:
     const string string_invalid;
@@ -866,6 +868,15 @@ namespace Common {
     /* the last must be all zeros */
     {0, 0, 0}
   }; // keywords
+  
+  // keywords for the real-time testing feature
+  // (can be switched on or off with a command line option)
+  const char* const internal_data_t::realtime_keywords[][3] = {
+    {"now__", "now", "now_"},
+    {"realtime__", "realtime", "realtime_"},
+    {"timestamp__", "timestamp", "timestamp_"},
+    {0, 0, 0}
+  };
 
   internal_data_t::internal_data_t()
     : identifier_counter(0), string_invalid("<invalid>"), id_map_name(),
@@ -970,6 +981,11 @@ namespace Common {
       Error_Context cntx(&loc, "While adding keywords");
       for(size_t i=0; keywords[i][0]; i++)
         add_keyword(keywords[i]);
+      if (realtime_features) {
+        for(size_t i=0; realtime_keywords[i][0] != 0; i++) {
+          add_keyword(realtime_keywords[i]);
+        }
+      }
     }
     /* Perhaps it were good to read a file which contains
         user-defined mappings :) */

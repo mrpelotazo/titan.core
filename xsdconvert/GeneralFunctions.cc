@@ -67,13 +67,13 @@ void XSDName2TTCN3Name(const Mstring& in_str, const Mstring& in_namespace,
     "kill", "killed",
     "label", "language", "length", "log",
     "map", "match", "message", "mixed", "mod", "modifies", "module", "modulepar", "mtc",
-    "noblock", "none", "not", "not4b", "nowait", "null",
+    "noblock", "none", "not", "not4b", "now", "nowait", "null",
     "objid", "octetstring", "of", "omit", "on", "optional", "or", "or4b", "out", "override",
     "param", "pass", "pattern", "permutation", "port", "present", "private", "procedure", "public",
-    "raise", "read", "receive", "record", "recursive", "refers", "rem", "repeat", "reply", "return", "running", "runs",
+    "raise", "read", "realtime", "receive", "record", "recursive", "refers", "rem", "repeat", "reply", "return", "running", "runs",
     "select", "self", "send", "sender", "set", "setverdict", "signature", "start", "stop", "subset",
     "superset", "system",
-    "template", "testcase", "timeout", "timer", "to", "trigger", "true", "type",
+    "template", "testcase", "timeout", "timer", "timestamp", "to", "trigger", "true", "type",
     "union", "universal", "unmap",
     "value", "valueof", "var", "variant", "verdicttype",
     "while", "with",
@@ -265,7 +265,8 @@ void XSDName2TTCN3Name(const Mstring& in_str, const Mstring& in_namespace,
       }
 
       for (QualifiedNames::iterator used = used_names.begin(); used; used = used->Next) {
-        if (qual_name == used->Data) {
+        if ((!o_flag_used && qual_name == used->Data) ||
+            (o_flag_used && qual_name.name == used->Data.name)) {
           postfixing = true;
           break;
         }
@@ -280,7 +281,8 @@ void XSDName2TTCN3Name(const Mstring& in_str, const Mstring& in_namespace,
           Free(tmpname);
           tmpname = mprintf("%s_%d", qual_name.name.c_str(), counter);
           for (QualifiedNames::iterator used = used_names.begin(); used; used = used->Next) {
-            if (QualifiedName(/* empty_string ? */ ns_uri, Mstring(tmpname)) == used->Data) {
+            if ((!o_flag_used && QualifiedName(/* empty_string ? */ ns_uri, Mstring(tmpname)) == used->Data) ||
+                (o_flag_used && Mstring(tmpname) == used->Data.name)) {
               found = true;
               break;
             }
