@@ -37,6 +37,7 @@ if(SED)
 else()
     message(FATAL_ERROR "sed could not be found")
 endif()
+
 #---------------------------------------------------------------------------------------
 # Compiler settings
 #---------------------------------------------------------------------------------------
@@ -49,7 +50,7 @@ if(UNIX)
 
     if(MACHINE_ARCH STREQUAL "armv7l")
         add_compile_options(-fsigned-char)
-	endif()
+    endif()
 endif()
 
 #---------------------------------------------------------------------------------------
@@ -149,7 +150,7 @@ if(UNIX)
         ${CPACK_PACKAGE_DIRECTORY}/postrm
     )
 
-	if(LINUX_DISTRO STREQUAL "debian" OR LINUX_DISTRO STREQUAL "ubuntu" OR LINUX_DISTRO STREQUAL "linuxmint" OR LINUX_DISTRO STREQUAL "raspbian")
+    if(LINUX_DISTRO STREQUAL "debian" OR LINUX_DISTRO STREQUAL "ubuntu" OR LINUX_DISTRO STREQUAL "linuxmint" OR LINUX_DISTRO STREQUAL "raspbian")
         execute_process(COMMAND dpkg-architecture -qDEB_HOST_ARCH OUTPUT_VARIABLE DEBIAN_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
         list(APPEND CPACK_GENERATOR DEB)
         set(CPACK_DEB_COMPONENT_INSTALL ON)
