@@ -4,7 +4,7 @@
 ## @brief   TTCN-3 Test Executor
 ##
 
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.10)
 
 project(titan VERSION 6.4.1)
 
