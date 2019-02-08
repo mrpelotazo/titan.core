@@ -117,7 +117,7 @@ install(
 )
 
 # Add to CMake registry
-export(PACKAGE ${PROJECT_NAME})
+# export(PACKAGE ${PROJECT_NAME})
 
 #---------------------------------------------------------------------------------------
 # CPack
