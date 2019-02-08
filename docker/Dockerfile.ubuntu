@@ -1,5 +1,5 @@
 # Dockerfile
-FROM ubuntu:xenial
+FROM ubuntu:bionic
 
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && apt-get install -y \
@@ -15,12 +15,38 @@ RUN apt-get update && apt-get install -y \
     flex \
     lsb-release \
     cmake
+
+# Installing Ruby Gems needed in the image
+# including asciidoctor itself
+RUN apt-get install -y \
+    graphviz \
+    python-pil \
+    python \
+    python-setuptools \
+    ruby \
+    ruby-dev \
+    pkg-config \
+    libglib2.0-dev \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libgdk-pixbuf2.0-dev \
+    && gem install --no-document \
+        concurrent-ruby \
+        asciidoctor:1.5.8 \
+        asciidoctor-confluence \
+        asciidoctor-diagram \
+        asciidoctor-epub3:1.5.0.alpha.7 \
+        asciimath \
+        asciidoctor-pdf:1.5.0.alpha.16 \
+        asciidoctor-revealjs \
+        coderay \
+        epubcheck:3.0.1 \
+        haml \
+        pygments.rb \
+        rake \
+        rouge \
+        slim \
+        thread_safe \
+        tilt
+
 WORKDIR /work
-RUN git clone --branch v3.9.4 https://github.com/Kitware/CMake.git
-WORKDIR /work/CMake/build
-RUN cmake -DCPACK_GENERATOR="DEB" .. && make package
-RUN apt-get remove --purge cmake cmake-data -y
-RUN dpkg -i cmake-3.9.4-Linux-x86_64.deb
-COPY . /work/titan.core
-WORKDIR /work/titan.core/build
-RUN cmake .. && make package

@@ -1,5 +1,5 @@
 # Dockerfile
-FROM opensuse:42.3
+FROM opensuse/leap:15.1
 
 RUN zypper refresh && zypper --non-interactive install \
     gcc \
@@ -16,13 +16,38 @@ RUN zypper refresh && zypper --non-interactive install \
     lsb-release \
     rpm-build \
     cmake
+
+# Installing Ruby Gems needed in the image
+# including asciidoctor itself
+RUN zypper --non-interactive install \
+    graphviz \
+    python2 \
+    python2-Pillow \
+    python2-setuptools \
+    ruby \
+    ruby-devel \
+    pkg-config \
+    glib2-devel \
+    cairo-devel \
+    pango-devel \
+    libgdk_pixbuf-2_0-0 \
+    && gem install --no-document \
+        concurrent-ruby \
+        asciidoctor:1.5.8 \
+        asciidoctor-confluence \
+        asciidoctor-diagram \
+        asciidoctor-epub3:1.5.0.alpha.7 \
+        asciimath \
+        asciidoctor-pdf:1.5.0.alpha.16 \
+        asciidoctor-revealjs \
+        coderay \
+        epubcheck:3.0.1 \
+        haml \
+        pygments.rb \
+        rake \
+        rouge \
+        slim \
+        thread_safe \
+        tilt
+
 WORKDIR /work
-RUN git clone --branch v3.9.4 https://github.com/Kitware/CMake.git
-WORKDIR CMake/build
-RUN cmake -DCPACK_GENERATOR="RPM" .. && make package
-RUN zypper --non-interactive remove cmake
-RUN rpm -i cmake-3.9.4-Linux-x86_64.rpm
-COPY . /work/titan.core
-WORKDIR /work/titan.core/build
-RUN cmake .. && make package
-CMD ["/bin/bash"]

@@ -1,5 +1,5 @@
 # Dockerfile
-FROM fedora:27
+FROM fedora:29
 
 RUN dnf install -y \
     gcc \
@@ -11,14 +11,44 @@ RUN dnf install -y \
     openssl-devel \
     ncurses-devel \
     libedit \
-	libedit-devel \
+    libedit-devel \
     bison \
     flex \
     redhat-lsb \
     rpmdevtools \
     cmake
+
+# Installing Ruby Gems needed in the image
+# including asciidoctor itself
+RUN dnf install -y \
+    graphviz \
+    python2 \
+    python2-pillow \
+    python2-setuptools \
+    ruby \
+    ruby-devel \
+    pkg-config \
+    glib2-devel \
+    cairo-devel \
+    pango-devel \
+    gdk-pixbuf2-devel \
+    && gem install --no-document \
+        concurrent-ruby \
+        asciidoctor:1.5.8 \
+        asciidoctor-confluence \
+        asciidoctor-diagram \
+        asciidoctor-epub3:1.5.0.alpha.7 \
+        asciimath \
+        asciidoctor-pdf:1.5.0.alpha.16 \
+        asciidoctor-revealjs \
+        coderay \
+        epubcheck:3.0.1 \
+        haml \
+        pygments.rb \
+        rake \
+        rouge \
+        slim \
+        thread_safe \
+        tilt
+
 WORKDIR /work
-COPY . /work/titan.core
-WORKDIR /work/titan.core/build
-RUN cmake .. && make package
-CMD ["/bin/bash"]
